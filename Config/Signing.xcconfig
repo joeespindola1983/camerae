@@ -1,0 +1,6 @@
+CODE_SIGN_STYLE = Automatic
+
+// Personal signing settings live here and are ignored by git.
+// Example:
+// DEVELOPMENT_TEAM = ABCD123456
+#include? "Signing.local.xcconfig"

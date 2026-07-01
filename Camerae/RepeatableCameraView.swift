@@ -1,0 +1,1416 @@
+import SwiftUI
+import UIKit
+
+struct RepeatableCameraView: View {
+    @StateObject private var camera: CameraController
+
+    private let project: CameraProject
+    private let store: TimelapseSessionStore
+    private let onCompletedTimelapse: () -> Void
+    private let onDeletedOpenedTimelapse: () -> Void
+    private let explicitReferenceURL: URL?
+    private let openedSession: TimelapseSession?
+
+    @State private var intervalSeconds = 5.0
+    @State private var selectedCaptureKind = RepeatableCaptureKind.timelapse
+    @State private var overlayOpacity = 0.45
+    @State private var evBias = 0.0
+    @State private var referenceImage: UIImage?
+    @State private var referenceMotion: MotionAttitude?
+    @State private var referenceGeoPose: GeoPose?
+    @State private var referenceOrientation: CaptureDisplayOrientation?
+    @State private var referenceName = "Sem referencia"
+    @State private var isShowingDeleteConfirmation = false
+    @State private var deleteErrorMessage: String?
+    @State private var capturePhase = RepeatableCapturePhase.setup
+    @State private var isPositionHUDVisible = true
+    @State private var isScaleHUDVisible = true
+    @State private var isMotionHUDVisible = true
+    @State private var isTimelapseInfoVisible = true
+    @State private var isGridVisible = true
+    @State private var isVisualMatchGuideVisible = true
+    @State private var referenceOverlayID = UUID()
+    @State private var currentAlignmentOrientation = CaptureDisplayOrientation.portrait
+
+    init(
+        project: CameraProject,
+        referenceURL: URL? = nil,
+        openedSession: TimelapseSession? = nil,
+        onCompletedTimelapse: @escaping () -> Void = {},
+        onDeletedOpenedTimelapse: @escaping () -> Void = {}
+    ) {
+        self.project = project
+        self.store = TimelapseSessionStore(project: project)
+        self.onCompletedTimelapse = onCompletedTimelapse
+        self.onDeletedOpenedTimelapse = onDeletedOpenedTimelapse
+        self.explicitReferenceURL = referenceURL
+        self.openedSession = openedSession
+        _camera = StateObject(wrappedValue: CameraController(project: project, captureMode: .repeatable))
+    }
+
+    var body: some View {
+        Group {
+            switch capturePhase {
+            case .setup:
+                setupView
+            case .align:
+                alignmentView
+            }
+        }
+        .navigationTitle(project.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(capturePhase == .align ? .hidden : .visible, for: .navigationBar)
+        .task {
+            await camera.start()
+            await camera.setExposureBias(evBias)
+            loadReference()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            refreshReferenceOverlay()
+        }
+        .onChange(of: camera.completedSession) {
+            loadReference()
+            if camera.completedSession != nil {
+                AppOrientationLock.shared.unlock()
+                onCompletedTimelapse()
+            }
+        }
+        .onDisappear {
+            AppOrientationLock.shared.unlock()
+        }
+        .alert("Excluir esta captura?", isPresented: $isShowingDeleteConfirmation) {
+            Button("Excluir captura", role: .destructive) {
+                deleteOpenedTimelapse()
+            }
+            Button("Cancelar", role: .cancel) {}
+        } message: {
+            Text("Essa acao apaga somente os frames, o MP4 e os arquivos desta captura. O projeto Repeatable continua salvo.")
+        }
+        .alert("Nao foi possivel excluir", isPresented: Binding(
+            get: { deleteErrorMessage != nil },
+            set: { if !$0 { deleteErrorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deleteErrorMessage ?? "")
+        }
+    }
+
+    private var setupView: some View {
+        List {
+            Section("Captura") {
+                Picker("Tipo", selection: $selectedCaptureKind) {
+                    ForEach(RepeatableCaptureKind.captureOptions) { kind in
+                        Label(kind.title, systemImage: kind.systemImage)
+                            .tag(kind)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(isCaptureActive)
+            }
+
+            Section("Ajustes") {
+                RepeatableControlSlider(
+                    title: "EV",
+                    value: $evBias,
+                    range: -3...3,
+                    step: 1,
+                    formatter: { value in
+                        abs(value) < 0.05 ? "0" : String(format: "%+.0f", value)
+                    },
+                    isDisabled: isCaptureActive
+                )
+                .onChange(of: evBias) { _, newValue in
+                    Task {
+                        await camera.setExposureBias(newValue)
+                    }
+                }
+
+                RepeatableControlSlider(
+                    title: "Opacidade referencia",
+                    value: $overlayOpacity,
+                    range: 0...1,
+                    step: 0.05,
+                    formatter: { "\(Int($0 * 100))%" },
+                    isDisabled: referenceImage == nil || isCaptureActive
+                )
+
+                if selectedCaptureKind == .timelapse {
+                    RepeatableControlSlider(
+                        title: "Intervalometro",
+                        value: $intervalSeconds,
+                        range: 2...10,
+                        step: 1,
+                        formatter: { String(format: "%.0fs", $0) },
+                        isDisabled: isCaptureActive
+                    )
+                }
+            }
+
+            Section("Referencia") {
+                HStack(spacing: 12) {
+                    ReferenceThumbnail(imageURL: activeReferenceURL, systemImage: "photo")
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(referenceImage == nil ? "Sem referencia" : referenceName)
+                            .font(.headline)
+                        Text("Usada como overlay no alinhamento")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Label(referenceMotion == nil ? "Rotacao nao salva" : "Rotacao salva", systemImage: "gyroscope")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Label(referenceGeoPose == nil ? "GPS nao salvo" : "GPS salvo", systemImage: "location")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            Section {
+                Button {
+                    lockToReferenceOrientation()
+                    capturePhase = .align
+                    refreshReferenceOverlay()
+                } label: {
+                    Label("Abrir alinhamento", systemImage: "viewfinder")
+                }
+                .disabled(isCaptureActive)
+            }
+
+            if openedSession != nil {
+                Section {
+                    Button(role: .destructive) {
+                        isShowingDeleteConfirmation = true
+                    } label: {
+                        Label("Excluir captura", systemImage: "trash")
+                    }
+                    .disabled(isCaptureActive)
+                }
+            }
+        }
+    }
+
+    private var alignmentView: some View {
+        GeometryReader { proxy in
+            ZStack {
+                Color.black
+                    .ignoresSafeArea()
+
+                CameraPreview(session: camera.session)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
+
+                if let referenceImage {
+                    ReferenceOverlayImage(
+                        image: referenceImage,
+                        referenceOrientation: referenceOrientation,
+                        displayOrientation: currentAlignmentOrientation
+                    )
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .clipped()
+                        .opacity(overlayOpacity)
+                        .allowsHitTesting(false)
+                        .ignoresSafeArea()
+                        .id(referenceOverlayID)
+                }
+
+                if isGridVisible {
+                    RuleOfThirdsGrid()
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .allowsHitTesting(false)
+                        .ignoresSafeArea()
+                }
+
+                if isMotionHUDVisible, let referenceMotion, let currentMotion = camera.currentMotion {
+                    MotionAlignmentHUD(reference: referenceMotion, current: currentMotion)
+                        .frame(width: min(proxy.size.width * 0.54, 220), height: min(proxy.size.width * 0.54, 220))
+                        .position(x: proxy.size.width / 2, y: max(proxy.size.height - 240, proxy.size.height * 0.58))
+                }
+
+                if isVisualMatchGuideVisible,
+                   let visualAlignment = camera.visualAlignment,
+                   !visualAlignment.matchGuides.isEmpty {
+                    VisualMatchGuideOverlay(guides: visualAlignment.matchGuides)
+                        .frame(width: proxy.size.width, height: proxy.size.height)
+                        .allowsHitTesting(false)
+                        .ignoresSafeArea()
+
+                    if let rotationDegrees = visualAlignment.visualRotationDegrees {
+                        VisualRotationHUD(rotationDegrees: rotationDegrees)
+                            .frame(width: 124, height: 78)
+                            .position(x: proxy.size.width / 2, y: max(proxy.size.height - 178, proxy.size.height * 0.68))
+                    }
+                }
+
+                if isScaleHUDVisible, let visualAlignment = camera.visualAlignment {
+                    VisualDistanceHUD(estimate: visualAlignment)
+                        .frame(width: min(proxy.size.width * 0.58, 260), height: 74)
+                        .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                }
+
+                if isPositionHUDVisible, let referenceGeoPose, let currentGeoPose = camera.currentGeoPose {
+                    let hudSize = min(proxy.size.width * 0.34, 150)
+                    GeoAlignmentHUD(reference: referenceGeoPose, current: currentGeoPose)
+                        .frame(width: hudSize, height: hudSize)
+                        .position(x: proxy.size.width - hudSize / 2 - 12, y: hudSize / 2 + 74)
+                }
+
+                if isPositionHUDVisible, let currentHeading = camera.currentGeoPose?.heading {
+                    CompassHeadingBar(
+                        referenceHeading: referenceGeoPose?.heading,
+                        currentHeading: currentHeading
+                    )
+                    .frame(width: min(proxy.size.width * 0.44, 250), height: 54)
+                    .position(x: min(proxy.size.width * 0.25, 145), y: 82)
+                }
+
+                VStack(spacing: 0) {
+                    alignmentTopBar
+                    Spacer(minLength: 0)
+                    alignmentBottomBar(for: proxy.size)
+                }
+                .padding(12)
+                .foregroundStyle(.white)
+                .shadow(radius: 12)
+
+                hudTogglePanel
+                    .position(x: proxy.size.width - 32, y: proxy.size.height / 2)
+            }
+            .onAppear {
+                updateAlignmentOrientation(for: proxy.size)
+            }
+            .onChange(of: proxy.size) { _, size in
+                updateAlignmentOrientation(for: size)
+            }
+        }
+        .ignoresSafeArea()
+    }
+
+    private var hudTogglePanel: some View {
+        VStack(spacing: 10) {
+            hudToggleButton(
+                systemImage: "location.north.line",
+                isOn: isPositionHUDVisible,
+                accessibilityLabel: "Alternar GPS e direcao"
+            ) {
+                isPositionHUDVisible.toggle()
+            }
+
+            hudToggleButton(
+                systemImage: "arrow.up.left.and.arrow.down.right",
+                isOn: isScaleHUDVisible,
+                accessibilityLabel: "Alternar escala visual"
+            ) {
+                isScaleHUDVisible.toggle()
+            }
+
+            hudToggleButton(
+                systemImage: "point.3.connected.trianglepath.dotted",
+                isOn: isVisualMatchGuideVisible,
+                accessibilityLabel: "Alternar pontos de similaridade"
+            ) {
+                isVisualMatchGuideVisible.toggle()
+            }
+
+            hudToggleButton(
+                systemImage: "gyroscope",
+                isOn: isMotionHUDVisible,
+                accessibilityLabel: "Alternar orientacao"
+            ) {
+                isMotionHUDVisible.toggle()
+            }
+
+            hudToggleButton(
+                systemImage: "square.grid.3x3",
+                isOn: isGridVisible,
+                accessibilityLabel: "Alternar grade de enquadramento"
+            ) {
+                isGridVisible.toggle()
+            }
+
+            hudToggleButton(
+                systemImage: "info.circle",
+                isOn: isTimelapseInfoVisible,
+                accessibilityLabel: "Alternar informacoes do timelapse"
+            ) {
+                isTimelapseInfoVisible.toggle()
+            }
+        }
+        .padding(6)
+        .background(.black.opacity(0.24), in: Capsule())
+    }
+
+    private func hudToggleButton(
+        systemImage: String,
+        isOn: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(isOn ? .white : .white.opacity(0.42))
+                .frame(width: 40, height: 40)
+                .background(isOn ? .white.opacity(0.2) : .black.opacity(0.22), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(isOn ? .white.opacity(0.28) : .white.opacity(0.1), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var alignmentTopBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(selectedCaptureKind.title)
+                    .font(.system(size: 17, weight: .semibold))
+                Text(camera.status)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+        }
+    }
+
+    private func alignmentBottomBar(for size: CGSize) -> some View {
+        VStack(spacing: 12) {
+            if isTimelapseInfoVisible {
+                alignmentInfoPanel(for: size)
+            }
+
+            alignmentActionBar
+        }
+    }
+
+    private func alignmentInfoPanel(for size: CGSize) -> some View {
+        let isLandscape = size.width > size.height
+        let maxWidth = isLandscape ? size.width * 0.5 : min(size.width * 0.86, 420)
+
+        return VStack(spacing: 7) {
+            HStack(spacing: 10) {
+                RepeatableMetricPill(title: "Frames", value: "\(camera.frameCount)")
+                RepeatableMetricPill(title: "EV", value: camera.baseExposureLabel)
+                RepeatableMetricPill(title: "Ref", value: referenceName)
+            }
+
+            HStack(spacing: 10) {
+                RepeatableMetricPill(title: "Ultima", value: camera.lastCapturedExposureLabel)
+                RepeatableMetricPill(title: "Inicio", value: camera.countdownLabel)
+                RepeatableMetricPill(title: "GPS", value: currentGPSLabel)
+            }
+        }
+        .font(.system(size: isLandscape ? 10 : 11, weight: .medium))
+        .foregroundStyle(.white)
+        .padding(.horizontal, isLandscape ? 8 : 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: maxWidth)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var alignmentActionBar: some View {
+        Group {
+            if isCaptureActive {
+                Button {
+                    Task {
+                        await performPrimaryCaptureAction()
+                    }
+                } label: {
+                    if camera.isSinglePhotoCaptureRunning {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Label(activeStopButtonTitle, systemImage: "stop.fill")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.red)
+                .disabled(camera.isSinglePhotoCaptureRunning)
+            } else {
+                HStack(spacing: 10) {
+                    Button {
+                        AppOrientationLock.shared.unlock()
+                        capturePhase = .setup
+                    } label: {
+                        Label("Cancelar", systemImage: "xmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(.white)
+
+                    Button {
+                        Task {
+                            await performPrimaryCaptureAction()
+                        }
+                    } label: {
+                        Label(primaryButtonTitle, systemImage: primaryButtonImage)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.blue)
+                }
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func cameraPanel(isLandscape: Bool) -> some View {
+        ZStack {
+            CameraPreview(session: camera.session)
+
+            if let referenceImage {
+                Image(uiImage: referenceImage)
+                    .resizable()
+                    .scaledToFill()
+                    .opacity(overlayOpacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .aspectRatio(isLandscape ? 16.0 / 9.0 : 3.0 / 4.0, contentMode: .fit)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.white.opacity(0.18), lineWidth: 1)
+        }
+        .background(Color.black, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(project.name)
+                    .font(.system(size: 18, weight: .semibold))
+                Text(camera.status)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            if openedSession != nil {
+                Button {
+                    isShowingDeleteConfirmation = true
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .disabled(camera.isTimelapseRunning || camera.isVideoRecording)
+                .accessibilityLabel("Excluir captura")
+            }
+        }
+        .foregroundStyle(.white)
+        .shadow(radius: 12)
+    }
+
+    private var controls: some View {
+        VStack(spacing: 12) {
+            Picker("Tipo", selection: $selectedCaptureKind) {
+                ForEach(RepeatableCaptureKind.captureOptions) { kind in
+                    Label(kind.title, systemImage: kind.systemImage)
+                        .tag(kind)
+                }
+            }
+            .pickerStyle(.segmented)
+            .disabled(camera.isTimelapseRunning || camera.isSinglePhotoCaptureRunning || camera.isVideoRecording)
+
+            HStack {
+                RepeatableMetricPill(title: "Frames", value: "\(camera.frameCount)")
+                RepeatableMetricPill(title: "EV", value: camera.baseExposureLabel)
+                RepeatableMetricPill(title: "Ref", value: referenceName)
+            }
+
+            HStack {
+                RepeatableMetricPill(title: "Ultima", value: camera.lastCapturedExposureLabel)
+                RepeatableMetricPill(title: "Inicio", value: camera.countdownLabel)
+                RepeatableMetricPill(title: "GPS", value: currentGPSLabel)
+            }
+
+            RepeatableControlSlider(
+                title: "EV",
+                value: $evBias,
+                range: -3...3,
+                step: 1,
+                formatter: { value in
+                    abs(value) < 0.05 ? "0" : String(format: "%+.0f", value)
+                },
+                isDisabled: camera.isTimelapseRunning || camera.isSinglePhotoCaptureRunning || camera.isVideoRecording
+            )
+            .onChange(of: evBias) { _, newValue in
+                Task {
+                    await camera.setExposureBias(newValue)
+                }
+            }
+
+            RepeatableControlSlider(
+                title: "Opacidade referencia",
+                value: $overlayOpacity,
+                range: 0...1,
+                step: 0.05,
+                formatter: { "\(Int($0 * 100))%" },
+                isDisabled: referenceImage == nil || camera.isSinglePhotoCaptureRunning || camera.isVideoRecording
+            )
+
+            if selectedCaptureKind == .timelapse {
+                RepeatableControlSlider(
+                    title: "Intervalometro",
+                    value: $intervalSeconds,
+                    range: 2...10,
+                    step: 1,
+                    formatter: { String(format: "%.0fs", $0) },
+                    isDisabled: camera.isTimelapseRunning || camera.isVideoRecording
+                )
+            }
+
+            Button {
+                Task {
+                    switch selectedCaptureKind {
+                    case .timelapse:
+                        await camera.toggleTimelapse(interval: intervalSeconds)
+                    case .video:
+                        await camera.toggleVideoRecording()
+                    case .photo:
+                        await camera.captureSinglePhoto()
+                    }
+                }
+            } label: {
+                if camera.isSinglePhotoCaptureRunning {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Label(primaryButtonTitle, systemImage: primaryButtonImage)
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(camera.isTimelapseRunning || camera.isVideoRecording ? .red : .blue)
+            .disabled(camera.isSinglePhotoCaptureRunning)
+        }
+        .foregroundStyle(.white)
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .padding(.top, 10)
+    }
+
+    private var primaryButtonTitle: String {
+        if camera.isTimelapseRunning || camera.isVideoRecording {
+            return activeStopButtonTitle
+        }
+
+        switch selectedCaptureKind {
+        case .timelapse:
+            return "Iniciar timelapse"
+        case .video:
+            return "Gravar video"
+        case .photo:
+            return "Capturar foto"
+        }
+    }
+
+    private var primaryButtonImage: String {
+        if camera.isTimelapseRunning || camera.isVideoRecording {
+            return "stop.fill"
+        }
+
+        return selectedCaptureKind.systemImage
+    }
+
+    private var activeStopButtonTitle: String {
+        switch selectedCaptureKind {
+        case .timelapse:
+            return "Finalizar timelapse"
+        case .video:
+            return "Finalizar video"
+        case .photo:
+            return "Finalizar"
+        }
+    }
+
+    private func performPrimaryCaptureAction() async {
+        camera.setPendingReferenceOrientation(currentAlignmentOrientation)
+        switch selectedCaptureKind {
+        case .timelapse:
+            await camera.toggleTimelapse(interval: intervalSeconds)
+        case .video:
+            await camera.toggleVideoRecording()
+        case .photo:
+            await camera.captureSinglePhoto()
+        }
+    }
+
+    private var isCaptureActive: Bool {
+        camera.isTimelapseRunning || camera.isVideoRecording || camera.isSinglePhotoCaptureRunning
+    }
+
+    private var activeReferenceURL: URL? {
+        explicitReferenceURL ?? store.firstReferenceFrameURL()
+    }
+
+    private var currentGPSLabel: String {
+        guard let currentGeoPose = camera.currentGeoPose else {
+            return "sem fino"
+        }
+
+        return String(format: "±%.0fm", currentGeoPose.horizontalAccuracy)
+    }
+
+    private func loadReference() {
+        guard let referenceURL = activeReferenceURL,
+              let image = UIImage(contentsOfFile: referenceURL.path) else {
+            referenceImage = nil
+            referenceMotion = nil
+            referenceGeoPose = nil
+            referenceOrientation = nil
+            referenceName = "Sem ref"
+            Task {
+                await camera.setVisualReference(nil)
+            }
+            return
+        }
+
+        referenceImage = image
+        referenceMotion = store.referenceMotion(forFrameURL: referenceURL)
+        referenceGeoPose = store.referenceGeoPose(forFrameURL: referenceURL)
+        referenceOrientation = store.referenceOrientation(forFrameURL: referenceURL) ?? CaptureDisplayOrientation(image: image)
+        referenceName = referenceURL.lastPathComponent.replacingOccurrences(of: "frame_", with: "")
+        Task {
+            await camera.setVisualReference(referenceURL)
+        }
+    }
+
+    private func refreshReferenceOverlay() {
+        referenceOverlayID = UUID()
+    }
+
+    private func lockToReferenceOrientation() {
+        guard let referenceOrientation else { return }
+        currentAlignmentOrientation = referenceOrientation
+        camera.setPendingReferenceOrientation(referenceOrientation)
+        AppOrientationLock.shared.lock(to: referenceOrientation)
+    }
+
+    private func updateAlignmentOrientation(for size: CGSize) {
+        if capturePhase == .align, referenceOrientation != nil {
+            return
+        }
+
+        let orientation = CaptureDisplayOrientation(displaySize: size)
+        if currentAlignmentOrientation != orientation {
+            currentAlignmentOrientation = orientation
+            refreshReferenceOverlay()
+        }
+    }
+
+    private func deleteOpenedTimelapse() {
+        guard let openedSession else { return }
+
+        do {
+            try store.deleteSession(openedSession)
+            onDeletedOpenedTimelapse()
+        } catch {
+            deleteErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private enum RepeatableCapturePhase {
+    case setup
+    case align
+}
+
+private struct ReferenceOverlayImage: View {
+    let image: UIImage
+    let referenceOrientation: CaptureDisplayOrientation?
+    let displayOrientation: CaptureDisplayOrientation
+
+    var body: some View {
+        GeometryReader { proxy in
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+}
+
+private struct RuleOfThirdsGrid: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let lineColor = Color.white.opacity(0.5)
+            let diagonalColor = Color.white.opacity(0.3)
+            let centerColor = Color.white.opacity(0.24)
+            let accentColor = Color.cyan.opacity(0.72)
+
+            ZStack {
+                Path { path in
+                    path.move(to: CGPoint(x: size.width / 3, y: 0))
+                    path.addLine(to: CGPoint(x: size.width / 3, y: size.height))
+                    path.move(to: CGPoint(x: size.width * 2 / 3, y: 0))
+                    path.addLine(to: CGPoint(x: size.width * 2 / 3, y: size.height))
+                    path.move(to: CGPoint(x: 0, y: size.height / 3))
+                    path.addLine(to: CGPoint(x: size.width, y: size.height / 3))
+                    path.move(to: CGPoint(x: 0, y: size.height * 2 / 3))
+                    path.addLine(to: CGPoint(x: size.width, y: size.height * 2 / 3))
+                }
+                .stroke(lineColor, style: StrokeStyle(lineWidth: 1, lineCap: .round))
+
+                Path { path in
+                    path.move(to: CGPoint(x: 0, y: 0))
+                    path.addLine(to: CGPoint(x: size.width, y: size.height))
+                    path.move(to: CGPoint(x: 0, y: size.height))
+                    path.addLine(to: CGPoint(x: size.width, y: 0))
+                }
+                .stroke(diagonalColor, style: StrokeStyle(lineWidth: 1, lineCap: .round))
+
+                Path { path in
+                    let crossLength = min(size.width, size.height) * 0.055
+                    path.move(to: CGPoint(x: size.width / 2 - crossLength, y: size.height / 2))
+                    path.addLine(to: CGPoint(x: size.width / 2 + crossLength, y: size.height / 2))
+                    path.move(to: CGPoint(x: size.width / 2, y: size.height / 2 - crossLength))
+                    path.addLine(to: CGPoint(x: size.width / 2, y: size.height / 2 + crossLength))
+                }
+                .stroke(centerColor, style: StrokeStyle(lineWidth: 1, lineCap: .round))
+
+                ForEach(Array(gridIntersections(in: size).enumerated()), id: \.offset) { _, point in
+                    Circle()
+                        .fill(accentColor)
+                        .frame(width: 5, height: 5)
+                        .position(point)
+                }
+            }
+            .shadow(color: .black.opacity(0.38), radius: 2, x: 0, y: 1)
+        }
+    }
+
+    private func gridIntersections(in size: CGSize) -> [CGPoint] {
+        [
+            CGPoint(x: size.width / 3, y: size.height / 3),
+            CGPoint(x: size.width * 2 / 3, y: size.height / 3),
+            CGPoint(x: size.width / 3, y: size.height * 2 / 3),
+            CGPoint(x: size.width * 2 / 3, y: size.height * 2 / 3)
+        ]
+    }
+}
+
+private struct VisualMatchGuideOverlay: View {
+    let guides: [VisualMatchGuide]
+
+    var body: some View {
+        GeometryReader { proxy in
+            Canvas { context, size in
+                for guide in guides {
+                    let referencePoint = screenPoint(for: guide.reference, in: size)
+                    let currentPoint = screenPoint(for: guide.current, in: size)
+                    let isMatched = isMatched(referencePoint, currentPoint, in: size)
+
+                    let referenceRect = CGRect(
+                        x: referencePoint.x - 8,
+                        y: referencePoint.y - 8,
+                        width: 16,
+                        height: 16
+                    )
+                    context.fill(Path(ellipseIn: referenceRect), with: .color(.black.opacity(0.42)))
+                    context.stroke(
+                        Path(ellipseIn: referenceRect),
+                        with: .color(isMatched ? .green.opacity(0.98) : .cyan.opacity(0.98)),
+                        lineWidth: 2
+                    )
+
+                    let currentRect = CGRect(
+                        x: currentPoint.x - 6,
+                        y: currentPoint.y - 6,
+                        width: 12,
+                        height: 12
+                    )
+                    context.fill(
+                        Path(ellipseIn: currentRect),
+                        with: .color(isMatched ? .green.opacity(0.98) : .yellow.opacity(0.98))
+                    )
+                    context.stroke(Path(ellipseIn: currentRect), with: .color(.black.opacity(0.5)), lineWidth: 1)
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+        }
+    }
+
+    private func screenPoint(for normalizedPoint: CGPoint, in size: CGSize) -> CGPoint {
+        CGPoint(
+            x: normalizedPoint.x * size.width,
+            y: (1 - normalizedPoint.y) * size.height
+        )
+    }
+
+    private func isMatched(_ start: CGPoint, _ end: CGPoint, in size: CGSize) -> Bool {
+        let dx = end.x - start.x
+        let dy = end.y - start.y
+        let distance = sqrt(dx * dx + dy * dy)
+        return distance <= max(14, min(size.width, size.height) * 0.024)
+    }
+}
+
+private struct VisualRotationHUD: View {
+    let rotationDegrees: Double
+
+    private var clampedRotation: Double {
+        min(max(rotationDegrees, -18), 18)
+    }
+
+    private var isAligned: Bool {
+        abs(rotationDegrees) < 0.8
+    }
+
+    private var tint: Color {
+        isAligned ? .green : .yellow
+    }
+
+    private var title: String {
+        if isAligned {
+            return "ROT OK"
+        }
+
+        return rotationDegrees > 0 ? "GIRE DIR" : "GIRE ESQ"
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let center = CGPoint(x: size.width / 2, y: 32)
+            let radius = min(size.width * 0.28, 30)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.black.opacity(0.32))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(.white.opacity(0.14), lineWidth: 1)
+                    }
+
+                Canvas { context, _ in
+                    let arcRect = CGRect(
+                        x: center.x - radius,
+                        y: center.y - radius,
+                        width: radius * 2,
+                        height: radius * 2
+                    )
+
+                    var baseArc = Path()
+                    baseArc.addArc(
+                        center: center,
+                        radius: radius,
+                        startAngle: .degrees(205),
+                        endAngle: .degrees(335),
+                        clockwise: false
+                    )
+                    context.stroke(baseArc, with: .color(.white.opacity(0.22)), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+
+                    var needle = Path()
+                    needle.move(to: center)
+                    let needleAngle = Angle(degrees: -90 + clampedRotation * 3.1).radians
+                    needle.addLine(to: CGPoint(
+                        x: center.x + cos(needleAngle) * radius * 0.86,
+                        y: center.y + sin(needleAngle) * radius * 0.86
+                    ))
+                    context.stroke(needle, with: .color(tint.opacity(0.95)), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+
+                    context.fill(Path(ellipseIn: CGRect(x: center.x - 3, y: center.y - 3, width: 6, height: 6)), with: .color(.white.opacity(0.9)))
+                    context.stroke(Path(ellipseIn: arcRect), with: .color(.clear), lineWidth: 0)
+                }
+
+                VStack(spacing: 1) {
+                    Spacer()
+                    Text(title)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(tint)
+                    Text(String(format: "%+.1f°", rotationDegrees))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white.opacity(0.82))
+                }
+                .padding(.bottom, 7)
+            }
+        }
+    }
+}
+
+private extension CaptureDisplayOrientation {
+    init(displaySize: CGSize) {
+        self = displaySize.width > displaySize.height ? .landscapeRight : .portrait
+    }
+
+    init(image: UIImage) {
+        if image.size.width > image.size.height {
+            self = .landscapeRight
+        } else {
+            self = .portrait
+        }
+    }
+}
+
+private struct RepeatableMetricPill: View {
+    let title: String
+    let value: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MotionAlignmentHUD: View {
+    let reference: MotionAttitude
+    let current: MotionAttitude
+
+    private var delta: MotionAttitude {
+        current.delta(from: reference)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            let radius = size * 0.36
+            let offset = currentOffset(radius: radius)
+
+            ZStack {
+                Circle()
+                    .stroke(.white.opacity(0.18), lineWidth: 1)
+                    .frame(width: size * 0.82, height: size * 0.82)
+
+                Circle()
+                    .stroke(.white.opacity(0.09), lineWidth: 1)
+                    .frame(width: size * 0.54, height: size * 0.54)
+
+                Rectangle()
+                    .fill(.white.opacity(0.16))
+                    .frame(width: size * 0.72, height: 1)
+
+                Rectangle()
+                    .fill(.white.opacity(0.16))
+                    .frame(width: 1, height: size * 0.72)
+
+                Circle()
+                    .stroke(.cyan.opacity(0.95), lineWidth: 2)
+                    .frame(width: 18, height: 18)
+
+                Rectangle()
+                    .fill(.cyan.opacity(0.85))
+                    .frame(width: 2, height: size * 0.18)
+                    .offset(y: -size * 0.09)
+
+                Rectangle()
+                    .fill(.yellow.opacity(0.9))
+                    .frame(width: 2, height: size * 0.24)
+                    .offset(y: -size * 0.12)
+                    .rotationEffect(.degrees(delta.z))
+
+                Circle()
+                    .fill(.yellow.opacity(0.96))
+                    .frame(width: 14, height: 14)
+                    .overlay {
+                        Circle()
+                            .stroke(.black.opacity(0.35), lineWidth: 1)
+                    }
+                    .offset(offset)
+
+                VStack {
+                    Spacer()
+                    HStack(spacing: 8) {
+                        axisPill("X", delta.x)
+                        axisPill("Y", delta.y)
+                        axisPill("Z", delta.z)
+                    }
+                }
+                .padding(.bottom, 8)
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height)
+            .background(.black.opacity(0.18), in: Circle())
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func currentOffset(radius: CGFloat) -> CGSize {
+        let x = CGFloat(clamped(delta.y / 18)) * radius
+        let y = CGFloat(clamped(-delta.x / 18)) * radius
+        return CGSize(width: x, height: y)
+    }
+
+    private func clamped(_ value: Double) -> Double {
+        min(max(value, -1), 1)
+    }
+
+    private func axisPill(_ axis: String, _ value: Double) -> some View {
+        HStack(spacing: 3) {
+            Text(axis)
+                .foregroundStyle(.white.opacity(0.65))
+            Text(String(format: "%+.1f", value))
+                .foregroundStyle(abs(value) < 2 ? .green : .white)
+        }
+        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 4)
+        .background(.black.opacity(0.38), in: Capsule())
+    }
+}
+
+private struct VisualDistanceHUD: View {
+    let estimate: VisualAlignmentEstimate
+
+    private var isFineAdjustment: Bool {
+        estimate.isFineAdjustment
+    }
+
+    private var scaleRange: Double {
+        isFineAdjustment ? 0.035 : 0.16
+    }
+
+    private var markerOffset: Double {
+        min(max((estimate.scale - 1) / scaleRange, -1), 1)
+    }
+
+    private var title: String {
+        if isFineAdjustment {
+            if abs(estimate.scale - 1) < 0.008 {
+                return "FINO OK"
+            }
+
+            return estimate.scale < 1 ? "AFASTE LEVE" : "APROXIME LEVE"
+        }
+
+        switch estimate.distanceHint {
+        case .searching:
+            return "ANALISANDO"
+        case .moveForward:
+            return "APROXIME"
+        case .moveBack:
+            return "AFASTE"
+        case .matched:
+            return "ESCALA OK"
+        }
+    }
+
+    private var tint: Color {
+        if isFineAdjustment {
+            return abs(estimate.scale - 1) < 0.008 ? .green : .cyan
+        }
+
+        switch estimate.distanceHint {
+        case .searching:
+            return .white.opacity(0.7)
+        case .matched:
+            return .green
+        case .moveForward, .moveBack:
+            return .yellow
+        }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let markerX = width / 2 + CGFloat(markerOffset) * (width * 0.38)
+
+            VStack(spacing: 8) {
+                HStack {
+                    Text(isFineAdjustment ? "- FINO" : "MENOR")
+                    Spacer()
+                    Text(title)
+                        .foregroundStyle(tint)
+                    Spacer()
+                    Text(isFineAdjustment ? "+ FINO" : "MAIOR")
+                }
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.58))
+
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(.white.opacity(0.16))
+                        .frame(height: 6)
+
+                    Rectangle()
+                        .fill(.white.opacity(0.24))
+                        .frame(width: 1, height: 18)
+                        .position(x: width / 2, y: 3)
+
+                    Circle()
+                        .fill(tint)
+                        .frame(width: 16, height: 16)
+                        .position(x: markerX, y: 3)
+                }
+                .frame(height: 18)
+
+                Text(detailLabel)
+                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.72))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 10)
+            .background(.black.opacity(0.34), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.white.opacity(0.15), lineWidth: 1)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var detailLabel: String {
+        if isFineAdjustment {
+            return String(format: "ajuste fino | escala %.3f", estimate.scale)
+        }
+
+        return String(format: "escala %.2f", estimate.scale)
+    }
+}
+
+private struct CompassHeadingBar: View {
+    let referenceHeading: Double?
+    let currentHeading: Double
+
+    private var normalizedCurrent: Double {
+        normalized(currentHeading)
+    }
+
+    private var normalizedReference: Double? {
+        referenceHeading.map(normalized)
+    }
+
+    private var deltaLabel: String {
+        guard let normalizedReference else {
+            return "--"
+        }
+
+        let delta = normalizedSigned(normalizedCurrent - normalizedReference)
+        return String(format: "%+.0f", delta)
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width
+            let currentX = xPosition(for: normalizedCurrent, width: width)
+            let referenceX = normalizedReference.map { xPosition(for: $0, width: width) }
+
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.black.opacity(0.34))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(.white.opacity(0.16), lineWidth: 1)
+                    }
+
+                ForEach([0, 90, 180, 270, 360], id: \.self) { value in
+                    let x = xPosition(for: Double(value), width: width)
+                    VStack(spacing: 3) {
+                        Rectangle()
+                            .fill(.white.opacity(0.28))
+                            .frame(width: 1, height: value % 180 == 0 ? 16 : 10)
+                        Text("\(value)")
+                            .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.62))
+                    }
+                    .position(x: x, y: 24)
+                }
+
+                if let referenceX {
+                    VStack(spacing: 2) {
+                        Triangle()
+                            .fill(.cyan.opacity(0.95))
+                            .frame(width: 12, height: 8)
+                        Text("REF")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.cyan.opacity(0.9))
+                    }
+                    .position(x: referenceX, y: 11)
+                }
+
+                VStack(spacing: 2) {
+                    Text(String(format: "%.0f", normalizedCurrent))
+                        .font(.system(size: 11, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.yellow.opacity(0.95))
+                    Triangle()
+                        .fill(.yellow.opacity(0.96))
+                        .frame(width: 14, height: 10)
+                        .rotationEffect(.degrees(180))
+                }
+                .position(x: currentX, y: 42)
+
+                Text(deltaLabel)
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundStyle(referenceHeading == nil ? .white.opacity(0.42) : .white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(.black.opacity(0.42), in: Capsule())
+                    .position(x: width / 2, y: 42)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func xPosition(for heading: Double, width: CGFloat) -> CGFloat {
+        let clampedHeading = min(max(heading, 0), 360)
+        return CGFloat(clampedHeading / 360) * (width - 20) + 10
+    }
+
+    private func normalized(_ value: Double) -> Double {
+        var result = value.truncatingRemainder(dividingBy: 360)
+        if result < 0 {
+            result += 360
+        }
+        return result
+    }
+
+    private func normalizedSigned(_ value: Double) -> Double {
+        var result = value
+        while result > 180 { result -= 360 }
+        while result < -180 { result += 360 }
+        return result
+    }
+}
+
+private struct Triangle: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct GeoAlignmentHUD: View {
+    let reference: GeoPose
+    let current: GeoPose
+
+    private var offset: CGSize {
+        current.offsetMeters(from: reference)
+    }
+
+    private var distance: Double {
+        sqrt(offset.width * offset.width + offset.height * offset.height)
+    }
+
+    private var scaleMeters: Double {
+        max(8, min(50, max(distance * 1.35, current.horizontalAccuracy)))
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = min(proxy.size.width, proxy.size.height)
+            let radius = size * 0.34
+            let dotOffset = currentOffset(radius: radius)
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(.black.opacity(0.24))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(.white.opacity(0.14), lineWidth: 1)
+                    }
+
+                Circle()
+                    .stroke(.white.opacity(0.12), lineWidth: 1)
+                    .frame(width: radius * 2, height: radius * 2)
+
+                Rectangle()
+                    .fill(.white.opacity(0.14))
+                    .frame(width: radius * 1.72, height: 1)
+
+                Rectangle()
+                    .fill(.white.opacity(0.14))
+                    .frame(width: 1, height: radius * 1.72)
+
+                Circle()
+                    .stroke(.cyan.opacity(0.95), lineWidth: 2)
+                    .frame(width: 14, height: 14)
+
+                Circle()
+                    .fill(.yellow.opacity(0.96))
+                    .frame(width: 12, height: 12)
+                    .overlay {
+                        Circle()
+                            .stroke(.black.opacity(0.35), lineWidth: 1)
+                    }
+                    .offset(dotOffset)
+
+                VStack {
+                    HStack {
+                        Text("GPS")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
+                            .foregroundStyle(.white.opacity(0.7))
+                        Spacer()
+                        Text(String(format: "%.1fm", distance))
+                            .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(distance < 2 ? .green : .white)
+                    }
+                    Spacer()
+                    HStack(spacing: 6) {
+                        axisPill("E", Double(offset.width))
+                        axisPill("N", Double(offset.height))
+                    }
+                }
+                .padding(8)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func currentOffset(radius: CGFloat) -> CGSize {
+        let x = CGFloat(clamped(Double(offset.width) / scaleMeters)) * radius
+        let y = CGFloat(clamped(-Double(offset.height) / scaleMeters)) * radius
+        return CGSize(width: x, height: y)
+    }
+
+    private func clamped(_ value: Double) -> Double {
+        min(max(value, -1), 1)
+    }
+
+    private func axisPill(_ axis: String, _ value: Double) -> some View {
+        HStack(spacing: 3) {
+            Text(axis)
+                .foregroundStyle(.white.opacity(0.62))
+            Text(String(format: "%+.1f", value))
+        }
+        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+        .padding(.horizontal, 5)
+        .padding(.vertical, 3)
+        .background(.black.opacity(0.38), in: Capsule())
+    }
+}
+
+private struct RepeatableControlSlider: View {
+    let title: String
+    @Binding var value: Double
+    let range: ClosedRange<Double>
+    let step: Double
+    let formatter: (Double) -> String
+    var isDisabled = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text(title)
+                Spacer()
+                Text(formatter(value))
+                    .font(.system(.body, design: .monospaced, weight: .semibold))
+            }
+
+            Slider(value: $value, in: range, step: step)
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .opacity(isDisabled ? 0.55 : 1)
+        .disabled(isDisabled)
+    }
+}
