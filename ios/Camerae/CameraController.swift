@@ -14,10 +14,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var isSinglePhotoCaptureRunning = false
     @Published private(set) var isVideoRecording = false
     @Published private(set) var frameCount = 0
+    @Published private(set) var astroCompositeFrameCount = 0
     @Published private(set) var baseExposureLabel = "-"
     @Published private(set) var stackProgressLabel = "-"
     @Published private(set) var lastCapturedExposureLabel = "-"
     @Published private(set) var countdownLabel = "-"
+    @Published private(set) var astroBatchProgressLabel = "-"
+    @Published private(set) var astroExposurePhaseLabel = "-"
+    @Published private(set) var astroStackingStartFrame: Int?
+    @Published private(set) var astroPreviewURL: URL?
     @Published private(set) var currentMotion: MotionAttitude?
     @Published private(set) var currentGeoPose: GeoPose?
     @Published private(set) var visualAlignment: VisualAlignmentEstimate?
@@ -36,6 +41,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private let store: TimelapseSessionStore
     nonisolated(unsafe) private var device: AVCaptureDevice?
     nonisolated(unsafe) private var exposureBias: Float = 0
+    nonisolated(unsafe) private var astroExposureStrategy = AstroExposureStrategy.automatic(maxDuration: 1.0)
     private var timelapseTask: Task<Void, Never>?
     private var latestLocation: CLLocation?
     private var latestHeading: CLHeading?
@@ -84,6 +90,24 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    func toggleAstroBatchCapture(
+        timelapseInterval: Double,
+        astroInterval: Double,
+        batchSize: Int,
+        usesAutomaticExposure: Bool
+    ) async {
+        if isTimelapseRunning {
+            stopTimelapse()
+        } else {
+            await startAstroBatchCapture(
+                timelapseInterval: timelapseInterval,
+                astroInterval: astroInterval,
+                batchSize: batchSize,
+                usesAutomaticExposure: usesAutomaticExposure
+            )
+        }
+    }
+
     func captureSinglePhoto() async {
         guard !isTimelapseRunning, !isSinglePhotoCaptureRunning else { return }
         isSinglePhotoCaptureRunning = true
@@ -93,6 +117,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             currentSession = try store.createSession(captureKind: .photo)
             completedSession = nil
             frameCount = 0
+            astroCompositeFrameCount = 0
+            astroBatchProgressLabel = "-"
+            astroExposurePhaseLabel = "-"
+            astroStackingStartFrame = nil
+            astroPreviewURL = nil
             lastExportURL = nil
             status = "Estabilizando tripe"
 
@@ -194,6 +223,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             currentSession = try store.createSession(captureKind: .timelapse)
             completedSession = nil
             frameCount = 0
+            astroCompositeFrameCount = 0
+            astroBatchProgressLabel = "-"
+            astroExposurePhaseLabel = "-"
+            astroStackingStartFrame = nil
+            astroPreviewURL = nil
             lastExportURL = nil
             isTimelapseRunning = true
             status = "Estabilizando tripe"
@@ -201,6 +235,45 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             timelapseTask = Task { [weak self] in
                 guard let self else { return }
                 await self.runTimelapseWithCountdown(interval: interval)
+            }
+        } catch {
+            status = "Falha ao criar sessao: \(error.localizedDescription)"
+        }
+    }
+
+    private func startAstroBatchCapture(
+        timelapseInterval: Double,
+        astroInterval: Double,
+        batchSize: Int,
+        usesAutomaticExposure: Bool
+    ) async {
+        guard case .astro = captureMode else {
+            await startTimelapse(interval: timelapseInterval)
+            return
+        }
+
+        do {
+            astroExposureStrategy = usesAutomaticExposure ? .automatic(maxDuration: 1.0) : .fixed(duration: 1.0)
+            currentSession = try store.createSession(captureKind: .timelapse)
+            completedSession = nil
+            frameCount = 0
+            astroCompositeFrameCount = 0
+            astroBatchProgressLabel = "0/\(Self.clampedAstroBatchSize(batchSize))"
+            astroExposurePhaseLabel = usesAutomaticExposure ? "Auto" : "Astro"
+            astroStackingStartFrame = nil
+            astroPreviewURL = nil
+            lastExportURL = nil
+            isTimelapseRunning = true
+            status = "Estabilizando tripe"
+
+            timelapseTask = Task { [weak self] in
+                guard let self else { return }
+                await self.runAstroBatchCaptureWithCountdown(
+                    timelapseInterval: timelapseInterval,
+                    astroInterval: astroInterval,
+                    batchSize: batchSize,
+                    waitsForAstroExposure: usesAutomaticExposure
+                )
             }
         } catch {
             status = "Falha ao criar sessao: \(error.localizedDescription)"
@@ -571,8 +644,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseTask = nil
         isTimelapseRunning = false
         countdownLabel = "-"
-        stackProgressLabel = "-"
-        if frameCount > 0 {
+        astroBatchProgressLabel = "-"
+        astroExposurePhaseLabel = "-"
+        if frameCount > 0 || astroCompositeFrameCount > 0 {
             completedSession = currentSession
             status = "Timelapse concluido"
         } else {
@@ -594,6 +668,30 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         await runTimelapse(interval: interval)
     }
 
+    private func runAstroBatchCaptureWithCountdown(
+        timelapseInterval: Double,
+        astroInterval: Double,
+        batchSize: Int,
+        waitsForAstroExposure: Bool
+    ) async {
+        for second in stride(from: 3, through: 1, by: -1) {
+            guard !Task.isCancelled else { return }
+            countdownLabel = "\(second)s"
+            status = "Comecando em \(second)s"
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        guard !Task.isCancelled else { return }
+        countdownLabel = "-"
+        status = waitsForAstroExposure ? "Capturando por do sol" : "Capturando lote astro"
+        await runAstroBatchCapture(
+            timelapseInterval: timelapseInterval,
+            astroInterval: astroInterval,
+            batchSize: batchSize,
+            waitsForAstroExposure: waitsForAstroExposure
+        )
+    }
+
     private func runTimelapse(interval: Double) async {
         let clampedInterval = min(max(interval, 2), 10)
         let intervalNanos = UInt64(clampedInterval * 1_000_000_000)
@@ -608,6 +706,83 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             if !Task.isCancelled {
                 status = "Aguardando \(Self.formatInterval(clampedInterval))"
                 try? await Task.sleep(nanoseconds: intervalNanos)
+            }
+        }
+    }
+
+    private func runAstroBatchCapture(
+        timelapseInterval: Double,
+        astroInterval: Double,
+        batchSize: Int,
+        waitsForAstroExposure: Bool
+    ) async {
+        let clampedTimelapseInterval = min(max(timelapseInterval, 2), 120)
+        let clampedAstroInterval = min(max(astroInterval, 1), 10)
+        let size = Self.clampedAstroBatchSize(batchSize)
+        var currentBatch: [URL] = []
+        currentBatch.reserveCapacity(size)
+        var isStackingActive = !waitsForAstroExposure
+
+        while !Task.isCancelled {
+            let captureStartedAt = Date()
+            do {
+                let savedFrame = try await captureAndSaveFrame()
+                if !isStackingActive {
+                    if savedFrame.exposureSeconds >= Self.astroStackingExposureThreshold {
+                        isStackingActive = true
+                        astroStackingStartFrame = savedFrame.index
+                        astroExposurePhaseLabel = "Astro"
+                        if let currentSession {
+                            try store.saveAstroStackingStartFrame(savedFrame.index, in: currentSession)
+                        }
+                        status = "Inicio astro no frame \(savedFrame.index)"
+                    } else {
+                        astroExposurePhaseLabel = "Auto"
+                        astroBatchProgressLabel = "aguardando"
+                        stackProgressLabel = "Auto"
+                    }
+                }
+
+                if isStackingActive {
+                    if astroStackingStartFrame == nil {
+                        astroStackingStartFrame = savedFrame.index
+                        if let currentSession {
+                            try store.saveAstroStackingStartFrame(savedFrame.index, in: currentSession)
+                        }
+                    }
+
+                    currentBatch.append(savedFrame.url)
+                    astroBatchProgressLabel = "\(currentBatch.count)/\(size)"
+                    stackProgressLabel = "Lote \(currentBatch.count)/\(size)"
+                }
+
+                if currentBatch.count >= size {
+                    status = "Processando frame astro"
+                    let outputURL = try await processAstroBatch(
+                        currentBatch,
+                        batchIndex: astroCompositeFrameCount + 1
+                    )
+                    astroCompositeFrameCount += 1
+                    astroPreviewURL = outputURL
+                    currentBatch.removeAll(keepingCapacity: true)
+                    astroBatchProgressLabel = "0/\(size)"
+                    stackProgressLabel = "Stack \(astroCompositeFrameCount)"
+                    status = "Preview astro atualizado"
+                }
+            } catch {
+                status = "Frame falhou: \(error.localizedDescription)"
+            }
+
+            if !Task.isCancelled {
+                let elapsed = Date().timeIntervalSince(captureStartedAt)
+                let nextInterval = isStackingActive ? clampedAstroInterval : clampedTimelapseInterval
+                let remaining = nextInterval - elapsed
+                if remaining > 0 {
+                    status = "Aguardando \(Self.formatInterval(remaining))"
+                    try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
+                } else {
+                    status = currentBatch.isEmpty ? "Capturando proximo lote" : "Capturando lote astro"
+                }
             }
         }
     }
@@ -683,11 +858,13 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         _ = try store.saveFrame(data, in: session, index: 1)
     }
 
-    private func captureAndSaveFrame() async throws {
+    @discardableResult
+    private func captureAndSaveFrame() async throws -> SavedFrame {
         guard let currentSession else { throw CameraError.missingSession }
         applyOutputRotation(for: currentSession.referenceOrientation)
         let photo = try await captureOriginalPhoto()
-        let savedURL = try store.saveFrame(photo.data, in: currentSession, index: frameCount + 1)
+        let frameIndex = frameCount + 1
+        let savedURL = try store.saveFrame(photo.data, in: currentSession, index: frameIndex)
 
         if frameCount == 0 {
             self.currentSession = try saveReferencePoseIfAvailable(for: currentSession)
@@ -695,8 +872,26 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         frameCount += 1
         lastCapturedExposureLabel = photo.exposureLabel
+        baseExposureLabel = Self.formatExposure(photo.exposureSeconds)
         stackProgressLabel = "Original"
         status = "Salvo \(savedURL.lastPathComponent)"
+        return SavedFrame(index: frameIndex, url: savedURL, exposureSeconds: photo.exposureSeconds)
+    }
+
+    private func processAstroBatch(_ frameURLs: [URL], batchIndex: Int) async throws -> URL {
+        guard let currentSession else { throw CameraError.missingSession }
+        let data = try await Task.detached(priority: .userInitiated) {
+            let stacker = ExposureStacker()
+            return try autoreleasepool {
+                try stacker.averageJPEGFiles(
+                    frameURLs,
+                    maxDimension: 1920,
+                    profile: .natural
+                )
+            }
+        }.value
+
+        return try store.saveAstroStackFrame(data, in: currentSession, index: batchIndex)
     }
 
     private func applyOutputRotation(for orientation: CaptureDisplayOrientation?) {
@@ -867,10 +1062,19 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated private func prepareCapture(device: AVCaptureDevice) throws -> Double {
         switch captureMode {
         case .astro:
-            return try prepareLongExposureCapture(device: device)
+            return try prepareAstroCapture(device: device)
         case .repeatable:
             try applyRepeatableAutoConfiguration(device: device)
             return CMTimeGetSeconds(device.exposureDuration)
+        }
+    }
+
+    nonisolated private func prepareAstroCapture(device: AVCaptureDevice) throws -> Double {
+        switch astroExposureStrategy {
+        case .automatic(let maxDuration):
+            return try prepareAutomaticAstroExposureCapture(device: device, maxDuration: maxDuration)
+        case .fixed(let duration):
+            return try prepareLongExposureCapture(device: device, targetSeconds: duration)
         }
     }
 
@@ -910,8 +1114,49 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         device.setExposureTargetBias(exposureBias)
     }
 
-    nonisolated private func prepareLongExposureCapture(device: AVCaptureDevice) throws -> Double {
-        let exposureDuration = Self.supportedExposureDuration(for: device, targetSeconds: 1.0)
+    nonisolated private func prepareAutomaticAstroExposureCapture(
+        device: AVCaptureDevice,
+        maxDuration: Double
+    ) throws -> Double {
+        let exposureDuration = Self.supportedExposureDuration(for: device, targetSeconds: maxDuration)
+        let frameDuration = Self.supportedFrameDuration(for: device, targetSeconds: exposureDuration)
+
+        try device.lockForConfiguration()
+        defer {
+            device.unlockForConfiguration()
+        }
+
+        if #available(iOS 18.0, *), device.isAutoVideoFrameRateEnabled {
+            device.isAutoVideoFrameRateEnabled = false
+        }
+
+        device.activeVideoMinFrameDuration = CMTime.invalid
+        device.activeVideoMaxFrameDuration = CMTime(seconds: frameDuration, preferredTimescale: 600)
+
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        } else if device.isFocusModeSupported(.autoFocus) {
+            device.focusMode = .autoFocus
+        }
+
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.activeMaxExposureDuration = CMTime(seconds: exposureDuration, preferredTimescale: 1_000_000_000)
+            device.exposureMode = .continuousAutoExposure
+        } else if device.isExposureModeSupported(.autoExpose) {
+            device.exposureMode = .autoExpose
+        }
+
+        if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+            device.whiteBalanceMode = .continuousAutoWhiteBalance
+        } else if device.isWhiteBalanceModeSupported(.autoWhiteBalance) {
+            device.whiteBalanceMode = .autoWhiteBalance
+        }
+
+        return CMTimeGetSeconds(device.exposureDuration)
+    }
+
+    nonisolated private func prepareLongExposureCapture(device: AVCaptureDevice, targetSeconds: Double) throws -> Double {
+        let exposureDuration = Self.supportedExposureDuration(for: device, targetSeconds: targetSeconds)
         let frameDuration = Self.supportedFrameDuration(for: device, targetSeconds: exposureDuration)
         let iso = min(max(device.iso, device.activeFormat.minISO), device.activeFormat.maxISO)
         let semaphore = DispatchSemaphore(value: 0)
@@ -976,6 +1221,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     nonisolated private static func formatExposure(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "-" }
+
         if seconds >= 1 {
             return String(format: "%.1fs", seconds)
         }
@@ -986,6 +1233,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private static func formatInterval(_ seconds: Double) -> String {
         String(format: "%.0fs", seconds)
     }
+
+    private static func clampedAstroBatchSize(_ value: Int) -> Int {
+        min(max(value, 5), 30)
+    }
+
+    private static let astroStackingExposureThreshold = 0.8
 
     private static func formatEV(_ value: Double) -> String {
         if abs(value) < 0.05 {
@@ -999,6 +1252,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 enum CameraCaptureMode {
     case astro
     case repeatable
+}
+
+private enum AstroExposureStrategy {
+    case automatic(maxDuration: Double)
+    case fixed(duration: Double)
 }
 
 struct VisualAlignmentEstimate: Equatable {
@@ -1062,6 +1320,13 @@ enum VisualDistanceHint {
 private struct CapturedPhoto {
     let data: Data
     let exposureLabel: String
+    let exposureSeconds: Double
+}
+
+private struct SavedFrame {
+    let index: Int
+    let url: URL
+    let exposureSeconds: Double
 }
 
 private final class MovieRecordingDelegate: NSObject, AVCaptureFileOutputRecordingDelegate {
@@ -1130,14 +1395,25 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             return
         }
 
-        completion(.success(CapturedPhoto(data: data, exposureLabel: Self.exposureLabel(from: photo.metadata))))
+        let exposureSeconds = Self.exposureSeconds(from: photo.metadata)
+        completion(.success(CapturedPhoto(
+            data: data,
+            exposureLabel: Self.exposureLabel(from: exposureSeconds),
+            exposureSeconds: exposureSeconds
+        )))
     }
 
-    private static func exposureLabel(from metadata: [String: Any]) -> String {
+    private static func exposureSeconds(from metadata: [String: Any]) -> Double {
         guard let exif = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
               let exposureTime = exif[kCGImagePropertyExifExposureTime as String] as? Double else {
-            return "-"
+            return 0
         }
+
+        return exposureTime
+    }
+
+    private static func exposureLabel(from exposureTime: Double) -> String {
+        guard exposureTime > 0 else { return "-" }
 
         if exposureTime >= 1 {
             return String(format: "%.2fs", exposureTime)

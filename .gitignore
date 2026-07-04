@@ -1,6 +1,15 @@
 .DS_Store
 .build/
+**/.build/
 DerivedData/
+**/DerivedData/
 *.xcuserstate
 xcuserdata/
 Config/Signing.local.xcconfig
+ios/Config/Signing.local.xcconfig
+
+# Android
+android/.gradle/
+android/.idea/
+android/local.properties
+android/**/build/

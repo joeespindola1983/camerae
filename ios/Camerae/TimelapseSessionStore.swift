@@ -76,6 +76,36 @@ final class TimelapseSessionStore {
         return fileURL
     }
 
+    func saveAstroStackFrame(_ data: Data, in session: TimelapseSession, index: Int) throws -> URL {
+        let directoryURL = session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true)
+        try fileManager.createDirectory(at: directoryURL, withIntermediateDirectories: true)
+
+        let fileName = String(format: "astro_frame_%06d.jpg", index)
+        let fileURL = directoryURL.appendingPathComponent(fileName)
+        try data.write(to: fileURL, options: [.atomic])
+        return fileURL
+    }
+
+    func saveAstroStackingStartFrame(_ frameIndex: Int, in session: TimelapseSession) throws {
+        let metadata: [String: Any] = [
+            "stackingStartFrame": max(frameIndex, 1),
+            "updatedAt": ISO8601DateFormatter().string(from: Date())
+        ]
+        let data = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
+        try data.write(to: astroCaptureMetadataURL(for: session), options: [.atomic])
+    }
+
+    func astroStackingStartFrame(in session: TimelapseSession) -> Int? {
+        guard
+            let data = try? Data(contentsOf: astroCaptureMetadataURL(for: session)),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+        else {
+            return nil
+        }
+
+        return object["stackingStartFrame"] as? Int
+    }
+
     func updateReferenceMotion(_ motion: MotionAttitude, for session: TimelapseSession) throws -> TimelapseSession {
         let updatedSession = TimelapseSession(
             id: session.id,
@@ -216,6 +246,10 @@ final class TimelapseSessionStore {
         frameURLs(in: session).count
     }
 
+    func astroStackFrameCount(in session: TimelapseSession) -> Int {
+        astroStackFrameURLs(in: session).count
+    }
+
     func frameURLs(in session: TimelapseSession) -> [URL] {
         guard let files = try? fileManager.contentsOfDirectory(
             at: session.directoryURL,
@@ -226,6 +260,23 @@ final class TimelapseSessionStore {
 
         return files.filter { url in
             url.lastPathComponent.hasPrefix("frame_") &&
+            url.pathExtension.lowercased() == "jpg" &&
+            ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
+        }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    func astroStackFrameURLs(in session: TimelapseSession) -> [URL] {
+        let directoryURL = session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true)
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey]
+        ) else {
+            return []
+        }
+
+        return files.filter { url in
+            url.lastPathComponent.hasPrefix("astro_frame_") &&
             url.pathExtension.lowercased() == "jpg" &&
             ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
         }
@@ -283,6 +334,10 @@ final class TimelapseSessionStore {
 
     func videoClipURL(for session: TimelapseSession) -> URL {
         session.directoryURL.appendingPathComponent("video.mov")
+    }
+
+    private func astroCaptureMetadataURL(for session: TimelapseSession) -> URL {
+        session.directoryURL.appendingPathComponent("astro_capture.json")
     }
 
     private func existingVideoURL(for session: TimelapseSession) -> URL? {
