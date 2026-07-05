@@ -26,6 +26,9 @@ struct TimelapseSessionSummary: Identifiable, Equatable, Hashable {
 }
 
 final class TimelapseSessionStore {
+    private static let maxOriginalFramesPerArchive = 1_000
+    private static let maxOriginalFrameArchiveBytes: UInt64 = 2 * 1024 * 1024 * 1024
+
     private let fileManager = FileManager.default
     private let project: CameraProject
     private let sessionsDirectory: URL
@@ -300,6 +303,170 @@ final class TimelapseSessionStore {
 
         try ZipWriter.write(files: files, baseURL: session.directoryURL, to: zipURL)
         return zipURL
+    }
+
+    func exportOriginalFramesZip(for session: TimelapseSession) throws -> URL {
+        try Self.exportOriginalFramesZip(for: session)
+    }
+
+    func exportOriginalFramesArchivesInBackground(for session: TimelapseSession) async throws -> [URL] {
+        try await Self.exportOriginalFramesArchivesInBackground(for: session)
+    }
+
+    static func exportOriginalFramesArchivesInBackground(for session: TimelapseSession) async throws -> [URL] {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    continuation.resume(returning: try exportOriginalFramesArchives(for: session))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    func exportOriginalFramesZipInBackground(for session: TimelapseSession) async throws -> URL {
+        try await Self.exportOriginalFramesZipInBackground(for: session)
+    }
+
+    static func exportOriginalFramesZipInBackground(for session: TimelapseSession) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                do {
+                    continuation.resume(returning: try exportOriginalFramesZip(for: session))
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    static func exportOriginalFramesZip(for session: TimelapseSession) throws -> URL {
+        try exportOriginalFramesArchives(
+            for: session,
+            maxFramesPerArchive: Int.max,
+            maxArchiveBytes: UInt64.max
+        )[0]
+    }
+
+    static func exportOriginalFramesArchives(
+        for session: TimelapseSession,
+        maxFramesPerArchive: Int = maxOriginalFramesPerArchive,
+        maxArchiveBytes: UInt64 = maxOriginalFrameArchiveBytes
+    ) throws -> [URL] {
+        let fileManager = FileManager.default
+        let projectDirectory = session.directoryURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let exportsDirectory = projectDirectory.appendingPathComponent("Exports", isDirectory: true)
+        try fileManager.createDirectory(at: exportsDirectory, withIntermediateDirectories: true)
+
+        let frames = originalFrameURLs(in: session)
+        guard !frames.isEmpty else {
+            throw TimelapseStoreError.noOriginalFrames
+        }
+
+        try ensureEnoughSpaceForOriginalFrameExport(frames, exportsDirectory: exportsDirectory)
+
+        let baseName = "\(session.name)_original_frames"
+        let previousExports = (try? fileManager.contentsOfDirectory(
+            at: exportsDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey]
+        )) ?? []
+        for url in previousExports where url.lastPathComponent.hasPrefix(baseName) && url.pathExtension == "zip" {
+            try? fileManager.removeItem(at: url)
+        }
+
+        let chunks = originalFrameArchiveChunks(
+            frames,
+            maxFramesPerArchive: maxFramesPerArchive,
+            maxArchiveBytes: maxArchiveBytes
+        )
+        guard !chunks.isEmpty else {
+            throw TimelapseStoreError.noOriginalFrames
+        }
+
+        let digits = max(3, String(chunks.count).count)
+        return try chunks.enumerated().map { index, chunk in
+            let fileName: String
+            if chunks.count == 1 {
+                fileName = "\(baseName).zip"
+            } else {
+                fileName = "\(baseName)_part_\(String(format: "%0*d", digits, index + 1))_of_\(String(format: "%0*d", digits, chunks.count)).zip"
+            }
+
+            let zipURL = exportsDirectory.appendingPathComponent(fileName)
+            try ZipWriter.write(files: chunk, baseURL: session.directoryURL, to: zipURL)
+            return zipURL
+        }
+    }
+
+    private static func originalFrameURLs(in session: TimelapseSession) -> [URL] {
+        guard let files = try? FileManager.default.contentsOfDirectory(
+            at: session.directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey]
+        ) else {
+            return []
+        }
+
+        return files.filter { url in
+            url.lastPathComponent.hasPrefix("frame_") &&
+            url.pathExtension.lowercased() == "jpg" &&
+            ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
+        }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    private static func originalFrameArchiveChunks(
+        _ frames: [URL],
+        maxFramesPerArchive: Int,
+        maxArchiveBytes: UInt64
+    ) -> [[URL]] {
+        let maxFrames = max(maxFramesPerArchive, 1)
+        let maxBytes = max(maxArchiveBytes, 1)
+        var chunks: [[URL]] = []
+        var current: [URL] = []
+        var currentBytes: UInt64 = 0
+
+        for frame in frames {
+            let frameSize = UInt64((try? frame.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+            let wouldExceedByteLimit = frameSize >= maxBytes || currentBytes > maxBytes - frameSize
+            let shouldStartNextArchive = !current.isEmpty &&
+                (current.count >= maxFrames || wouldExceedByteLimit)
+
+            if shouldStartNextArchive {
+                chunks.append(current)
+                current = []
+                currentBytes = 0
+            }
+
+            current.append(frame)
+            currentBytes += frameSize
+        }
+
+        if !current.isEmpty {
+            chunks.append(current)
+        }
+
+        return chunks
+    }
+
+    private static func ensureEnoughSpaceForOriginalFrameExport(
+        _ frames: [URL],
+        exportsDirectory: URL
+    ) throws {
+        let requiredBytes = frames.reduce(UInt64(0)) { total, frame in
+            total + UInt64((try? frame.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        } + (128 * 1024 * 1024)
+
+        let values = try? exportsDirectory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let available = values?.volumeAvailableCapacityForImportantUsage else {
+            return
+        }
+
+        if UInt64(max(available, 0)) < requiredBytes {
+            throw TimelapseStoreError.notEnoughStorageForExport
+        }
     }
 
     func deleteSession(_ session: TimelapseSession) throws {
@@ -591,6 +758,8 @@ enum RepeatableCaptureKind: String, Identifiable, Codable, Hashable {
 private enum TimelapseStoreError: LocalizedError {
     case sessionDoesNotBelongToProject
     case unsafeSessionPath
+    case noOriginalFrames
+    case notEnoughStorageForExport
 
     var errorDescription: String? {
         switch self {
@@ -598,6 +767,10 @@ private enum TimelapseStoreError: LocalizedError {
             return "este timelapse nao pertence ao projeto atual"
         case .unsafeSessionPath:
             return "o caminho deste timelapse nao parece seguro para exclusao"
+        case .noOriginalFrames:
+            return "nenhum frame original encontrado para exportar"
+        case .notEnoughStorageForExport:
+            return "espaco insuficiente para exportar os frames originais"
         }
     }
 }

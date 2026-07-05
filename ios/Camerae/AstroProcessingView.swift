@@ -11,19 +11,26 @@ struct AstroProcessingView: View {
     @State private var stackSize = 10.0
     @State private var fps = 24.0
     @State private var processingProfile = AstroProcessingProfile.natural
+    @State private var processingSettings = AstroImageProcessingSettings.defaults(for: .natural)
     @State private var usesAutomaticStackingStart = true
+    @State private var usesPrecomputedAstroFrames = false
+    @State private var rejectsBlurredFrames = false
+    @State private var preservesTimelineDuration = true
     @State private var stackingStartFrame = 1.0
     @State private var isConfirmingProjectDelete = false
     @State private var previewItem: AstroClipItem?
-    @State private var shareItem: AstroClipItem?
+    @State private var shareItem: AstroShareItem?
+    @State private var isShowingImageLab = false
+    @State private var exportedArchiveURLs: [URL] = []
+    @State private var isShowingExportedArchives = false
     @State private var pendingClipDelete: AstroRenderedClip?
     @State private var isConfirmingClipDelete = false
     @State private var shareErrorMessage: String?
     @State private var deleteErrorMessage: String?
     @Environment(\.dismiss) private var dismiss
 
-    private let minStackSize = 5
-    private let maxAllowedStackSize = 30
+    private let minStackSize = 2
+    private let maxAllowedStackSize = 120
 
     init(
         session: TimelapseSession,
@@ -39,20 +46,19 @@ struct AstroProcessingView: View {
     private var outputFrameCount: Int {
         processor.outputFrameCount(
             stackSize: Int(stackSize),
-            stackingStartFrame: effectiveStackingStartFrame
+            stackingStartFrame: effectiveStackingStartFrame,
+            usesPrecomputedFrames: usesPrecomputedAstroFrames,
+            preservesTimelineDuration: preservesTimelineDuration
         )
     }
 
     private var maxStackSize: Int {
-        if canUseCompositeFrames {
-            return minStackSize
-        }
-
         return max(min(processor.originalFrameCount, maxAllowedStackSize), minStackSize)
     }
 
     private var canUseCompositeFrames: Bool {
         processor.compositeFrameCount > 0 &&
+            usesPrecomputedAstroFrames &&
             (processor.recommendedStackingStartFrame == nil ||
                 processor.recommendedStackingStartFrame == effectiveStackingStartFrame)
     }
@@ -107,7 +113,24 @@ struct AstroProcessingView: View {
                 AstroClipPreview(url: item.url)
             }
             .sheet(item: $shareItem) { item in
-                ShareSheet(items: [item.url])
+                ShareSheet(items: item.urls)
+            }
+            .sheet(isPresented: $isShowingExportedArchives) {
+                if !exportedArchiveURLs.isEmpty {
+                    ExportedArchivesView(urls: exportedArchiveURLs)
+                }
+            }
+            .sheet(isPresented: $isShowingImageLab) {
+                AstroImageLabView(
+                    processor: processor,
+                    initialStackSize: Int(stackSize),
+                    initialStackingStartFrame: effectiveStackingStartFrame,
+                    initialSettings: processingSettings
+                ) { selectedStackSize, selectedSettings in
+                    stackSize = Double(selectedStackSize)
+                    processingProfile = selectedSettings.profile
+                    processingSettings = selectedSettings
+                }
             }
     }
 
@@ -167,9 +190,16 @@ struct AstroProcessingView: View {
             .navigationBarTitleDisplayMode(.inline)
             .overlay {
                 if processor.isRendering {
-                    AstroProcessingOverlay(
-                        status: processor.status,
-                        progressText: processor.progressText
+                    BlockingProgressOverlay(
+                        title: "Processando",
+                        message: processor.status,
+                        detail: processor.progressText
+                    )
+                } else if processor.isExportingOriginalFrames {
+                    BlockingProgressOverlay(
+                        title: "Exportando ZIP",
+                        message: processor.status,
+                        detail: "Aguarde"
                     )
                 }
             }
@@ -188,31 +218,57 @@ struct AstroProcessingView: View {
     private var stackingSection: some View {
         Section("Stacking") {
             stackingStartControls
+            precomputedFrameControls
 
             if canUseCompositeFrames {
-                Text("Esta sessao ja tem frames bons gerados por lote. Se o inicio automatico for mantido, o clipe reutiliza esses frames.")
+                Text("Esta sessao tem frames bons gerados por lote. Eles serao reutilizados sem reprocessar os originais.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-            } else {
-                VStack(alignment: .leading, spacing: 6) {
-                    HStack {
-                        Text("Imagens por stack")
-                        Spacer()
-                        Text("\(min(max(Int(stackSize), minStackSize), maxStackSize))")
-                            .font(.system(.body, design: .monospaced, weight: .semibold))
-                    }
+            }
 
-                    if processor.originalFrameCount >= minStackSize {
-                        Slider(value: $stackSize, in: Double(minStackSize)...Double(maxStackSize), step: 1)
-                    } else {
-                        Text("Capture pelo menos 5 fotos para escolher um tamanho de stack.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text(canUseCompositeFrames ? "Frames por frame pronto" : "Imagens por lote")
+                    Spacer()
+                    Text("\(min(max(Int(stackSize), minStackSize), maxStackSize))")
+                        .font(.system(.body, design: .monospaced, weight: .semibold))
+                }
+
+                if processor.originalFrameCount >= minStackSize {
+                    Slider(value: $stackSize, in: Double(minStackSize)...Double(maxStackSize), step: 1)
+                } else {
+                    Text("Capture pelo menos 2 fotos para escolher o tamanho do lote.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
             }
 
+            Toggle(isOn: $rejectsBlurredFrames) {
+                Text("Rejeitar frames borrados")
+            }
+            .disabled(canUseCompositeFrames)
+
+            Toggle(isOn: $preservesTimelineDuration) {
+                Text("Preservar duracao")
+            }
+
             LabeledContent("Frames processados", value: "\(outputFrameCount)")
+        }
+    }
+
+    private var precomputedFrameControls: some View {
+        Group {
+            if processor.compositeFrameCount > 0 {
+                Toggle(isOn: $usesPrecomputedAstroFrames) {
+                    Text("Usar frames bons prontos")
+                }
+
+                if !usesPrecomputedAstroFrames {
+                    Text("Desligado: o app reprocessa as fotos originais e permite gerar outro clipe com outro numero de stack.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
     }
 
@@ -251,6 +307,9 @@ struct AstroProcessingView: View {
                 }
             }
             .pickerStyle(.segmented)
+            .onChange(of: processingProfile) {
+                processingSettings = .defaults(for: processingProfile)
+            }
 
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
@@ -273,8 +332,11 @@ struct AstroProcessingView: View {
                     await processor.renderStacks(
                         stackSize: Int(stackSize),
                         fps: Int(fps),
-                        profile: processingProfile,
-                        stackingStartFrame: effectiveStackingStartFrame
+                        settings: processingSettings,
+                        stackingStartFrame: effectiveStackingStartFrame,
+                        usesPrecomputedFrames: usesPrecomputedAstroFrames,
+                        rejectsBlurredFrames: rejectsBlurredFrames,
+                        preservesTimelineDuration: preservesTimelineDuration
                     )
                 }
             } label: {
@@ -303,11 +365,30 @@ struct AstroProcessingView: View {
                     .font(.footnote)
             }
 
+            Button {
+                isShowingImageLab = true
+            } label: {
+                Label("Editar imagem de referencia", systemImage: "slider.horizontal.3")
+            }
+            .disabled(processor.isRendering || processor.isExportingOriginalFrames || processor.originalFrameCount == 0)
+
+            Button {
+                Task {
+                    await exportOriginalFrames()
+                }
+            } label: {
+                Label(
+                    processor.isExportingOriginalFrames ? "Exportando..." : "Exportar frames originais",
+                    systemImage: "photo.stack"
+                )
+            }
+            .disabled(processor.isRendering || processor.isExportingOriginalFrames || processor.originalFrameCount == 0)
+
             Button("Concluir") {
                 onComplete()
                 dismiss()
             }
-            .disabled(processor.isRendering)
+            .disabled(processor.isRendering || processor.isExportingOriginalFrames)
         } footer: {
             Text(processor.status)
         }
@@ -377,7 +458,7 @@ struct AstroProcessingView: View {
 
     private func shareVideo(_ url: URL) {
         guard validateVideo(url) else { return }
-        shareItem = AstroClipItem(url: url)
+        shareItem = AstroShareItem(urls: [url])
     }
 
     private func validateVideo(_ url: URL) -> Bool {
@@ -418,6 +499,15 @@ struct AstroProcessingView: View {
             deleteErrorMessage = error.localizedDescription
         }
     }
+
+    private func exportOriginalFrames() async {
+        do {
+            exportedArchiveURLs = try await processor.exportOriginalFramesArchives()
+            isShowingExportedArchives = true
+        } catch {
+            shareErrorMessage = error.localizedDescription
+        }
+    }
 }
 
 private struct AstroClipItem: Identifiable {
@@ -425,6 +515,14 @@ private struct AstroClipItem: Identifiable {
 
     var id: String {
         url.path
+    }
+}
+
+private struct AstroShareItem: Identifiable {
+    let urls: [URL]
+
+    var id: String {
+        urls.map(\.path).joined(separator: "|")
     }
 }
 
@@ -571,6 +669,7 @@ final class AstroProcessingController: ObservableObject {
     @Published private(set) var compositeFrameCount = 0
     @Published private(set) var status = "Pronto para processar"
     @Published private(set) var isRendering = false
+    @Published private(set) var isExportingOriginalFrames = false
     @Published private(set) var lastRenderURL: URL?
     @Published private(set) var lastVideoURL: URL?
     @Published private(set) var renderedClips: [AstroRenderedClip] = []
@@ -600,20 +699,31 @@ final class AstroProcessingController: ObservableObject {
         return "\(currentStack)/\(totalStacks)"
     }
 
-    func outputFrameCount(stackSize: Int, stackingStartFrame: Int) -> Int {
+    func outputFrameCount(
+        stackSize: Int,
+        stackingStartFrame: Int,
+        usesPrecomputedFrames: Bool,
+        preservesTimelineDuration: Bool
+    ) -> Int {
         let startIndex = min(max(stackingStartFrame, 1), max(originalFrameCount, 1))
         let preStackFrameCount = max(startIndex - 1, 0)
+        let size = Self.clampedStackSize(stackSize)
 
-        let canUsePrecomputedFrames = compositeFrameCount > 0 &&
+        let canUsePrecomputedFrames = usesPrecomputedFrames &&
+            compositeFrameCount > 0 &&
             (recommendedStackingStartFrame == nil || recommendedStackingStartFrame == startIndex)
 
         if canUsePrecomputedFrames {
-            return preStackFrameCount + compositeFrameCount
+            let renderedFrames = preservesTimelineDuration ? compositeFrameCount * size : compositeFrameCount
+            return preStackFrameCount + renderedFrames
         }
 
-        let size = min(max(stackSize, 5), 30)
         let stackableFrameCount = max(originalFrameCount - preStackFrameCount, 0)
-        return preStackFrameCount + (stackableFrameCount / size)
+        let fullGroupCount = stackableFrameCount / size
+        let remainderFrameCount = stackableFrameCount % size
+        let stackGroupCount = fullGroupCount + (remainderFrameCount > 0 ? 1 : 0)
+        let renderedStackFrames = preservesTimelineDuration ? stackableFrameCount : stackGroupCount
+        return preStackFrameCount + renderedStackFrames
     }
 
     func deleteClip(_ clip: AstroRenderedClip) throws {
@@ -628,14 +738,46 @@ final class AstroProcessingController: ObservableObject {
         reload()
     }
 
-    func renderStacks(stackSize: Int, fps: Int, profile: AstroProcessingProfile, stackingStartFrame: Int) async {
-        let size = min(max(stackSize, 5), 30)
+    func exportOriginalFramesArchives() async throws -> [URL] {
+        guard !isRendering, !isExportingOriginalFrames else {
+            throw AstroRenderStoreError.renderAlreadyRunning
+        }
+
+        isExportingOriginalFrames = true
+        status = "Gerando ZIP com \(originalFrameCount) frames originais"
+
+        do {
+            let urls = try await TimelapseSessionStore.exportOriginalFramesArchivesInBackground(for: session)
+            status = urls.count == 1
+                ? "ZIP de originais pronto"
+                : "ZIP de originais pronto (\(urls.count) partes)"
+            isExportingOriginalFrames = false
+            return urls
+        } catch {
+            status = "Falha no ZIP: \(error.localizedDescription)"
+            isExportingOriginalFrames = false
+            throw error
+        }
+    }
+
+    func renderStacks(
+        stackSize: Int,
+        fps: Int,
+        settings: AstroImageProcessingSettings,
+        stackingStartFrame: Int,
+        usesPrecomputedFrames: Bool,
+        rejectsBlurredFrames: Bool,
+        preservesTimelineDuration: Bool
+    ) async {
+        let profile = settings.profile
+        let size = Self.clampedStackSize(stackSize)
         let precomputedFrames = compositeFrames()
         let originalFrames = originalFrames()
         let startIndex = min(max(stackingStartFrame, 1), max(originalFrames.count, 1))
         let preStackFrames = Array(originalFrames.prefix(max(startIndex - 1, 0)))
         let stackSourceFrames = Array(originalFrames.dropFirst(max(startIndex - 1, 0)))
-        let canUsePrecomputedFrames = !precomputedFrames.isEmpty &&
+        let canUsePrecomputedFrames = usesPrecomputedFrames &&
+            !precomputedFrames.isEmpty &&
             (recommendedStackingStartFrame == nil || recommendedStackingStartFrame == startIndex)
         let frames = canUsePrecomputedFrames ? precomputedFrames : stackSourceFrames
         guard !originalFrames.isEmpty, (!frames.isEmpty || !preStackFrames.isEmpty) else {
@@ -650,8 +792,13 @@ final class AstroProcessingController: ObservableObject {
 
         do {
             let renderURL = try createRenderDirectory(stackSize: size, fps: fps, profile: profile)
-            let groups = canUsePrecomputedFrames ? [] : frames.chunked(into: size).filter { $0.count == size }
-            let expectedFrames = preStackFrames.count + (canUsePrecomputedFrames ? precomputedFrames.count : groups.count)
+            let groups = canUsePrecomputedFrames ? [] : frames.chunked(into: size)
+            let expectedFrames = outputFrameCount(
+                stackSize: size,
+                stackingStartFrame: startIndex,
+                usesPrecomputedFrames: usesPrecomputedFrames,
+                preservesTimelineDuration: preservesTimelineDuration
+            )
 
             totalStacks = expectedFrames
             status = canUsePrecomputedFrames
@@ -670,6 +817,7 @@ final class AstroProcessingController: ObservableObject {
                 result = try await AstroRenderWorker.renderPrecomputedFrames(
                     precomputedFrames,
                     preStackFrames: preStackFrames,
+                    repeatCount: preservesTimelineDuration ? size : 1,
                     renderURL: renderURL,
                     fps: fps,
                     progress: progress
@@ -680,7 +828,9 @@ final class AstroProcessingController: ObservableObject {
                     preStackFrames: preStackFrames,
                     renderURL: renderURL,
                     fps: fps,
-                    profile: profile,
+                    settings: settings,
+                    rejectsBlurredFrames: rejectsBlurredFrames,
+                    preservesTimelineDuration: preservesTimelineDuration,
                     progress: progress
                 )
             }
@@ -691,6 +841,12 @@ final class AstroProcessingController: ObservableObject {
                 fps: fps,
                 profile: profile,
                 stackingStartFrame: startIndex,
+                usedPrecomputedFrames: canUsePrecomputedFrames,
+                rejectsBlurredFrames: rejectsBlurredFrames && !canUsePrecomputedFrames,
+                preservesTimelineDuration: preservesTimelineDuration,
+                denoiseApplied: settings.appliesDenoise,
+                denoiseNoiseLevel: settings.noiseLevel,
+                denoiseSharpness: settings.sharpness,
                 outputFrames: result.outputFrames,
                 retainedSourceFrames: result.retainedSourceFrames,
                 videoURL: result.videoURL
@@ -712,6 +868,57 @@ final class AstroProcessingController: ObservableObject {
         currentStack = current
         totalStacks = total
         status = "Stack \(current)/\(total) (\(profileTitle))"
+    }
+
+    func previewReferenceFrameCount(stackSize: Int, stackingStartFrame: Int) -> Int {
+        let frames = originalFrames()
+        guard !frames.isEmpty else { return 0 }
+
+        let startIndex = min(max(stackingStartFrame, 1), frames.count)
+        let availableCount = max(frames.count - (startIndex - 1), 0)
+        return min(Self.clampedStackSize(stackSize), availableCount)
+    }
+
+    func renderReferencePreview(
+        stackSize: Int,
+        stackingStartFrame: Int,
+        settings: AstroImageProcessingSettings
+    ) async throws -> URL {
+        guard !isRendering, !isExportingOriginalFrames else {
+            throw AstroRenderStoreError.renderAlreadyRunning
+        }
+
+        let frames = originalFrames()
+        guard !frames.isEmpty else {
+            throw AstroRenderStoreError.noPreviewFrames
+        }
+
+        let startIndex = min(max(stackingStartFrame, 1), frames.count)
+        let size = Self.clampedStackSize(stackSize)
+        let previewFrames = Array(frames.dropFirst(startIndex - 1).prefix(size))
+        guard !previewFrames.isEmpty else {
+            throw AstroRenderStoreError.noPreviewFrames
+        }
+
+        let previewDirectory = session.directoryURL.appendingPathComponent("Preview Frames", isDirectory: true)
+        try fileManager.createDirectory(at: previewDirectory, withIntermediateDirectories: true)
+        let outputURL = previewDirectory.appendingPathComponent("reference_preview_\(UUID().uuidString).jpg")
+
+        return try await Task.detached(priority: .userInitiated) {
+            let data = try autoreleasepool {
+                try ExposureStacker().averageJPEGFiles(
+                    previewFrames,
+                    maxDimension: 1920,
+                    settings: settings
+                )
+            }
+            try data.write(to: outputURL, options: [.atomic])
+            return outputURL
+        }.value
+    }
+
+    private static func clampedStackSize(_ value: Int) -> Int {
+        min(max(value, 2), 120)
     }
 
     private func originalFrames() -> [URL] {
@@ -869,6 +1076,12 @@ final class AstroProcessingController: ObservableObject {
         fps: Int,
         profile: AstroProcessingProfile,
         stackingStartFrame: Int,
+        usedPrecomputedFrames: Bool,
+        rejectsBlurredFrames: Bool,
+        preservesTimelineDuration: Bool,
+        denoiseApplied: Bool,
+        denoiseNoiseLevel: Float,
+        denoiseSharpness: Float,
         outputFrames: Int,
         retainedSourceFrames: Int,
         videoURL: URL
@@ -880,6 +1093,12 @@ final class AstroProcessingController: ObservableObject {
             "stackSize": stackSize,
             "fps": fps,
             "processingProfile": profile.rawValue,
+            "usedPrecomputedFrames": usedPrecomputedFrames,
+            "rejectsBlurredFrames": rejectsBlurredFrames,
+            "preservesTimelineDuration": preservesTimelineDuration,
+            "denoiseApplied": denoiseApplied,
+            "denoiseNoiseLevel": denoiseNoiseLevel,
+            "denoiseSharpness": denoiseSharpness,
             "retainedSourceFrames": retainedSourceFrames,
             "outputFrameCount": outputFrames,
             "estimatedVideoDuration": fps > 0 ? Double(outputFrames) / Double(fps) : 0,
@@ -956,11 +1175,17 @@ struct AstroRenderedClip: Identifiable {
 
 enum AstroRenderStoreError: LocalizedError {
     case unsafeRenderPath
+    case renderAlreadyRunning
+    case noPreviewFrames
 
     var errorDescription: String? {
         switch self {
         case .unsafeRenderPath:
             return "caminho de render invalido"
+        case .renderAlreadyRunning:
+            return "aguarde o processo atual terminar"
+        case .noPreviewFrames:
+            return "nao ha frames originais suficientes para gerar o preview"
         }
     }
 }
@@ -971,13 +1196,19 @@ private enum AstroRenderWorker {
         preStackFrames: [URL],
         renderURL: URL,
         fps: Int,
-        profile: AstroProcessingProfile,
+        settings: AstroImageProcessingSettings,
+        rejectsBlurredFrames: Bool,
+        preservesTimelineDuration: Bool,
         progress: @escaping @Sendable (Int, Int) async -> Void
     ) async throws -> AstroRenderResult {
         try await Task.detached(priority: .userInitiated) {
             let stacker = ExposureStacker()
-            var outputFrameURLs: [URL] = []
-            outputFrameURLs.reserveCapacity(preStackFrames.count + groups.count)
+            let profile = settings.profile
+            var savedFrameURLs: [URL] = []
+            var videoFrameURLs: [URL] = []
+            let totalVideoFrames = preStackFrames.count + groups.reduce(0) { $0 + (preservesTimelineDuration ? $1.count : 1) }
+            savedFrameURLs.reserveCapacity(preStackFrames.count + groups.count)
+            videoFrameURLs.reserveCapacity(totalVideoFrames)
             var retainedSourceFrames = preStackFrames.count
 
             for (index, frameURL) in preStackFrames.enumerated() {
@@ -987,33 +1218,38 @@ private enum AstroRenderWorker {
                     try FileManager.default.removeItem(at: outputURL)
                 }
                 try FileManager.default.copyItem(at: frameURL, to: outputURL)
-                outputFrameURLs.append(outputURL)
-                await progress(outputFrameURLs.count, preStackFrames.count + groups.count)
+                savedFrameURLs.append(outputURL)
+                videoFrameURLs.append(outputURL)
+                await progress(videoFrameURLs.count, totalVideoFrames)
             }
 
             for group in groups {
                 try Task.checkCancellation()
-                let preferredFrames = stacker.preferredFrames(group, maxDimension: 1920, profile: profile)
+                let preferredFrames = rejectsBlurredFrames
+                    ? stacker.preferredFrames(group, maxDimension: 1920, profile: profile)
+                    : group
                 retainedSourceFrames += preferredFrames.count
 
                 let data = try autoreleasepool {
                     try stacker.averageJPEGFiles(
                         preferredFrames,
                         maxDimension: 1920,
-                        profile: profile
+                        settings: settings
                     )
                 }
-                let outputURL = renderURL.appendingPathComponent(String(format: "stack_%06d.jpg", outputFrameURLs.count + 1))
+                let outputURL = renderURL.appendingPathComponent(String(format: "stack_%06d.jpg", savedFrameURLs.count + 1))
                 try data.write(to: outputURL, options: [.atomic])
-                outputFrameURLs.append(outputURL)
-                await progress(outputFrameURLs.count, preStackFrames.count + groups.count)
+                savedFrameURLs.append(outputURL)
+                let repeatCount = preservesTimelineDuration ? group.count : 1
+                videoFrameURLs.append(contentsOf: Array(repeating: outputURL, count: max(repeatCount, 1)))
+                await progress(videoFrameURLs.count, totalVideoFrames)
             }
 
             let videoURL = renderURL.appendingPathComponent("astro.mp4")
-            await progress(outputFrameURLs.count, outputFrameURLs.count)
-            try await TimelapseVideoRenderer().render(frames: outputFrameURLs, outputURL: videoURL, fps: fps)
+            await progress(videoFrameURLs.count, videoFrameURLs.count)
+            try await TimelapseVideoRenderer().render(frames: videoFrameURLs, outputURL: videoURL, fps: fps)
             return AstroRenderResult(
-                outputFrames: outputFrameURLs.count,
+                outputFrames: videoFrameURLs.count,
                 retainedSourceFrames: retainedSourceFrames,
                 videoURL: videoURL
             )
@@ -1023,33 +1259,50 @@ private enum AstroRenderWorker {
     static func renderPrecomputedFrames(
         _ frames: [URL],
         preStackFrames: [URL],
+        repeatCount: Int,
         renderURL: URL,
         fps: Int,
         progress: @escaping @Sendable (Int, Int) async -> Void
     ) async throws -> AstroRenderResult {
         try await Task.detached(priority: .userInitiated) {
-            var outputFrameURLs: [URL] = []
-            outputFrameURLs.reserveCapacity(preStackFrames.count + frames.count)
-            let totalFrames = preStackFrames.count + frames.count
+            var savedFrameURLs: [URL] = []
+            var videoFrameURLs: [URL] = []
+            let totalVideoFrames = preStackFrames.count + (frames.count * max(repeatCount, 1))
+            savedFrameURLs.reserveCapacity(preStackFrames.count + frames.count)
+            videoFrameURLs.reserveCapacity(totalVideoFrames)
 
-            for frameURL in preStackFrames + frames {
+            for frameURL in preStackFrames {
                 try Task.checkCancellation()
 
-                let outputURL = renderURL.appendingPathComponent(String(format: "stack_%06d.jpg", outputFrameURLs.count + 1))
+                let outputURL = renderURL.appendingPathComponent(String(format: "stack_%06d.jpg", savedFrameURLs.count + 1))
                 if FileManager.default.fileExists(atPath: outputURL.path) {
                     try FileManager.default.removeItem(at: outputURL)
                 }
                 try FileManager.default.copyItem(at: frameURL, to: outputURL)
-                outputFrameURLs.append(outputURL)
-                await progress(outputFrameURLs.count, totalFrames)
+                savedFrameURLs.append(outputURL)
+                videoFrameURLs.append(outputURL)
+                await progress(videoFrameURLs.count, totalVideoFrames)
+            }
+
+            for frameURL in frames {
+                try Task.checkCancellation()
+
+                let outputURL = renderURL.appendingPathComponent(String(format: "stack_%06d.jpg", savedFrameURLs.count + 1))
+                if FileManager.default.fileExists(atPath: outputURL.path) {
+                    try FileManager.default.removeItem(at: outputURL)
+                }
+                try FileManager.default.copyItem(at: frameURL, to: outputURL)
+                savedFrameURLs.append(outputURL)
+                videoFrameURLs.append(contentsOf: Array(repeating: outputURL, count: max(repeatCount, 1)))
+                await progress(videoFrameURLs.count, totalVideoFrames)
             }
 
             let videoURL = renderURL.appendingPathComponent("astro.mp4")
-            await progress(outputFrameURLs.count, outputFrameURLs.count)
-            try await TimelapseVideoRenderer().render(frames: outputFrameURLs, outputURL: videoURL, fps: fps)
+            await progress(videoFrameURLs.count, videoFrameURLs.count)
+            try await TimelapseVideoRenderer().render(frames: videoFrameURLs, outputURL: videoURL, fps: fps)
             return AstroRenderResult(
-                outputFrames: outputFrameURLs.count,
-                retainedSourceFrames: totalFrames,
+                outputFrames: videoFrameURLs.count,
+                retainedSourceFrames: preStackFrames.count + frames.count,
                 videoURL: videoURL
             )
         }.value

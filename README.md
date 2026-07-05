@@ -6,6 +6,7 @@ Camerae is a camera app experiment focused on repeatable framing and astrophotog
 
 - `ios/` - Current iOS application built with SwiftUI, AVFoundation, Vision, CoreMotion, and CoreLocation.
 - `android/` - Android project scaffold for the future Camerae Android app.
+- `processing/` - Local C++/OpenCV astrophotography processing lab and reusable algorithm core.
 - `docs/` - Product, architecture, and implementation notes shared across platforms.
 
 ## Current Focus
@@ -22,4 +23,18 @@ xcodebuild \
   -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO \
   build
+```
+
+## Processing Lab
+
+```sh
+brew install opencv pkg-config
+cmake -S processing -B processing/build
+cmake --build processing/build
+```
+
+Run local astro previews without deploying to a phone:
+
+```sh
+bash processing/scripts/compare_stacks.sh /path/to/frames milkyway
 ```

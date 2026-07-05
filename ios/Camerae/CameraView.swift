@@ -11,8 +11,9 @@ struct CameraView: View {
     @State private var astroBatchSize = 30.0
     @State private var usesAutomaticAstroExposure = true
     @State private var isControlsVisible = true
-    @State private var isShowingExporter = false
-    @State private var shareURL: URL?
+    @State private var isShowingExportedArchives = false
+    @State private var isExportingOriginalFrames = false
+    @State private var exportedArchiveURLs: [URL] = []
     @State private var processingSession: TimelapseSession?
 
     init(project: CameraProject, onDeleteProject: @escaping () throws -> Void = {}) {
@@ -36,15 +37,23 @@ struct CameraView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
+
+            if isExportingOriginalFrames {
+                BlockingProgressOverlay(
+                    title: "Exportando ZIP",
+                    message: "Gerando pacote com os frames originais",
+                    detail: "Aguarde"
+                )
+            }
         }
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await camera.start()
         }
-        .sheet(isPresented: $isShowingExporter) {
-            if let shareURL {
-                ShareSheet(items: [shareURL])
+        .sheet(isPresented: $isShowingExportedArchives) {
+            if !exportedArchiveURLs.isEmpty {
+                ExportedArchivesView(urls: exportedArchiveURLs)
             }
         }
         .navigationDestination(item: $processingSession) { session in
@@ -85,17 +94,25 @@ struct CameraView: View {
 
             Button {
                 Task {
+                    isExportingOriginalFrames = true
                     await camera.exportLastSession()
-                    shareURL = camera.lastExportURL
-                    isShowingExporter = shareURL != nil
+                    exportedArchiveURLs = camera.lastExportURLs
+                    isExportingOriginalFrames = false
+                    isShowingExportedArchives = !exportedArchiveURLs.isEmpty
                 }
             } label: {
-                Image(systemName: "square.and.arrow.up")
-                    .font(.system(size: 18, weight: .semibold))
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
+                if isExportingOriginalFrames {
+                    ProgressView()
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                } else {
+                    Image(systemName: "square.and.arrow.up")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
             }
-            .disabled(camera.currentSession == nil)
+            .disabled(camera.currentSession == nil || isExportingOriginalFrames)
             .accessibilityLabel("Exportar ZIP")
         }
         .foregroundStyle(.white)

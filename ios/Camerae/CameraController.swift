@@ -29,6 +29,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var currentSession: TimelapseSession?
     @Published private(set) var completedSession: TimelapseSession?
     @Published private(set) var lastExportURL: URL?
+    @Published private(set) var lastExportURLs: [URL] = []
 
     private let captureMode: CameraCaptureMode
     private let captureQueue = DispatchQueue(label: "camerae.capture.queue")
@@ -123,6 +124,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             astroStackingStartFrame = nil
             astroPreviewURL = nil
             lastExportURL = nil
+            lastExportURLs = []
             status = "Estabilizando tripe"
 
             for second in stride(from: 3, through: 1, by: -1) {
@@ -211,9 +213,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
 
         do {
-            lastExportURL = try store.exportZip(for: currentSession)
-            status = "ZIP pronto"
+            status = "Gerando ZIP de originais"
+            lastExportURLs = try await store.exportOriginalFramesArchivesInBackground(for: currentSession)
+            lastExportURL = lastExportURLs.first
+            status = lastExportURLs.count == 1
+                ? "ZIP de originais pronto"
+                : "ZIP de originais pronto (\(lastExportURLs.count) partes)"
         } catch {
+            lastExportURLs = []
+            lastExportURL = nil
             status = "Falha no ZIP: \(error.localizedDescription)"
         }
     }
@@ -229,6 +237,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             astroStackingStartFrame = nil
             astroPreviewURL = nil
             lastExportURL = nil
+            lastExportURLs = []
             isTimelapseRunning = true
             status = "Estabilizando tripe"
 
@@ -263,6 +272,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             astroStackingStartFrame = nil
             astroPreviewURL = nil
             lastExportURL = nil
+            lastExportURLs = []
             isTimelapseRunning = true
             status = "Estabilizando tripe"
 
@@ -806,6 +816,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             completedSession = nil
             frameCount = 0
             lastExportURL = nil
+            lastExportURLs = []
             isVideoRecording = true
             status = "Gravando video"
 

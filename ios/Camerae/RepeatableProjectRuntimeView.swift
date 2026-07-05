@@ -10,8 +10,11 @@ struct RepeatableProjectRuntimeView: View {
     @State private var isConfirmingSessionDelete = false
     @State private var pendingSessionDelete: TimelapseSession?
     @State private var renderingSessionID: UUID?
+    @State private var exportingOriginalFramesSessionID: UUID?
     @State private var shareURL: URL?
     @State private var isShowingShareSheet = false
+    @State private var exportedArchiveURLs: [URL] = []
+    @State private var isShowingExportedArchives = false
     @State private var errorMessage: String?
 
     private let store: TimelapseSessionStore
@@ -46,6 +49,15 @@ struct RepeatableProjectRuntimeView: View {
         .onAppear {
             reloadSessions()
         }
+        .overlay {
+            if exportingOriginalFramesSessionID != nil {
+                BlockingProgressOverlay(
+                    title: "Exportando ZIP",
+                    message: "Gerando pacote com os frames originais",
+                    detail: "Aguarde"
+                )
+            }
+        }
         .alert("Excluir este projeto?", isPresented: $isConfirmingProjectDelete) {
             Button("Excluir projeto", role: .destructive) {
                 deleteProject()
@@ -75,6 +87,11 @@ struct RepeatableProjectRuntimeView: View {
                 ShareSheet(items: [shareURL])
             }
         }
+        .sheet(isPresented: $isShowingExportedArchives) {
+            if !exportedArchiveURLs.isEmpty {
+                ExportedArchivesView(urls: exportedArchiveURLs)
+            }
+        }
     }
 
     private var sessionList: some View {
@@ -99,6 +116,8 @@ struct RepeatableProjectRuntimeView: View {
                             RepeatableSessionRow(
                                 summary: summary,
                                 isRendering: renderingSessionID == summary.id,
+                                isExportingOriginalFrames: exportingOriginalFramesSessionID == summary.id,
+                                isBusy: renderingSessionID != nil || exportingOriginalFramesSessionID != nil,
                                 renderAction: {
                                     Task {
                                         await renderVideo(for: summary.session)
@@ -106,6 +125,11 @@ struct RepeatableProjectRuntimeView: View {
                                 },
                                 shareAction: {
                                     shareMedia(for: summary)
+                                },
+                                exportOriginalFramesAction: {
+                                    Task {
+                                        await exportOriginalFrames(for: summary.session)
+                                    }
                                 }
                             )
                         }
@@ -232,6 +256,20 @@ struct RepeatableProjectRuntimeView: View {
         shareURL = url
         isShowingShareSheet = true
     }
+
+    private func exportOriginalFrames(for session: TimelapseSession) async {
+        guard exportingOriginalFramesSessionID == nil, renderingSessionID == nil else { return }
+        exportingOriginalFramesSessionID = session.id
+
+        do {
+            exportedArchiveURLs = try await store.exportOriginalFramesArchivesInBackground(for: session)
+            isShowingExportedArchives = true
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+
+        exportingOriginalFramesSessionID = nil
+    }
 }
 
 private enum RepeatableProjectMode: Equatable {
@@ -242,8 +280,11 @@ private enum RepeatableProjectMode: Equatable {
 private struct RepeatableSessionRow: View {
     let summary: TimelapseSessionSummary
     let isRendering: Bool
+    let isExportingOriginalFrames: Bool
+    let isBusy: Bool
     let renderAction: () -> Void
     let shareAction: () -> Void
+    let exportOriginalFramesAction: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -279,6 +320,21 @@ private struct RepeatableSessionRow: View {
             }
 
             HStack(spacing: 8) {
+                Button {
+                    exportOriginalFramesAction()
+                } label: {
+                    if isExportingOriginalFrames {
+                        ProgressView()
+                            .frame(width: 44, height: 36)
+                    } else {
+                        Label("Originais", systemImage: "photo.stack")
+                            .labelStyle(.iconOnly)
+                            .frame(width: 44, height: 36)
+                    }
+                }
+                .buttonStyle(.bordered)
+                .disabled(isBusy || summary.frameCount == 0)
+
                 if (summary.captureKind == .timelapse && summary.videoURL != nil) ||
                     (summary.captureKind == .video && summary.videoClipURL != nil) {
                     Button {
@@ -289,6 +345,7 @@ private struct RepeatableSessionRow: View {
                             .frame(width: 44, height: 36)
                     }
                     .buttonStyle(.bordered)
+                    .disabled(isBusy)
                 }
 
                 if summary.captureKind == .timelapse {
@@ -305,7 +362,7 @@ private struct RepeatableSessionRow: View {
                         }
                     }
                     .buttonStyle(.bordered)
-                    .disabled(isRendering || summary.frameCount == 0)
+                    .disabled(isBusy || summary.frameCount == 0)
                 }
             }
         }

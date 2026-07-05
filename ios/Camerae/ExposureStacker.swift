@@ -59,6 +59,26 @@ enum AstroProcessingProfile: String, CaseIterable, Identifiable {
     }
 }
 
+struct AstroImageProcessingSettings: Equatable, Hashable {
+    var profile: AstroProcessingProfile
+    var appliesDenoise: Bool
+    var noiseLevel: Float
+    var sharpness: Float
+
+    static func defaults(for profile: AstroProcessingProfile) -> AstroImageProcessingSettings {
+        AstroImageProcessingSettings(
+            profile: profile,
+            appliesDenoise: profile != .natural,
+            noiseLevel: profile.noiseLevel,
+            sharpness: profile.sharpness
+        )
+    }
+
+    var alignsStars: Bool {
+        profile.alignsStars
+    }
+}
+
 final class ExposureStacker {
     private let context = CIContext(options: [
         .workingColorSpace: CGColorSpace(name: CGColorSpace.sRGB) as Any,
@@ -121,18 +141,30 @@ final class ExposureStacker {
         maxDimension: CGFloat? = nil,
         profile: AstroProcessingProfile = .natural
     ) throws -> Data {
+        try averageJPEGFiles(
+            frameURLs,
+            maxDimension: maxDimension,
+            settings: .defaults(for: profile)
+        )
+    }
+
+    func averageJPEGFiles(
+        _ frameURLs: [URL],
+        maxDimension: CGFloat? = nil,
+        settings: AstroImageProcessingSettings
+    ) throws -> Data {
         guard let firstURL = frameURLs.first,
-              var accumulator = processedFrame(firstURL, maxDimension: maxDimension, profile: profile) else {
+              var accumulator = processedFrame(firstURL, maxDimension: maxDimension, settings: settings) else {
             throw CameraError.photoEncodingFailed
         }
 
         let extent = accumulator.extent
-        let referenceAnchor = profile.alignsStars ? starAnchor(in: accumulator) : nil
+        let referenceAnchor = settings.alignsStars ? starAnchor(in: accumulator) : nil
         accumulator = try materialized(accumulator, extent: extent)
 
         for index in frameURLs.dropFirst().indices {
             try autoreleasepool {
-                guard var frame = processedFrame(frameURLs[index], maxDimension: maxDimension, profile: profile) else {
+                guard var frame = processedFrame(frameURLs[index], maxDimension: maxDimension, settings: settings) else {
                     return
                 }
 
@@ -155,7 +187,7 @@ final class ExposureStacker {
             }
         }
 
-        accumulator = postProcessedStack(accumulator, profile: profile).cropped(to: extent)
+        accumulator = postProcessedStack(accumulator, profile: settings.profile).cropped(to: extent)
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let data = context.jpegRepresentation(
@@ -175,6 +207,18 @@ final class ExposureStacker {
         maxDimension: CGFloat?,
         profile: AstroProcessingProfile
     ) -> CIImage? {
+        processedFrame(
+            frameURL,
+            maxDimension: maxDimension,
+            settings: .defaults(for: profile)
+        )
+    }
+
+    private func processedFrame(
+        _ frameURL: URL,
+        maxDimension: CGFloat?,
+        settings: AstroImageProcessingSettings
+    ) -> CIImage? {
         guard var image = CIImage(contentsOf: frameURL)?.normalizedForStacking() else {
             return nil
         }
@@ -183,11 +227,14 @@ final class ExposureStacker {
             image = image.downscaled(maxDimension: maxDimension)
         }
 
-        if profile != .natural {
+        if settings.profile != .natural {
             image = normalizedExposureAndWhiteBalance(image)
+        }
+
+        if settings.appliesDenoise {
             image = image.applyingFilter("CINoiseReduction", parameters: [
-                "inputNoiseLevel": profile.noiseLevel,
-                "inputSharpness": profile.sharpness
+                "inputNoiseLevel": settings.noiseLevel,
+                "inputSharpness": settings.sharpness
             ])
         }
 
