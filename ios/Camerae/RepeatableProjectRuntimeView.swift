@@ -17,6 +17,7 @@ struct RepeatableProjectRuntimeView: View {
     @State private var isShowingExportedArchives = false
     @State private var exportProgress: OriginalFrameExportProgress?
     @State private var exportTask: Task<Void, Never>?
+    @State private var videoSettings = WorkflowVideoSettings.repeatableDefault
     @State private var errorMessage: String?
 
     private let store: TimelapseSessionStore
@@ -37,6 +38,7 @@ struct RepeatableProjectRuntimeView: View {
                     project: project,
                     referenceURL: referenceURL,
                     openedSession: sourceSession,
+                    videoSettings: $videoSettings,
                     onCompletedTimelapse: {
                         reloadSessions()
                         mode = .list
@@ -196,7 +198,7 @@ struct RepeatableProjectRuntimeView: View {
         renderingSessionID = session.id
 
         do {
-            let videoURL = try await store.renderVideo(for: session, fps: 24)
+            let videoURL = try await store.renderVideo(for: session, settings: videoSettings)
             reloadSessions()
             shareVideo(videoURL)
         } catch {

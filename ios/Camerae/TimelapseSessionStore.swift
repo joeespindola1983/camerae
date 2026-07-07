@@ -671,10 +671,13 @@ final class TimelapseSessionStore {
         }
     }
 
-    func renderVideo(for session: TimelapseSession, fps: Int = 24) async throws -> URL {
+    func renderVideo(
+        for session: TimelapseSession,
+        settings: WorkflowVideoSettings = .repeatableDefault
+    ) async throws -> URL {
         let frames = frameURLs(in: session)
         let outputURL = videoURL(for: session)
-        try await TimelapseVideoRenderer().render(frames: frames, outputURL: outputURL, fps: fps)
+        try await TimelapseVideoRenderer().render(frames: frames, outputURL: outputURL, settings: settings)
         return outputURL
     }
 

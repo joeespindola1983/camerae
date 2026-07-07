@@ -8,11 +8,11 @@ struct TimelapseVideoRenderer {
     func render(
         frames: [URL],
         outputURL: URL,
-        fps: Int,
+        settings: WorkflowVideoSettings,
         progress: (@Sendable (Int, Int) async -> Void)? = nil
     ) async throws {
         try await Task.detached(priority: .userInitiated) {
-            try await renderVideo(frames: frames, outputURL: outputURL, fps: fps, progress: progress)
+            try await renderVideo(frames: frames, outputURL: outputURL, settings: settings, progress: progress)
         }.value
     }
 }
@@ -20,7 +20,7 @@ struct TimelapseVideoRenderer {
 private func renderVideo(
     frames: [URL],
     outputURL: URL,
-    fps: Int,
+    settings: WorkflowVideoSettings,
     progress: (@Sendable (Int, Int) async -> Void)?
 ) async throws {
     guard let firstFrame = frames.first else {
@@ -32,14 +32,15 @@ private func renderVideo(
         try fileManager.removeItem(at: outputURL)
     }
 
-    let renderSize = try renderSize(for: firstFrame)
+    let renderSize = try renderSize(for: firstFrame, resolution: settings.resolution)
+    let fps = max(settings.fps, 1)
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
         AVVideoCodecKey: AVVideoCodecType.h264,
         AVVideoWidthKey: Int(renderSize.width),
         AVVideoHeightKey: Int(renderSize.height),
         AVVideoCompressionPropertiesKey: [
-            AVVideoAverageBitRateKey: max(Int(renderSize.width * renderSize.height * 4), 2_000_000),
+            AVVideoAverageBitRateKey: bitRate(for: renderSize, fps: fps, quality: settings.quality),
             AVVideoMaxKeyFrameIntervalKey: max(fps, 1)
         ]
     ])
@@ -127,7 +128,7 @@ private func renderVideo(
     }
 }
 
-private func renderSize(for frameURL: URL) throws -> CGSize {
+private func renderSize(for frameURL: URL, resolution: WorkflowVideoResolution) throws -> CGSize {
     guard
         let source = CGImageSourceCreateWithURL(frameURL as CFURL, nil),
         let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
@@ -137,17 +138,26 @@ private func renderSize(for frameURL: URL) throws -> CGSize {
         throw VideoRenderError.noFrames
     }
 
-    let maxDimension: CGFloat = 1920
-    let width = pixelWidth
-    let height = pixelHeight
-    let scale = min(1, maxDimension / max(width, height))
-    let scaledWidth = Int(width * scale)
-    let scaledHeight = Int(height * scale)
+    guard let maxPixelSize = resolution.maxPixelSize else {
+        return evenSize(width: pixelWidth, height: pixelHeight)
+    }
 
-    return CGSize(
-        width: max(2, scaledWidth - (scaledWidth % 2)),
-        height: max(2, scaledHeight - (scaledHeight % 2))
-    )
+    let isPortrait = pixelHeight >= pixelWidth
+    let targetWidth = isPortrait ? min(maxPixelSize.width, maxPixelSize.height) : max(maxPixelSize.width, maxPixelSize.height)
+    let targetHeight = isPortrait ? max(maxPixelSize.width, maxPixelSize.height) : min(maxPixelSize.width, maxPixelSize.height)
+    return evenSize(width: targetWidth, height: targetHeight)
+}
+
+private func evenSize(width: CGFloat, height: CGFloat) -> CGSize {
+    let evenWidth = Int(width) - (Int(width) % 2)
+    let evenHeight = Int(height) - (Int(height) % 2)
+    return CGSize(width: max(2, evenWidth), height: max(2, evenHeight))
+}
+
+private func bitRate(for size: CGSize, fps: Int, quality: WorkflowVideoQuality) -> Int {
+    let frameRateFactor = Double(max(fps, 24)) / 30.0
+    let pixelFactor = Double(size.width * size.height * 4)
+    return max(Int(pixelFactor * frameRateFactor * quality.bitRateMultiplier), 2_000_000)
 }
 
 private func makePixelBuffer(from frameURL: URL, size: CGSize, pool: CVPixelBufferPool) -> CVPixelBuffer? {

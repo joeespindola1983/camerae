@@ -10,6 +10,7 @@ struct RepeatableCameraView: View {
     private let onDeletedOpenedTimelapse: () -> Void
     private let explicitReferenceURL: URL?
     private let openedSession: TimelapseSession?
+    @Binding private var videoSettings: WorkflowVideoSettings
 
     @State private var intervalSeconds = 5.0
     @State private var selectedCaptureKind = RepeatableCaptureKind.timelapse
@@ -36,6 +37,7 @@ struct RepeatableCameraView: View {
         project: CameraProject,
         referenceURL: URL? = nil,
         openedSession: TimelapseSession? = nil,
+        videoSettings: Binding<WorkflowVideoSettings>,
         onCompletedTimelapse: @escaping () -> Void = {},
         onDeletedOpenedTimelapse: @escaping () -> Void = {}
     ) {
@@ -45,6 +47,7 @@ struct RepeatableCameraView: View {
         self.onDeletedOpenedTimelapse = onDeletedOpenedTimelapse
         self.explicitReferenceURL = referenceURL
         self.openedSession = openedSession
+        _videoSettings = videoSettings
         _camera = StateObject(wrappedValue: CameraController(project: project, captureMode: .repeatable))
     }
 
@@ -144,6 +147,17 @@ struct RepeatableCameraView: View {
                         formatter: { String(format: "%.0fs", $0) },
                         isDisabled: isCaptureActive
                     )
+                }
+            }
+
+            if selectedCaptureKind == .video {
+                Section("Video") {
+                    WorkflowVideoSettingsView(
+                        settings: $videoSettings,
+                        isDisabled: isCaptureActive
+                    )
+
+                    LabeledContent("Saida", value: videoSettings.summary)
                 }
             }
 

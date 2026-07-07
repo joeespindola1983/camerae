@@ -44,7 +44,7 @@ struct AstroProcessingView: View {
 
     @StateObject private var processor: AstroProcessingController
     @State private var stackSize = 10.0
-    @State private var fps = 24.0
+    @State private var videoSettings = WorkflowVideoSettings.astroDefault
     @State private var processingSettings = AstroImageProcessingSettings.defaults(for: .natural)
     @State private var usesAutomaticStackingStart = true
     @State private var usesPrecomputedAstroFrames = false
@@ -110,8 +110,8 @@ struct AstroProcessingView: View {
     }
 
     private var videoDuration: Double {
-        guard fps > 0 else { return 0 }
-        return Double(outputFrameCount) / fps
+        guard videoSettings.fps > 0 else { return 0 }
+        return Double(outputFrameCount) / Double(videoSettings.fps)
     }
 
     var body: some View {
@@ -413,27 +413,24 @@ struct AstroProcessingView: View {
 
     private var videoSection: some View {
         Section(content: {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack {
-                    Text("FPS")
-                    Spacer()
-                    Text("\(Int(fps))")
-                        .font(.system(.body, design: .monospaced, weight: .semibold))
-                }
-                Slider(value: $fps, in: 1...60, step: 1)
-            }
+            WorkflowVideoSettingsView(
+                settings: $videoSettings,
+                isDisabled: processor.isRendering || processor.isExportingOriginalFrames
+            )
 
             Toggle(isOn: $preservesTimelineDuration) {
                 Text("Preservar duracao")
             }
+            .disabled(processor.isRendering || processor.isExportingOriginalFrames)
 
+            LabeledContent("Saida", value: videoSettings.summary)
             LabeledContent("Duracao estimada", value: String(format: "%.1fs", videoDuration))
 
             Button {
                 Task {
                     await processor.renderStacks(
                         stackSize: Int(stackSize),
-                        fps: Int(fps),
+                        videoSettings: videoSettings,
                         settings: processingSettings,
                         stackingStartFrame: effectiveStackingStartFrame,
                         usesPrecomputedFrames: usesPrecomputedAstroFrames,
@@ -1483,7 +1480,7 @@ final class AstroProcessingController: ObservableObject {
 
     func renderStacks(
         stackSize: Int,
-        fps: Int,
+        videoSettings: WorkflowVideoSettings,
         settings: AstroImageProcessingSettings,
         stackingStartFrame: Int,
         usesPrecomputedFrames: Bool,
@@ -1517,7 +1514,7 @@ final class AstroProcessingController: ObservableObject {
         totalVideoFrames = 0
 
         do {
-            let renderURL = try createRenderDirectory(stackSize: size, fps: fps, profile: profile)
+            let renderURL = try createRenderDirectory(stackSize: size, fps: videoSettings.fps, profile: profile)
             let groups = canUsePrecomputedFrames ? [] : frames.chunked(into: size)
             let expectedFrames = outputFrameCount(
                 stackSize: size,
@@ -1548,7 +1545,7 @@ final class AstroProcessingController: ObservableObject {
                     preStackFrames: preStackFrames,
                     repeatCount: preservesTimelineDuration ? size : 1,
                     renderURL: renderURL,
-                    fps: fps,
+                    videoSettings: videoSettings,
                     progress: progress,
                     videoProgress: videoProgress
                 )
@@ -1557,7 +1554,7 @@ final class AstroProcessingController: ObservableObject {
                     groups: groups,
                     preStackFrames: preStackFrames,
                     renderURL: renderURL,
-                    fps: fps,
+                    videoSettings: videoSettings,
                     settings: settings,
                     rejectsBlurredFrames: rejectsBlurredFrames,
                     preservesTimelineDuration: preservesTimelineDuration,
@@ -1569,7 +1566,8 @@ final class AstroProcessingController: ObservableObject {
             try writeRenderManifest(
                 renderURL: renderURL,
                 stackSize: size,
-                fps: fps,
+                fps: videoSettings.fps,
+                videoSettings: videoSettings,
                 profile: profile,
                 stackingStartFrame: startIndex,
                 usedPrecomputedFrames: canUsePrecomputedFrames,
@@ -2016,6 +2014,7 @@ final class AstroProcessingController: ObservableObject {
         renderURL: URL,
         stackSize: Int,
         fps: Int,
+        videoSettings: WorkflowVideoSettings,
         profile: AstroProcessingProfile,
         stackingStartFrame: Int,
         usedPrecomputedFrames: Bool,
@@ -2036,6 +2035,8 @@ final class AstroProcessingController: ObservableObject {
             "stackingStartFrame": stackingStartFrame,
             "stackSize": stackSize,
             "fps": fps,
+            "videoResolution": videoSettings.resolution.rawValue,
+            "videoQuality": videoSettings.quality.rawValue,
             "processingProfile": profile.rawValue,
             "stackingBackend": processingSettings.stackingBackend.rawValue,
             "alignsStars": processingSettings.alignsStars,
@@ -2229,7 +2230,7 @@ private enum AstroRenderWorker {
         groups: [[URL]],
         preStackFrames: [URL],
         renderURL: URL,
-        fps: Int,
+        videoSettings: WorkflowVideoSettings,
         settings: AstroImageProcessingSettings,
         rejectsBlurredFrames: Bool,
         preservesTimelineDuration: Bool,
@@ -2286,7 +2287,7 @@ private enum AstroRenderWorker {
             try await TimelapseVideoRenderer().render(
                 frames: videoFrameURLs,
                 outputURL: videoURL,
-                fps: fps,
+                settings: videoSettings,
                 progress: videoProgress
             )
             return AstroRenderResult(
@@ -2302,7 +2303,7 @@ private enum AstroRenderWorker {
         preStackFrames: [URL],
         repeatCount: Int,
         renderURL: URL,
-        fps: Int,
+        videoSettings: WorkflowVideoSettings,
         progress: @escaping @Sendable (Int, Int) async -> Void,
         videoProgress: @escaping @Sendable (Int, Int) async -> Void
     ) async throws -> AstroRenderResult {
@@ -2345,7 +2346,7 @@ private enum AstroRenderWorker {
             try await TimelapseVideoRenderer().render(
                 frames: videoFrameURLs,
                 outputURL: videoURL,
-                fps: fps,
+                settings: videoSettings,
                 progress: videoProgress
             )
             return AstroRenderResult(
