@@ -5,6 +5,19 @@ enum ZipWriter {
     private static let bufferSize = 256 * 1024
 
     static func write(files: [URL], baseURL: URL, to destinationURL: URL) throws {
+        try writeSync(files: files, baseURL: baseURL, to: destinationURL)
+    }
+
+    static func write(
+        files: [URL],
+        baseURL: URL,
+        to destinationURL: URL,
+        progress: @escaping @Sendable (Int) async -> Void
+    ) async throws {
+        try await writeAsync(files: files, baseURL: baseURL, to: destinationURL, progress: progress)
+    }
+
+    private static func writeSync(files: [URL], baseURL: URL, to destinationURL: URL) throws {
         let temporaryURL = destinationURL
             .deletingLastPathComponent()
             .appendingPathComponent("\(destinationURL.lastPathComponent).tmp")
@@ -25,7 +38,52 @@ enum ZipWriter {
             var buffer = [UInt8](repeating: 0, count: bufferSize)
             for fileURL in files {
                 let name = relativePath(for: fileURL, baseURL: baseURL)
-                try writer.append(fileURL: fileURL, name: name, buffer: &buffer)
+                try writer.append(fileURL: fileURL, name: name, buffer: &buffer, checksCancellation: false)
+            }
+
+            try writer.finish()
+            close(fd)
+
+            if fileManager.fileExists(atPath: destinationURL.path) {
+                try fileManager.removeItem(at: destinationURL)
+            }
+            try fileManager.moveItem(at: temporaryURL, to: destinationURL)
+        } catch {
+            close(fd)
+            try? fileManager.removeItem(at: temporaryURL)
+            throw error
+        }
+    }
+
+    private static func writeAsync(
+        files: [URL],
+        baseURL: URL,
+        to destinationURL: URL,
+        progress: @escaping @Sendable (Int) async -> Void
+    ) async throws {
+        let temporaryURL = destinationURL
+            .deletingLastPathComponent()
+            .appendingPathComponent("\(destinationURL.lastPathComponent).tmp")
+        let fileManager = FileManager.default
+
+        if fileManager.fileExists(atPath: temporaryURL.path) {
+            try fileManager.removeItem(at: temporaryURL)
+        }
+
+        let fd = open(temporaryURL.path, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR)
+        guard fd >= 0 else {
+            throw ZipWriterError.cannotOpenFile(temporaryURL.path)
+        }
+
+        var writer = StreamingZipFile(fileDescriptor: fd)
+
+        do {
+            var buffer = [UInt8](repeating: 0, count: bufferSize)
+            for (index, fileURL) in files.enumerated() {
+                try Task.checkCancellation()
+                let name = relativePath(for: fileURL, baseURL: baseURL)
+                try writer.append(fileURL: fileURL, name: name, buffer: &buffer, checksCancellation: true)
+                await progress(index + 1)
             }
 
             try writer.finish()
@@ -59,15 +117,24 @@ enum ZipWriter {
         var offset: UInt64 = 0
         var records: [CentralRecord] = []
 
-        mutating func append(fileURL: URL, name: String, buffer: inout [UInt8]) throws {
+        mutating func append(
+            fileURL: URL,
+            name: String,
+            buffer: inout [UInt8],
+            checksCancellation: Bool
+        ) throws {
             guard let nameData = name.data(using: .utf8) else {
                 throw ZipWriterError.invalidFileName(name)
             }
 
-            let stats = try CRC32.checksumAndSize(of: fileURL, buffer: &buffer)
+            let stats = try CRC32.checksumAndSize(
+                of: fileURL,
+                buffer: &buffer,
+                checksCancellation: checksCancellation
+            )
             let localHeaderOffset = offset
             try write(localHeader(nameData: nameData, crc: stats.crc, size: stats.size))
-            try copy(fileURL, buffer: &buffer)
+            try copy(fileURL, buffer: &buffer, checksCancellation: checksCancellation)
 
             records.append(CentralRecord(
                 nameData: nameData,
@@ -96,7 +163,7 @@ enum ZipWriter {
             try write(endRecord())
         }
 
-        private mutating func copy(_ fileURL: URL, buffer: inout [UInt8]) throws {
+        private mutating func copy(_ fileURL: URL, buffer: inout [UInt8], checksCancellation: Bool) throws {
             let inputFD = open(fileURL.path, O_RDONLY)
             guard inputFD >= 0 else {
                 throw ZipWriterError.cannotOpenFile(fileURL.path)
@@ -104,6 +171,10 @@ enum ZipWriter {
             defer { close(inputFD) }
 
             while true {
+                if checksCancellation {
+                    try Task.checkCancellation()
+                }
+
                 let count = buffer.withUnsafeMutableBufferPointer { pointer in
                     read(inputFD, pointer.baseAddress, pointer.count)
                 }
@@ -306,7 +377,11 @@ private enum CRC32 {
         return crc
     }
 
-    static func checksumAndSize(of fileURL: URL, buffer: inout [UInt8]) throws -> (crc: UInt32, size: UInt64) {
+    static func checksumAndSize(
+        of fileURL: URL,
+        buffer: inout [UInt8],
+        checksCancellation: Bool
+    ) throws -> (crc: UInt32, size: UInt64) {
         let inputFD = open(fileURL.path, O_RDONLY)
         guard inputFD >= 0 else {
             throw ZipWriterError.cannotOpenFile(fileURL.path)
@@ -317,6 +392,10 @@ private enum CRC32 {
         var size: UInt64 = 0
 
         while true {
+            if checksCancellation {
+                try Task.checkCancellation()
+            }
+
             let count = buffer.withUnsafeMutableBufferPointer { pointer in
                 read(inputFD, pointer.baseAddress, pointer.count)
             }

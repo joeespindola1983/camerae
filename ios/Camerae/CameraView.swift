@@ -14,6 +14,7 @@ struct CameraView: View {
     @State private var isShowingExportedArchives = false
     @State private var isExportingOriginalFrames = false
     @State private var exportedArchiveURLs: [URL] = []
+    @State private var exportTask: Task<Void, Never>?
     @State private var processingSession: TimelapseSession?
 
     init(project: CameraProject, onDeleteProject: @escaping () throws -> Void = {}) {
@@ -42,7 +43,11 @@ struct CameraView: View {
                 BlockingProgressOverlay(
                     title: "Exportando ZIP",
                     message: "Gerando pacote com os frames originais",
-                    detail: "Aguarde"
+                    detail: camera.originalFrameExportProgress?.detailText ?? "Preparando",
+                    cancelTitle: "Parar",
+                    cancelAction: {
+                        exportTask?.cancel()
+                    }
                 )
             }
         }
@@ -93,11 +98,12 @@ struct CameraView: View {
             .accessibilityLabel(isControlsVisible ? "Esconder controles" : "Mostrar controles")
 
             Button {
-                Task {
+                exportTask = Task {
                     isExportingOriginalFrames = true
                     await camera.exportLastSession()
                     exportedArchiveURLs = camera.lastExportURLs
                     isExportingOriginalFrames = false
+                    exportTask = nil
                     isShowingExportedArchives = !exportedArchiveURLs.isEmpty
                 }
             } label: {

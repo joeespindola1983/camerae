@@ -30,6 +30,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var completedSession: TimelapseSession?
     @Published private(set) var lastExportURL: URL?
     @Published private(set) var lastExportURLs: [URL] = []
+    @Published private(set) var originalFrameExportProgress: OriginalFrameExportProgress?
 
     private let captureMode: CameraCaptureMode
     private let captureQueue = DispatchQueue(label: "camerae.capture.queue")
@@ -52,6 +53,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var lastVisualAlignmentAnalysis = Date.distantPast
     nonisolated(unsafe) private var isAnalyzingVisualAlignment = false
     nonisolated(unsafe) private var isVisualFineAdjustmentActive = false
+    nonisolated(unsafe) private var isSequenceFocusLocked = false
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
 
@@ -214,16 +216,33 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         do {
             status = "Gerando ZIP de originais"
-            lastExportURLs = try await store.exportOriginalFramesArchivesInBackground(for: currentSession)
+            originalFrameExportProgress = nil
+            lastExportURLs = try await store.exportOriginalFramesArchivesInBackground(for: currentSession) { [weak self] progress in
+                await self?.updateOriginalFrameExportProgress(progress)
+            }
             lastExportURL = lastExportURLs.first
             status = lastExportURLs.count == 1
                 ? "ZIP de originais pronto"
                 : "ZIP de originais pronto (\(lastExportURLs.count) partes)"
+            originalFrameExportProgress = nil
+        } catch is CancellationError {
+            lastExportURLs = TimelapseSessionStore.existingOriginalFrameArchives(for: currentSession)
+            lastExportURL = lastExportURLs.first
+            status = lastExportURLs.isEmpty
+                ? "Export cancelado"
+                : "Export cancelado (\(lastExportURLs.count) lotes prontos)"
+            originalFrameExportProgress = nil
         } catch {
             lastExportURLs = []
             lastExportURL = nil
             status = "Falha no ZIP: \(error.localizedDescription)"
+            originalFrameExportProgress = nil
         }
+    }
+
+    private func updateOriginalFrameExportProgress(_ progress: OriginalFrameExportProgress) {
+        originalFrameExportProgress = progress
+        status = progress.detailText
     }
 
     private func startTimelapse(interval: Double) async {
@@ -653,6 +672,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseTask?.cancel()
         timelapseTask = nil
         isTimelapseRunning = false
+        unlockFocusAfterCaptureSequence()
         countdownLabel = "-"
         astroBatchProgressLabel = "-"
         astroExposurePhaseLabel = "-"
@@ -674,6 +694,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         guard !Task.isCancelled else { return }
         countdownLabel = "-"
+        await lockFocusForCaptureSequence()
+        guard !Task.isCancelled else { return }
         status = "Capturando timelapse"
         await runTimelapse(interval: interval)
     }
@@ -693,6 +715,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         guard !Task.isCancelled else { return }
         countdownLabel = "-"
+        await lockFocusForCaptureSequence()
+        guard !Task.isCancelled else { return }
         status = waitsForAstroExposure ? "Capturando por do sol" : "Capturando lote astro"
         await runAstroBatchCapture(
             timelapseInterval: timelapseInterval,
@@ -1089,6 +1113,85 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    private func lockFocusForCaptureSequence() async {
+        await withCheckedContinuation { continuation in
+            captureQueue.async {
+                guard let device = self.device else {
+                    continuation.resume()
+                    return
+                }
+
+                do {
+                    try device.lockForConfiguration()
+                    defer {
+                        device.unlockForConfiguration()
+                    }
+
+                    if device.isSubjectAreaChangeMonitoringEnabled {
+                        device.isSubjectAreaChangeMonitoringEnabled = false
+                    }
+
+                    if device.isFocusModeSupported(.locked) {
+                        device.focusMode = .locked
+                        self.isSequenceFocusLocked = true
+                        Task { @MainActor in
+                            self.status = "Foco travado"
+                        }
+                    } else {
+                        self.isSequenceFocusLocked = false
+                        Task { @MainActor in
+                            self.status = "Foco travado indisponivel"
+                        }
+                    }
+                } catch {
+                    self.isSequenceFocusLocked = false
+                    Task { @MainActor in
+                        self.status = "Foco nao travou: \(error.localizedDescription)"
+                    }
+                }
+
+                continuation.resume()
+            }
+        }
+    }
+
+    private func unlockFocusAfterCaptureSequence() {
+        captureQueue.async {
+            guard let device = self.device else {
+                self.isSequenceFocusLocked = false
+                return
+            }
+
+            do {
+                try device.lockForConfiguration()
+                defer {
+                    device.unlockForConfiguration()
+                }
+
+                self.isSequenceFocusLocked = false
+                self.applyAutoFocusConfigurationIfNeeded(device: device)
+            } catch {
+                self.isSequenceFocusLocked = false
+            }
+        }
+    }
+
+    nonisolated private func applyAutoFocusConfigurationIfNeeded(device: AVCaptureDevice) {
+        guard !isSequenceFocusLocked else {
+            return
+        }
+
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        } else if device.isFocusModeSupported(.autoFocus) {
+            device.focusMode = .autoFocus
+        }
+
+        if device.isSubjectAreaChangeMonitoringEnabled == false {
+            device.isSubjectAreaChangeMonitoringEnabled = true
+        }
+    }
+
     nonisolated private func applyRepeatableAutoConfiguration(device: AVCaptureDevice) throws {
         try device.lockForConfiguration()
         defer {
@@ -1104,11 +1207,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         device.activeVideoMinFrameDuration = CMTime.invalid
         device.activeVideoMaxFrameDuration = CMTime.invalid
 
-        if device.isFocusModeSupported(.continuousAutoFocus) {
-            device.focusMode = .continuousAutoFocus
-        } else if device.isFocusModeSupported(.autoFocus) {
-            device.focusMode = .autoFocus
-        }
+        applyAutoFocusConfigurationIfNeeded(device: device)
 
         if device.isExposureModeSupported(.continuousAutoExposure) {
             device.exposureMode = .continuousAutoExposure
@@ -1144,11 +1243,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         device.activeVideoMinFrameDuration = CMTime.invalid
         device.activeVideoMaxFrameDuration = CMTime(seconds: frameDuration, preferredTimescale: 600)
 
-        if device.isFocusModeSupported(.continuousAutoFocus) {
-            device.focusMode = .continuousAutoFocus
-        } else if device.isFocusModeSupported(.autoFocus) {
-            device.focusMode = .autoFocus
-        }
+        applyAutoFocusConfigurationIfNeeded(device: device)
 
         if device.isExposureModeSupported(.continuousAutoExposure) {
             device.activeMaxExposureDuration = CMTime(seconds: exposureDuration, preferredTimescale: 1_000_000_000)

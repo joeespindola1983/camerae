@@ -50,6 +50,8 @@ struct CameraProject: Identifiable, Equatable, Hashable {
     let directoryURL: URL
     let createdAt: Date
     let updatedAt: Date
+    let lastOpenedAt: Date?
+    let isArchived: Bool
 }
 
 @MainActor
@@ -94,7 +96,15 @@ final class ProjectStore: ObservableObject {
     func projects(for module: CameraModule) -> [CameraProject] {
         projects
             .filter { $0.module == module }
-            .sorted { $0.createdAt > $1.createdAt }
+            .sorted(by: projectSort)
+    }
+
+    func activeProjects(for module: CameraModule) -> [CameraProject] {
+        projects(for: module).filter { !$0.isArchived }
+    }
+
+    func archivedProjects(for module: CameraModule) -> [CameraProject] {
+        projects(for: module).filter(\.isArchived)
     }
 
     func defaultProjectName(for module: CameraModule, date: Date = Date()) -> String {
@@ -120,13 +130,48 @@ final class ProjectStore: ObservableObject {
             name: name,
             directoryURL: directoryURL,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            lastOpenedAt: now,
+            isArchived: false
         )
 
         try writeManifest(for: project)
         projects.insert(project, at: 0)
         projects.sort { $0.createdAt > $1.createdAt }
         return project
+    }
+
+    func markOpened(_ project: CameraProject, at date: Date = Date()) {
+        guard let current = projects.first(where: { $0.id == project.id }) else { return }
+
+        let updated = CameraProject(
+            id: current.id,
+            module: current.module,
+            name: current.name,
+            directoryURL: current.directoryURL,
+            createdAt: current.createdAt,
+            updatedAt: date,
+            lastOpenedAt: date,
+            isArchived: current.isArchived
+        )
+        updateProject(updated)
+    }
+
+    func setArchived(_ project: CameraProject, isArchived: Bool) throws {
+        guard let current = projects.first(where: { $0.id == project.id }) else { return }
+        let now = Date()
+        let updated = CameraProject(
+            id: current.id,
+            module: current.module,
+            name: current.name,
+            directoryURL: current.directoryURL,
+            createdAt: current.createdAt,
+            updatedAt: now,
+            lastOpenedAt: current.lastOpenedAt,
+            isArchived: isArchived
+        )
+        try writeManifest(for: updated)
+        replaceProject(updated)
     }
 
     private func loadProjects() throws -> [CameraProject] {
@@ -162,12 +207,14 @@ final class ProjectStore: ObservableObject {
                     name: manifest.name,
                     directoryURL: directory,
                     createdAt: manifest.createdAt,
-                    updatedAt: manifest.updatedAt
+                    updatedAt: manifest.updatedAt,
+                    lastOpenedAt: manifest.lastOpenedAt,
+                    isArchived: manifest.isArchived ?? false
                 ))
             }
         }
 
-        return loadedProjects.sorted { $0.createdAt > $1.createdAt }
+        return loadedProjects.sorted(by: projectSort)
     }
 
     private func writeManifest(for project: CameraProject) throws {
@@ -176,11 +223,37 @@ final class ProjectStore: ObservableObject {
             module: project.module,
             name: project.name,
             createdAt: project.createdAt,
-            updatedAt: project.updatedAt
+            updatedAt: project.updatedAt,
+            lastOpenedAt: project.lastOpenedAt,
+            isArchived: project.isArchived
         )
 
         let data = try encoder.encode(manifest)
         try data.write(to: project.directoryURL.appendingPathComponent("project.json"), options: [.atomic])
+    }
+
+    private func updateProject(_ project: CameraProject) {
+        do {
+            try writeManifest(for: project)
+            replaceProject(project)
+        } catch {
+            reload()
+        }
+    }
+
+    private func replaceProject(_ project: CameraProject) {
+        projects.removeAll { $0.id == project.id }
+        projects.append(project)
+        projects.sort(by: projectSort)
+    }
+
+    private func projectSort(_ left: CameraProject, _ right: CameraProject) -> Bool {
+        let leftDate = left.lastOpenedAt ?? left.updatedAt
+        let rightDate = right.lastOpenedAt ?? right.updatedAt
+        if leftDate == rightDate {
+            return left.createdAt > right.createdAt
+        }
+        return leftDate > rightDate
     }
 
     private func uniqueDirectoryURL(baseName: String, in parentURL: URL) -> URL {
@@ -211,4 +284,6 @@ private struct ProjectManifest: Codable {
     let name: String
     let createdAt: Date
     let updatedAt: Date
+    let lastOpenedAt: Date?
+    let isArchived: Bool?
 }

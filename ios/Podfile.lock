@@ -1,0 +1,26 @@
+PODS:
+  - onnxruntime-c (1.27.0)
+  - onnxruntime-objc (1.27.0):
+    - onnxruntime-objc/Core (= 1.27.0)
+  - onnxruntime-objc/Core (1.27.0):
+    - onnxruntime-c (= 1.27.0)
+  - OpenCV2 (4.3.0)
+
+DEPENDENCIES:
+  - onnxruntime-objc
+  - OpenCV2
+
+SPEC REPOS:
+  trunk:
+    - onnxruntime-c
+    - onnxruntime-objc
+    - OpenCV2
+
+SPEC CHECKSUMS:
+  onnxruntime-c: 412ab51682e622e3d77ddc9176aa92517d171820
+  onnxruntime-objc: f88cca350e7603f81c31b5823f3ddfaa67da9f84
+  OpenCV2: ffe82e5cb5d16dc3fc01a5f4127b9a5b3cfc7d1b
+
+PODFILE CHECKSUM: 365f8cf4bf94a05f48feb95823c9a96fbbfcbc22
+
+COCOAPODS: 1.16.2

@@ -1,6 +1,8 @@
 .DS_Store
 .build/
 **/.build/
+__pycache__/
+**/__pycache__/
 DerivedData/
 **/DerivedData/
 *.xcuserstate
@@ -13,3 +15,12 @@ android/.gradle/
 android/.idea/
 android/local.properties
 android/**/build/
+
+# Local processing outputs
+processing/build/
+processing/out/
+processing/tmp/
+
+# Local ML models are large and may have separate redistribution terms.
+ios/LocalModels/
+ios/Pods/

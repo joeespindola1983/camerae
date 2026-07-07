@@ -120,16 +120,23 @@ cv::Mat postProcess(const cv::Mat& image, const AstroSettings& settings) {
     output = applyGamma(output, settings.gamma);
 
     if (settings.denoise) {
-        cv::Mat denoised;
-        cv::fastNlMeansDenoisingColored(
-            output,
-            denoised,
-            settings.denoiseStrength,
-            settings.denoiseColorStrength,
-            settings.denoiseTemplateWindow,
-            settings.denoiseSearchWindow
-        );
-        output = denoised;
+        switch (settings.denoiseBackend) {
+        case DenoiseBackend::FastNlMeans: {
+            cv::Mat denoised;
+            cv::fastNlMeansDenoisingColored(
+                output,
+                denoised,
+                settings.denoiseStrength,
+                settings.denoiseColorStrength,
+                settings.denoiseTemplateWindow,
+                settings.denoiseSearchWindow
+            );
+            output = denoised;
+            break;
+        }
+        case DenoiseBackend::MachineLearning:
+            throw std::runtime_error("denoise ML ainda nao esta configurado: forneca um modelo Core ML ou ONNX embarcavel");
+        }
     }
 
     return output;
@@ -220,6 +227,17 @@ AstroResult renderAstroPreview(
     const AstroSettings& settings
 ) {
     const auto frames = listFramePaths(inputDirectory);
+    return renderAstroStack(frames, outputPath, settings);
+}
+
+AstroResult renderAstroStack(
+    const std::vector<std::filesystem::path>& framePaths,
+    const std::filesystem::path& outputPath,
+    const AstroSettings& settings,
+    AstroProgressCallback progressCallback,
+    void* progressContext
+) {
+    const auto& frames = framePaths;
     if (frames.empty()) {
         throw std::runtime_error("nenhum frame encontrado");
     }
@@ -240,9 +258,13 @@ AstroResult renderAstroPreview(
     reference = resizeToMaxDimension(reference, settings.maxDimension);
 
     cv::Mat accumulator = cv::Mat::zeros(reference.size(), CV_32FC3);
+    int accumulatedFrames = 0;
     for (int index = 0; index < usedCount; ++index) {
         cv::Mat frame = cv::imread(frames[startIndex + index].string(), cv::IMREAD_COLOR);
         if (frame.empty()) {
+            if (progressCallback && !progressCallback(index + 1, usedCount, progressContext)) {
+                throw std::runtime_error("processamento cancelado");
+            }
             continue;
         }
 
@@ -258,21 +280,32 @@ AstroResult renderAstroPreview(
         cv::Mat frame32;
         frame.convertTo(frame32, CV_32FC3, 1.0 / 255.0);
         accumulator += frame32;
+        accumulatedFrames += 1;
+
+        if (progressCallback && !progressCallback(index + 1, usedCount, progressContext)) {
+            throw std::runtime_error("processamento cancelado");
+        }
     }
 
-    accumulator /= static_cast<float>(usedCount);
+    if (accumulatedFrames == 0) {
+        throw std::runtime_error("nenhum frame valido foi processado");
+    }
+
+    accumulator /= static_cast<float>(accumulatedFrames);
     cv::Mat averaged;
     accumulator.convertTo(averaged, CV_8UC3, 255.0);
     averaged = postProcess(averaged, settings);
 
-    std::filesystem::create_directories(outputPath.parent_path());
+    if (!outputPath.parent_path().empty()) {
+        std::filesystem::create_directories(outputPath.parent_path());
+    }
     if (!cv::imwrite(outputPath.string(), averaged)) {
         throw std::runtime_error("nao foi possivel gravar output: " + outputPath.string());
     }
 
     return AstroResult{
         .discoveredFrames = static_cast<int>(frames.size()),
-        .usedFrames = usedCount,
+        .usedFrames = accumulatedFrames,
         .outputPath = outputPath
     };
 }

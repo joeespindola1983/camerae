@@ -1,0 +1,2 @@
+#include? "../Pods/Target Support Files/Pods-Camerae/Pods-Camerae.debug.xcconfig"
+#include "Signing.xcconfig"

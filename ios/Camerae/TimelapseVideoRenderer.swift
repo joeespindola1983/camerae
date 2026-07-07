@@ -5,14 +5,24 @@ import ImageIO
 import UIKit
 
 struct TimelapseVideoRenderer {
-    func render(frames: [URL], outputURL: URL, fps: Int) async throws {
+    func render(
+        frames: [URL],
+        outputURL: URL,
+        fps: Int,
+        progress: (@Sendable (Int, Int) async -> Void)? = nil
+    ) async throws {
         try await Task.detached(priority: .userInitiated) {
-            try renderVideo(frames: frames, outputURL: outputURL, fps: fps)
+            try await renderVideo(frames: frames, outputURL: outputURL, fps: fps, progress: progress)
         }.value
     }
 }
 
-private func renderVideo(frames: [URL], outputURL: URL, fps: Int) throws {
+private func renderVideo(
+    frames: [URL],
+    outputURL: URL,
+    fps: Int,
+    progress: (@Sendable (Int, Int) async -> Void)?
+) async throws {
     guard let firstFrame = frames.first else {
         throw VideoRenderError.noFrames
     }
@@ -80,6 +90,10 @@ private func renderVideo(frames: [URL], outputURL: URL, fps: Int) throws {
 
             frameIndex += 1
         }
+
+        if frameIndex == 1 || frameIndex % 5 == 0 || frameIndex == Int64(frames.count) {
+            await progress?(Int(frameIndex), frames.count)
+        }
     }
 
     guard frameIndex > 0 else {
@@ -90,11 +104,11 @@ private func renderVideo(frames: [URL], outputURL: URL, fps: Int) throws {
 
     input.markAsFinished()
 
-    let semaphore = DispatchSemaphore(value: 0)
-    writer.finishWriting {
-        semaphore.signal()
+    await withCheckedContinuation { continuation in
+        writer.finishWriting {
+            continuation.resume()
+        }
     }
-    semaphore.wait()
 
     switch writer.status {
     case .completed:

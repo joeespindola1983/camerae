@@ -18,6 +18,7 @@ void printUsage() {
         << "  --max-dimension N\n"
         << "  --align 0|1\n"
         << "  --denoise 0|1\n"
+        << "  --denoiser fastnlm|ml\n"
         << "  --denoise-strength N\n"
         << "  --denoise-color-strength N\n"
         << "  --contrast N\n"
@@ -36,6 +37,16 @@ std::string requireValue(int& index, int argc, char* argv[]) {
 
 bool parseBool(const std::string& value) {
     return value == "1" || value == "true" || value == "yes" || value == "on";
+}
+
+camerae_processing::DenoiseBackend parseDenoiseBackend(const std::string& value) {
+    if (value == "fastnlm" || value == "opencv") {
+        return camerae_processing::DenoiseBackend::FastNlMeans;
+    }
+    if (value == "ml" || value == "coreml" || value == "onnx" || value == "deepsnr") {
+        return camerae_processing::DenoiseBackend::MachineLearning;
+    }
+    throw std::invalid_argument("denoiser invalido: " + value);
 }
 
 } // namespace
@@ -82,6 +93,8 @@ int main(int argc, char* argv[]) {
                 settings.alignStars = parseBool(requireValue(index, argc, argv));
             } else if (arg == "--denoise") {
                 settings.denoise = parseBool(requireValue(index, argc, argv));
+            } else if (arg == "--denoiser") {
+                settings.denoiseBackend = parseDenoiseBackend(requireValue(index, argc, argv));
             } else if (arg == "--denoise-strength") {
                 settings.denoiseStrength = std::stof(requireValue(index, argc, argv));
             } else if (arg == "--denoise-color-strength") {

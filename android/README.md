@@ -9,7 +9,7 @@ The iOS app in `../ios` remains the reference implementation for product behavio
 - Camera preview and capture: CameraX first, Camera2 where manual controls are required.
 - Long exposure capability detection: Camera2 `SENSOR_INFO_EXPOSURE_TIME_RANGE`.
 - Repeatable alignment: camera preview overlay, sensors, location, and image similarity.
-- Image similarity: OpenCV or Android-native ML/Vision alternatives after the MVP is stable.
+- Image similarity and processing: OpenCV is available through the Gradle dependency `org.opencv:opencv`.
 
 ## First Milestone
 
@@ -26,3 +26,5 @@ Build a repeatable-alignment MVP:
 ```sh
 ./gradlew assembleDebug
 ```
+
+The debug build packages OpenCV native libraries, including `libopencv_java4.so`.

@@ -61,20 +61,60 @@ private struct ProjectListView: View {
     @State private var projectName = ""
     @State private var errorMessage: String?
 
-    private var projects: [CameraProject] {
-        projectStore.projects(for: module)
+    private var activeProjects: [CameraProject] {
+        projectStore.activeProjects(for: module)
+    }
+
+    private var lastOpenedProject: CameraProject? {
+        activeProjects.first
+    }
+
+    private var remainingActiveProjects: [CameraProject] {
+        guard let lastOpenedProject else {
+            return []
+        }
+
+        return activeProjects.filter { $0.id != lastOpenedProject.id }
+    }
+
+    private var archivedProjects: [CameraProject] {
+        projectStore.archivedProjects(for: module)
     }
 
     var body: some View {
         List {
-            Section("Projetos") {
-                if projects.isEmpty {
+            if let lastOpenedProject {
+                Section("Ultimo aberto") {
+                    projectLink(lastOpenedProject, isHighlighted: true)
+                }
+            }
+
+            if activeProjects.isEmpty {
+                Section("Projetos") {
                     Text("Nenhum projeto ainda")
                         .foregroundStyle(.secondary)
-                } else {
-                    ForEach(projects) { project in
+                }
+            } else if !remainingActiveProjects.isEmpty {
+                Section("Projetos") {
+                    ForEach(remainingActiveProjects) { project in
+                        projectLink(project)
+                    }
+                }
+            }
+
+            if !archivedProjects.isEmpty {
+                Section("Arquivados") {
+                    ForEach(archivedProjects) { project in
                         NavigationLink(value: project) {
                             ProjectRow(project: project)
+                        }
+                        .swipeActions(edge: .trailing) {
+                            Button {
+                                setArchived(project, false)
+                            } label: {
+                                Label("Restaurar", systemImage: "arrow.uturn.backward")
+                            }
+                            .tint(.green)
                         }
                     }
                 }
@@ -124,10 +164,38 @@ private struct ProjectListView: View {
             errorMessage = error.localizedDescription
         }
     }
+
+    private func setArchived(_ project: CameraProject, _ isArchived: Bool) {
+        do {
+            try projectStore.setArchived(project, isArchived: isArchived)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func projectLink(_ project: CameraProject, isHighlighted: Bool = false) -> some View {
+        NavigationLink(value: project) {
+            ProjectRow(project: project, isHighlighted: isHighlighted)
+        }
+        .listRowBackground(isHighlighted ? Color.accentColor.opacity(0.12) : nil)
+        .swipeActions(edge: .trailing) {
+            Button {
+                setArchived(project, true)
+            } label: {
+                Label("Arquivar", systemImage: "archivebox")
+            }
+            .tint(.orange)
+        }
+    }
 }
 
 private struct ProjectRow: View {
     let project: CameraProject
+    var isHighlighted = false
+
+    private var summary: ProjectRowSummary {
+        ProjectRowSummary(project: project)
+    }
 
     private var thumbnailURL: URL? {
         TimelapseSessionStore(project: project).firstReferenceFrameURL()
@@ -138,14 +206,66 @@ private struct ProjectRow: View {
             ReferenceThumbnail(imageURL: thumbnailURL, systemImage: project.module.systemImage)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(project.name)
-                    .font(.headline)
-                Text(project.createdAt.formatted(date: .abbreviated, time: .shortened))
+                HStack(spacing: 6) {
+                    Text(project.name)
+                        .font(.headline)
+                    if isHighlighted {
+                        Image(systemName: "clock.fill")
+                            .font(.caption)
+                            .foregroundStyle(.tint)
+                    }
+                    if project.isArchived {
+                        Image(systemName: "archivebox")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Text(summary.subtitle)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
+
+                if let detail = summary.detail {
+                    Text(detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if isHighlighted {
+                    Text("Ultimo projeto aberto")
+                        .font(.caption2)
+                        .foregroundStyle(.tint)
+                }
             }
         }
         .padding(.vertical, 4)
+    }
+}
+
+private struct ProjectRowSummary {
+    let project: CameraProject
+
+    private var store: TimelapseSessionStore {
+        TimelapseSessionStore(project: project)
+    }
+
+    var subtitle: String {
+        if let lastOpenedAt = project.lastOpenedAt {
+            return "Aberto \(lastOpenedAt.formatted(date: .abbreviated, time: .shortened))"
+        }
+
+        return "Criado \(project.createdAt.formatted(date: .abbreviated, time: .shortened))"
+    }
+
+    var detail: String? {
+        guard project.module == .astrophotography,
+              let latest = store.latestSessionSummaryWithFrames() else {
+            return nil
+        }
+
+        var parts = ["\(latest.frameCount) frames"]
+        parts.append(latest.isAstroProcessed ? "processado" : "nao processado")
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -187,18 +307,24 @@ private struct NewProjectSheet: View {
 }
 
 private struct ModuleRuntimeView: View {
+    @EnvironmentObject private var projectStore: ProjectStore
     let project: CameraProject
     @Binding var path: NavigationPath
 
     var body: some View {
-        switch project.module {
-        case .astrophotography:
-            AstroProjectRuntimeView(project: project, path: $path)
-        case .repeatable:
-            RepeatableProjectRuntimeView(project: project) {
-                try TimelapseSessionStore(project: project).deleteProject()
-                path.removeLast()
+        Group {
+            switch project.module {
+            case .astrophotography:
+                AstroProjectRuntimeView(project: project, path: $path)
+            case .repeatable:
+                RepeatableProjectRuntimeView(project: project) {
+                    try TimelapseSessionStore(project: project).deleteProject()
+                    path.removeLast()
+                }
             }
+        }
+        .onAppear {
+            projectStore.markOpened(project)
         }
     }
 }

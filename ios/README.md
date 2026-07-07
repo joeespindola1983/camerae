@@ -34,8 +34,34 @@ MVP iOS para timelapse de baixa luz e captura repetivel.
 
 ## Como abrir
 
-Abra `Camerae.xcodeproj` no Xcode e rode em um iPhone fisico. Se voce regenerar o projeto, use:
+Instale os pods e abra `Camerae.xcworkspace` no Xcode:
+
+```sh
+pod install
+open Camerae.xcworkspace
+```
+
+Rode em um iPhone fisico. Se voce regenerar o projeto, use:
 
 ```sh
 xcodegen generate
+pod install
 ```
+
+## Modelos locais
+
+Modelos grandes ficam fora do Git. Para ativar DeepSNR no iOS, coloque os arquivos locais aqui:
+
+```text
+ios/LocalModels/DeepSNR/DeepSNR_weights_v2.onnx
+ios/LocalModels/DeepSNR/LICENSE.txt
+ios/LocalModels/DeepSNR/README.txt
+```
+
+Essa pasta e ignorada pelo Git, mas e adicionada ao bundle local pelo XcodeGen quando existir.
+
+## Processamento nativo
+
+- ONNX Runtime entra via CocoaPods para o DeepSNR local.
+- OpenCV entra via CocoaPods (`OpenCV2`) e fica disponivel para pontes Objective-C++.
+- O Laboratorio Astro mostra a versao carregada do OpenCV na secao de tratamento.

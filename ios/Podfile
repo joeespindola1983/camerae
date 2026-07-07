@@ -1,0 +1,8 @@
+platform :ios, '17.0'
+
+use_frameworks!
+
+target 'Camerae' do
+  pod 'OpenCV2'
+  pod 'onnxruntime-objc'
+end

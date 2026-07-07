@@ -21,8 +21,36 @@ struct TimelapseSessionSummary: Identifiable, Equatable, Hashable {
     let referenceFrameURL: URL?
     let videoURL: URL?
     let videoClipURL: URL?
+    let isAstroProcessed: Bool
 
     var id: UUID { session.id }
+}
+
+struct OriginalFrameExportProgress: Equatable, Sendable {
+    let processedFrames: Int
+    let totalFrames: Int
+    let completedBatches: Int
+    let totalBatches: Int
+    let currentBatch: Int
+    let currentBatchFrames: Int
+    let currentBatchProcessedFrames: Int
+
+    var detailText: String {
+        let batch = min(max(currentBatch, 1), max(totalBatches, 1))
+        let remainingBatches = max(totalBatches - completedBatches, 0)
+        return "\(processedFrames)/\(totalFrames) imagens • lote \(batch)/\(totalBatches) • faltam \(remainingBatches)"
+    }
+}
+
+private struct OriginalFrameExportPlan {
+    let totalFrames: Int
+    let batches: [OriginalFrameArchiveBatch]
+}
+
+private struct OriginalFrameArchiveBatch {
+    let index: Int
+    let frames: [URL]
+    let url: URL
 }
 
 final class TimelapseSessionStore {
@@ -174,6 +202,14 @@ final class TimelapseSessionStore {
             .first
     }
 
+    func latestSessionSummaryWithFrames() -> TimelapseSessionSummary? {
+        guard let session = latestSessionWithFrames() else {
+            return nil
+        }
+
+        return summary(for: session)
+    }
+
     func sessionSummaries() -> [TimelapseSessionSummary] {
         guard let sessions = try? loadSessions() else {
             return []
@@ -181,16 +217,19 @@ final class TimelapseSessionStore {
 
         return sessions
             .sorted { $0.createdAt > $1.createdAt }
-            .map { session in
-                TimelapseSessionSummary(
-                    session: session,
-                    captureKind: session.captureKind,
-                    frameCount: frameCount(in: session),
-                    referenceFrameURL: firstFrameURL(in: session),
-                    videoURL: existingVideoURL(for: session),
-                    videoClipURL: existingVideoClipURL(for: session)
-                )
-            }
+            .map(summary)
+    }
+
+    private func summary(for session: TimelapseSession) -> TimelapseSessionSummary {
+        TimelapseSessionSummary(
+            session: session,
+            captureKind: session.captureKind,
+            frameCount: frameCount(in: session),
+            referenceFrameURL: firstFrameURL(in: session),
+            videoURL: existingVideoURL(for: session),
+            videoClipURL: existingVideoClipURL(for: session),
+            isAstroProcessed: isAstroProcessed(session)
+        )
     }
 
     func firstReferenceFrameURL() -> URL? {
@@ -286,6 +325,26 @@ final class TimelapseSessionStore {
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
+    func isAstroProcessed(_ session: TimelapseSession) -> Bool {
+        astroStackFrameCount(in: session) > 0 || hasAstroRenderedClip(in: session)
+    }
+
+    private func hasAstroRenderedClip(in session: TimelapseSession) -> Bool {
+        let rendersURL = session.directoryURL.appendingPathComponent("Astro Renders", isDirectory: true)
+        guard let renderDirectories = try? fileManager.contentsOfDirectory(
+            at: rendersURL,
+            includingPropertiesForKeys: [.isDirectoryKey]
+        ) else {
+            return false
+        }
+
+        return renderDirectories.contains { renderURL in
+            let isDirectory = (try? renderURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+            guard isDirectory else { return false }
+            return fileManager.fileExists(atPath: renderURL.appendingPathComponent("astro.mp4").path)
+        }
+    }
+
     func exportZip(for session: TimelapseSession) throws -> URL {
         try fileManager.createDirectory(at: exportsDirectory, withIntermediateDirectories: true)
         let zipURL = exportsDirectory.appendingPathComponent("\(session.name).zip")
@@ -313,16 +372,24 @@ final class TimelapseSessionStore {
         try await Self.exportOriginalFramesArchivesInBackground(for: session)
     }
 
+    func exportOriginalFramesArchivesInBackground(
+        for session: TimelapseSession,
+        progress: @escaping @Sendable (OriginalFrameExportProgress) async -> Void
+    ) async throws -> [URL] {
+        try await Self.exportOriginalFramesArchivesInBackground(for: session, progress: progress)
+    }
+
     static func exportOriginalFramesArchivesInBackground(for session: TimelapseSession) async throws -> [URL] {
-        try await withCheckedThrowingContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                do {
-                    continuation.resume(returning: try exportOriginalFramesArchives(for: session))
-                } catch {
-                    continuation.resume(throwing: error)
-                }
-            }
-        }
+        try await exportOriginalFramesArchivesInBackground(for: session) { _ in }
+    }
+
+    static func exportOriginalFramesArchivesInBackground(
+        for session: TimelapseSession,
+        progress: @escaping @Sendable (OriginalFrameExportProgress) async -> Void
+    ) async throws -> [URL] {
+        try await Task.detached(priority: .utility) {
+            try await exportOriginalFramesArchives(for: session, progress: progress)
+        }.value
     }
 
     func exportOriginalFramesZipInBackground(for session: TimelapseSession) async throws -> URL {
@@ -354,6 +421,112 @@ final class TimelapseSessionStore {
         maxFramesPerArchive: Int = maxOriginalFramesPerArchive,
         maxArchiveBytes: UInt64 = maxOriginalFrameArchiveBytes
     ) throws -> [URL] {
+        try exportOriginalFramesArchivePlan(
+            for: session,
+            maxFramesPerArchive: maxFramesPerArchive,
+            maxArchiveBytes: maxArchiveBytes
+        ).batches.map { batch in
+            if !FileManager.default.fileExists(atPath: batch.url.path) {
+                try ZipWriter.write(files: batch.frames, baseURL: session.directoryURL, to: batch.url)
+            }
+            return batch.url
+        }
+    }
+
+    static func exportOriginalFramesArchives(
+        for session: TimelapseSession,
+        maxFramesPerArchive: Int = maxOriginalFramesPerArchive,
+        maxArchiveBytes: UInt64 = maxOriginalFrameArchiveBytes,
+        progress: @escaping @Sendable (OriginalFrameExportProgress) async -> Void
+    ) async throws -> [URL] {
+        let plan = try exportOriginalFramesArchivePlan(
+            for: session,
+            maxFramesPerArchive: maxFramesPerArchive,
+            maxArchiveBytes: maxArchiveBytes
+        )
+        var processedFrames = 0
+        var completedBatches = 0
+        var outputURLs: [URL] = []
+
+        await progress(OriginalFrameExportProgress(
+            processedFrames: 0,
+            totalFrames: plan.totalFrames,
+            completedBatches: 0,
+            totalBatches: plan.batches.count,
+            currentBatch: 1,
+            currentBatchFrames: plan.batches.first?.frames.count ?? 0,
+            currentBatchProcessedFrames: 0
+        ))
+
+        for batch in plan.batches {
+            try Task.checkCancellation()
+
+            if completedArchiveExists(at: batch.url) {
+                processedFrames += batch.frames.count
+                completedBatches += 1
+                outputURLs.append(batch.url)
+                await progress(OriginalFrameExportProgress(
+                    processedFrames: processedFrames,
+                    totalFrames: plan.totalFrames,
+                    completedBatches: completedBatches,
+                    totalBatches: plan.batches.count,
+                    currentBatch: batch.index,
+                    currentBatchFrames: batch.frames.count,
+                    currentBatchProcessedFrames: batch.frames.count
+                ))
+                continue
+            }
+
+            let baseProcessedFrames = processedFrames
+            let baseCompletedBatches = completedBatches
+            try await ZipWriter.write(
+                files: batch.frames,
+                baseURL: session.directoryURL,
+                to: batch.url
+            ) { batchProcessedFrames in
+                await progress(OriginalFrameExportProgress(
+                    processedFrames: baseProcessedFrames + batchProcessedFrames,
+                    totalFrames: plan.totalFrames,
+                    completedBatches: baseCompletedBatches,
+                    totalBatches: plan.batches.count,
+                    currentBatch: batch.index,
+                    currentBatchFrames: batch.frames.count,
+                    currentBatchProcessedFrames: batchProcessedFrames
+                ))
+            }
+
+            processedFrames += batch.frames.count
+            completedBatches += 1
+            outputURLs.append(batch.url)
+        }
+
+        return outputURLs
+    }
+
+    static func existingOriginalFrameArchives(for session: TimelapseSession) -> [URL] {
+        let projectDirectory = session.directoryURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let exportsDirectory = projectDirectory.appendingPathComponent("Exports", isDirectory: true)
+        let baseName = "\(session.name)_original_frames"
+        let exports = (try? FileManager.default.contentsOfDirectory(
+            at: exportsDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey]
+        )) ?? []
+
+        return exports.filter { url in
+            url.lastPathComponent.hasPrefix(baseName) &&
+                url.pathExtension.lowercased() == "zip" &&
+                completedArchiveExists(at: url)
+        }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    private static func exportOriginalFramesArchivePlan(
+        for session: TimelapseSession,
+        maxFramesPerArchive: Int,
+        maxArchiveBytes: UInt64
+    ) throws -> OriginalFrameExportPlan {
         let fileManager = FileManager.default
         let projectDirectory = session.directoryURL
             .deletingLastPathComponent()
@@ -387,7 +560,7 @@ final class TimelapseSessionStore {
         }
 
         let digits = max(3, String(chunks.count).count)
-        return try chunks.enumerated().map { index, chunk in
+        let batches = chunks.enumerated().map { index, chunk in
             let fileName: String
             if chunks.count == 1 {
                 fileName = "\(baseName).zip"
@@ -396,9 +569,19 @@ final class TimelapseSessionStore {
             }
 
             let zipURL = exportsDirectory.appendingPathComponent(fileName)
-            try ZipWriter.write(files: chunk, baseURL: session.directoryURL, to: zipURL)
-            return zipURL
+            return OriginalFrameArchiveBatch(index: index + 1, frames: chunk, url: zipURL)
         }
+
+        return OriginalFrameExportPlan(totalFrames: frames.count, batches: batches)
+    }
+
+    private static func completedArchiveExists(at url: URL) -> Bool {
+        guard FileManager.default.fileExists(atPath: url.path),
+              let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize else {
+            return false
+        }
+
+        return size > 0
     }
 
     private static func originalFrameURLs(in session: TimelapseSession) -> [URL] {

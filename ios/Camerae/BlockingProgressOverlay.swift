@@ -4,6 +4,8 @@ struct BlockingProgressOverlay: View {
     let title: String
     let message: String
     var detail: String?
+    var cancelTitle: String?
+    var cancelAction: (() -> Void)?
 
     var body: some View {
         ZStack {
@@ -26,6 +28,16 @@ struct BlockingProgressOverlay: View {
                     Text(detail)
                         .font(.system(.caption, design: .monospaced, weight: .semibold))
                         .foregroundStyle(.secondary)
+                }
+
+                if let cancelTitle, let cancelAction {
+                    Button(role: .cancel) {
+                        cancelAction()
+                    } label: {
+                        Text(cancelTitle)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
                 }
             }
             .padding(24)

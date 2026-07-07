@@ -1,11 +1,14 @@
 import CoreImage
+import CoreML
 import Foundation
 import ImageIO
 import UIKit
 
 enum AstroProcessingProfile: String, CaseIterable, Identifiable {
     case natural
+    case light
     case milkyWay
+    case balanced
     case strong
 
     var id: String { rawValue }
@@ -14,8 +17,12 @@ enum AstroProcessingProfile: String, CaseIterable, Identifiable {
         switch self {
         case .natural:
             return "Natural"
+        case .light:
+            return "Leve"
         case .milkyWay:
             return "Via Lactea"
+        case .balanced:
+            return "Balanceado"
         case .strong:
             return "Forte"
         }
@@ -25,23 +32,31 @@ enum AstroProcessingProfile: String, CaseIterable, Identifiable {
         switch self {
         case .natural:
             return 1.0
+        case .light:
+            return 0.95
         case .milkyWay:
             return 0.85
+        case .balanced:
+            return 0.80
         case .strong:
             return 0.75
         }
     }
 
     var alignsStars: Bool {
-        self != .natural
+        self == .balanced || self == .strong
     }
 
     var noiseLevel: Float {
         switch self {
         case .natural:
             return 0.015
+        case .light:
+            return 0.020
         case .milkyWay:
             return 0.025
+        case .balanced:
+            return 0.032
         case .strong:
             return 0.04
         }
@@ -51,32 +66,115 @@ enum AstroProcessingProfile: String, CaseIterable, Identifiable {
         switch self {
         case .natural:
             return 0.55
+        case .light:
+            return 0.60
         case .milkyWay:
             return 0.65
+        case .balanced:
+            return 0.70
         case .strong:
             return 0.75
         }
     }
 }
 
+enum AstroDenoiseBackend: String, CaseIterable, Identifiable {
+    case coreImage
+    case deepSNR
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .coreImage:
+            return "Core Image"
+        case .deepSNR:
+            return "DeepSNR"
+        }
+    }
+}
+
+enum AstroStackingBackend: String, CaseIterable, Identifiable {
+    case coreImage
+    case openCV
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .coreImage:
+            return "Core Image"
+        case .openCV:
+            return "OpenCV"
+        }
+    }
+}
+
 struct AstroImageProcessingSettings: Equatable, Hashable {
     var profile: AstroProcessingProfile
+    var stackingBackend: AstroStackingBackend
     var appliesDenoise: Bool
+    var denoiseBackend: AstroDenoiseBackend
+    var alignsStars: Bool
     var noiseLevel: Float
     var sharpness: Float
+    var gamma: Float
+    var contrast: Float
+    var brightness: Float
+    var saturation: Float
+    var shadowAmount: Float
+    var highlightAmount: Float
+    var vibrance: Float
+    var unsharpAmount: Float
+    var unsharpRadius: Float
 
     static func defaults(for profile: AstroProcessingProfile) -> AstroImageProcessingSettings {
-        AstroImageProcessingSettings(
+        let tuning = tuningDefaults(for: profile)
+        return AstroImageProcessingSettings(
             profile: profile,
+            stackingBackend: .coreImage,
             appliesDenoise: profile != .natural,
+            denoiseBackend: .coreImage,
+            alignsStars: profile.alignsStars,
             noiseLevel: profile.noiseLevel,
-            sharpness: profile.sharpness
+            sharpness: profile.sharpness,
+            gamma: tuning.gamma,
+            contrast: tuning.contrast,
+            brightness: tuning.brightness,
+            saturation: tuning.saturation,
+            shadowAmount: tuning.shadowAmount,
+            highlightAmount: tuning.highlightAmount,
+            vibrance: tuning.vibrance,
+            unsharpAmount: tuning.unsharpAmount,
+            unsharpRadius: tuning.unsharpRadius
         )
     }
 
-    var alignsStars: Bool {
-        profile.alignsStars
+    private static func tuningDefaults(for profile: AstroProcessingProfile) -> (
+        gamma: Float,
+        contrast: Float,
+        brightness: Float,
+        saturation: Float,
+        shadowAmount: Float,
+        highlightAmount: Float,
+        vibrance: Float,
+        unsharpAmount: Float,
+        unsharpRadius: Float
+    ) {
+        switch profile {
+        case .natural:
+            return (0.90, 1.04, -0.005, 1.06, 0.08, 0.98, 0.08, 0.20, 1.5)
+        case .light:
+            return (0.85, 1.06, 0.005, 1.08, 0.14, 0.96, 0.12, 0.26, 1.8)
+        case .milkyWay:
+            return (0.82, 1.08, 0.012, 1.12, 0.24, 0.94, 0.16, 0.32, 2.0)
+        case .balanced:
+            return (0.80, 1.10, 0.014, 1.14, 0.30, 0.92, 0.20, 0.38, 2.1)
+        case .strong:
+            return (0.72, 1.14, 0.018, 1.20, 0.38, 0.90, 0.24, 0.48, 2.5)
+        }
     }
+
 }
 
 final class ExposureStacker {
@@ -153,25 +251,41 @@ final class ExposureStacker {
         maxDimension: CGFloat? = nil,
         settings: AstroImageProcessingSettings
     ) throws -> Data {
+        if settings.stackingBackend == .openCV {
+            return try averageJPEGFilesWithOpenCV(
+                frameURLs,
+                maxDimension: maxDimension,
+                settings: settings
+            )
+        }
+
         guard let firstURL = frameURLs.first,
-              var accumulator = processedFrame(firstURL, maxDimension: maxDimension, settings: settings) else {
+              var accumulator = processedFrame(firstURL, maxDimension: maxDimension, settings: settings, debugIndex: 0) else {
             throw CameraError.photoEncodingFailed
         }
 
         let extent = accumulator.extent
-        let referenceAnchor = settings.alignsStars ? starAnchor(in: accumulator) : nil
+        let referenceAnchor: CGPoint? = nil
         accumulator = try materialized(accumulator, extent: extent)
 
         for index in frameURLs.dropFirst().indices {
             try autoreleasepool {
-                guard var frame = processedFrame(frameURLs[index], maxDimension: maxDimension, settings: settings) else {
+                guard var frame = processedFrame(frameURLs[index], maxDimension: maxDimension, settings: settings, debugIndex: index) else {
                     return
                 }
 
                 if let referenceAnchor, let frameAnchor = starAnchor(in: frame) {
-                    let dx = referenceAnchor.x - frameAnchor.x
-                    let dy = referenceAnchor.y - frameAnchor.y
-                    frame = frame.transformed(by: CGAffineTransform(translationX: dx, y: dy))
+                    let rawDX = referenceAnchor.x - frameAnchor.x
+                    let rawDY = referenceAnchor.y - frameAnchor.y
+                    let offset = clampedAlignmentOffset(
+                        dx: rawDX,
+                        dy: rawDY,
+                        extent: extent
+                    )
+                    if index <= 3 {
+                        print("camerae-debug core-image-align frame=\(index) ref=(\(referenceAnchor.x),\(referenceAnchor.y)) frame=(\(frameAnchor.x),\(frameAnchor.y)) raw=(\(rawDX),\(rawDY)) applied=(\(offset.dx),\(offset.dy)) extent=\(extent)")
+                    }
+                    frame = frame.transformed(by: CGAffineTransform(translationX: offset.dx, y: offset.dy))
                 }
                 frame = frame.cropped(to: extent)
 
@@ -187,7 +301,10 @@ final class ExposureStacker {
             }
         }
 
-        accumulator = postProcessedStack(accumulator, profile: settings.profile).cropped(to: extent)
+        accumulator = postProcessedStack(accumulator, settings: settings).cropped(to: extent)
+        if settings.appliesDenoise && settings.denoiseBackend == .deepSNR {
+            accumulator = try DeepSNRDenoiser().denoisedImage(accumulator, context: context).cropped(to: extent)
+        }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let data = context.jpegRepresentation(
@@ -200,6 +317,107 @@ final class ExposureStacker {
 
         context.clearCaches()
         return data
+    }
+
+    private func averageJPEGFilesWithOpenCV(
+        _ frameURLs: [URL],
+        maxDimension: CGFloat?,
+        settings: AstroImageProcessingSettings
+    ) throws -> Data {
+        guard !frameURLs.isEmpty else {
+            throw CameraError.photoEncodingFailed
+        }
+
+        let outputURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("camerae-opencv-stack-\(UUID().uuidString).jpg")
+        let normalizedDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("camerae-opencv-normalized-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            try? FileManager.default.removeItem(at: outputURL)
+            try? FileManager.default.removeItem(at: normalizedDirectory)
+        }
+
+        let normalizedFrameURLs = try normalizedFrameFilesForOpenCV(
+            frameURLs,
+            outputDirectory: normalizedDirectory,
+            maxDimension: maxDimension
+        )
+        let denoiseWithOpenCV = settings.appliesDenoise && settings.denoiseBackend == .coreImage
+        let denoiseStrength = max(0.5, min(15, settings.noiseLevel * 250))
+
+        try OpenCVBridge.renderStack(
+            framePaths: normalizedFrameURLs.map(\.path),
+            outputPath: outputURL.path,
+            maxDimension: 0,
+            alignStars: settings.alignsStars,
+            normalizeFrames: settings.profile != .natural,
+            denoise: denoiseWithOpenCV,
+            denoiseStrength: denoiseStrength,
+            gamma: settings.gamma,
+            contrast: settings.contrast,
+            brightness: settings.brightness,
+            saturation: settings.saturation,
+            shadowAmount: settings.shadowAmount,
+            highlightAmount: settings.highlightAmount,
+            vibrance: settings.vibrance,
+            unsharpAmount: settings.unsharpAmount,
+            unsharpRadius: settings.unsharpRadius
+        )
+
+        if settings.appliesDenoise && settings.denoiseBackend == .deepSNR {
+            guard let image = CIImage(contentsOf: outputURL)?.normalizedForStacking() else {
+                throw CameraError.photoEncodingFailed
+            }
+
+            let denoised = try DeepSNRDenoiser().denoisedImage(image, context: context)
+            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+            guard let data = context.jpegRepresentation(
+                of: denoised,
+                colorSpace: colorSpace,
+                options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.95]
+            ) else {
+                throw CameraError.photoEncodingFailed
+            }
+            context.clearCaches()
+            return data
+        }
+
+        return try Data(contentsOf: outputURL, options: [.mappedIfSafe])
+    }
+
+    private func normalizedFrameFilesForOpenCV(
+        _ frameURLs: [URL],
+        outputDirectory: URL,
+        maxDimension: CGFloat?
+    ) throws -> [URL] {
+        try FileManager.default.createDirectory(at: outputDirectory, withIntermediateDirectories: true)
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+
+        return try frameURLs.enumerated().compactMap { index, frameURL in
+            try autoreleasepool {
+                guard var image = decodedFrame(frameURL, maxDimension: maxDimension, debugIndex: index, debugPrefix: "opencv-normalize") else {
+                    return nil
+                }
+
+                image = image.transformed(by: CGAffineTransform(
+                    translationX: -image.extent.minX,
+                    y: -image.extent.minY
+                ))
+                let extent = image.extent.integral
+
+                guard let data = context.jpegRepresentation(
+                    of: image.cropped(to: extent),
+                    colorSpace: colorSpace,
+                    options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.98]
+                ) else {
+                    throw CameraError.photoEncodingFailed
+                }
+
+                let outputURL = outputDirectory.appendingPathComponent(String(format: "frame_%04d.jpg", index))
+                try data.write(to: outputURL, options: [.atomic])
+                return outputURL
+            }
+        }
     }
 
     private func processedFrame(
@@ -217,21 +435,18 @@ final class ExposureStacker {
     private func processedFrame(
         _ frameURL: URL,
         maxDimension: CGFloat?,
-        settings: AstroImageProcessingSettings
+        settings: AstroImageProcessingSettings,
+        debugIndex: Int? = nil
     ) -> CIImage? {
-        guard var image = CIImage(contentsOf: frameURL)?.normalizedForStacking() else {
+        guard var image = decodedFrame(frameURL, maxDimension: maxDimension, debugIndex: debugIndex, debugPrefix: "core-image") else {
             return nil
-        }
-
-        if let maxDimension {
-            image = image.downscaled(maxDimension: maxDimension)
         }
 
         if settings.profile != .natural {
             image = normalizedExposureAndWhiteBalance(image)
         }
 
-        if settings.appliesDenoise {
+        if settings.appliesDenoise && settings.denoiseBackend == .coreImage {
             image = image.applyingFilter("CINoiseReduction", parameters: [
                 "inputNoiseLevel": settings.noiseLevel,
                 "inputSharpness": settings.sharpness
@@ -241,59 +456,66 @@ final class ExposureStacker {
         return image
     }
 
-    private func postProcessedStack(_ image: CIImage, profile: AstroProcessingProfile) -> CIImage {
-        switch profile {
-        case .natural:
-            return image
-                .applyingFilter("CIColorControls", parameters: [
-                    kCIInputSaturationKey: 1.04,
-                    kCIInputContrastKey: 1.06,
-                    kCIInputBrightnessKey: -0.01
-                ])
-                .applyingFilter("CISharpenLuminance", parameters: [
-                    kCIInputSharpnessKey: 0.25
-                ])
-        case .milkyWay:
-            return image
-                .applyingFilter("CIHighlightShadowAdjust", parameters: [
-                    "inputShadowAmount": 0.25,
-                    "inputHighlightAmount": 0.95
-                ])
-                .applyingFilter("CIGammaAdjust", parameters: [
-                    "inputPower": 0.88
-                ])
-                .applyingFilter("CIColorControls", parameters: [
-                    kCIInputSaturationKey: 1.10,
-                    kCIInputContrastKey: 1.12,
-                    kCIInputBrightnessKey: 0.015
-                ])
-                .applyingFilter("CIVibrance", parameters: [
-                    "inputAmount": 0.16
-                ])
-                .applyingFilter("CISharpenLuminance", parameters: [
-                    kCIInputSharpnessKey: 0.28
-                ])
-        case .strong:
-            return image
-                .applyingFilter("CIHighlightShadowAdjust", parameters: [
-                    "inputShadowAmount": 0.38,
-                    "inputHighlightAmount": 0.90
-                ])
-                .applyingFilter("CIGammaAdjust", parameters: [
-                    "inputPower": 0.82
-                ])
-                .applyingFilter("CIColorControls", parameters: [
-                    kCIInputSaturationKey: 1.18,
-                    kCIInputContrastKey: 1.20,
-                    kCIInputBrightnessKey: 0.02
-                ])
-                .applyingFilter("CIVibrance", parameters: [
-                    "inputAmount": 0.24
-                ])
-                .applyingFilter("CISharpenLuminance", parameters: [
-                    kCIInputSharpnessKey: 0.36
-                ])
+    private func postProcessedStack(_ image: CIImage, settings: AstroImageProcessingSettings) -> CIImage {
+        image
+            .applyingFilter("CIHighlightShadowAdjust", parameters: [
+                "inputShadowAmount": settings.shadowAmount,
+                "inputHighlightAmount": settings.highlightAmount
+            ])
+            .applyingFilter("CIGammaAdjust", parameters: [
+                "inputPower": settings.gamma
+            ])
+            .applyingFilter("CIColorControls", parameters: [
+                kCIInputSaturationKey: settings.saturation,
+                kCIInputContrastKey: settings.contrast,
+                kCIInputBrightnessKey: settings.brightness
+            ])
+            .applyingFilter("CIVibrance", parameters: [
+                "inputAmount": settings.vibrance
+            ])
+            .applyingFilter("CIUnsharpMask", parameters: [
+                kCIInputIntensityKey: settings.unsharpAmount,
+                kCIInputRadiusKey: settings.unsharpRadius
+            ])
+    }
+
+    private func decodedFrame(
+        _ frameURL: URL,
+        maxDimension: CGFloat?,
+        debugIndex: Int?,
+        debugPrefix: String
+    ) -> CIImage? {
+        guard let source = CGImageSourceCreateWithURL(frameURL as CFURL, [
+            kCGImageSourceShouldCache: false
+        ] as CFDictionary) else {
+            print("camerae-debug \(debugPrefix)-decode failed source path=\(frameURL.path)")
+            return nil
         }
+
+        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        let orientation = properties?[kCGImagePropertyOrientation] as? UInt32 ?? 1
+        let pixelWidth = properties?[kCGImagePropertyPixelWidth] as? Int ?? 0
+        let pixelHeight = properties?[kCGImagePropertyPixelHeight] as? Int ?? 0
+        let fullMaxDimension = max(pixelWidth, pixelHeight, 1)
+        let requestedMaxDimension = maxDimension.map { max(1, Int(ceil($0))) } ?? fullMaxDimension
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCache: false,
+            kCGImageSourceThumbnailMaxPixelSize: requestedMaxDimension
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            print("camerae-debug \(debugPrefix)-decode failed thumbnail path=\(frameURL.lastPathComponent) orientation=\(orientation) source=\(pixelWidth)x\(pixelHeight) max=\(requestedMaxDimension)")
+            return nil
+        }
+
+        if let debugIndex, debugIndex < 3 {
+            print("camerae-debug \(debugPrefix)-decode frame=\(debugIndex) file=\(frameURL.lastPathComponent) orientation=\(orientation) source=\(pixelWidth)x\(pixelHeight) decoded=\(cgImage.width)x\(cgImage.height) max=\(requestedMaxDimension)")
+        }
+
+        return CIImage(cgImage: cgImage)
     }
 
     private func normalizedExposureAndWhiteBalance(_ image: CIImage) -> CIImage {
@@ -322,7 +544,7 @@ final class ExposureStacker {
     }
 
     private func sharpnessScore(for frameURL: URL, maxDimension: CGFloat) -> Double {
-        guard let image = CIImage(contentsOf: frameURL)?.normalizedForStacking().downscaled(maxDimension: maxDimension),
+        guard let image = decodedFrame(frameURL, maxDimension: maxDimension, debugIndex: nil, debugPrefix: "sharpness"),
               let sample = luminanceSample(for: image) else {
             return 0
         }
@@ -387,6 +609,16 @@ final class ExposureStacker {
             x: image.extent.minX + CGFloat(weightedX / totalWeight) * scaleX,
             y: image.extent.minY + CGFloat(weightedY / totalWeight) * scaleY
         )
+    }
+
+    private func clampedAlignmentOffset(dx: CGFloat, dy: CGFloat, extent: CGRect) -> (dx: CGFloat, dy: CGFloat) {
+        let maxDX = extent.width * 0.18
+        let maxDY = extent.height * 0.18
+        guard abs(dx) <= maxDX, abs(dy) <= maxDY else {
+            return (0, 0)
+        }
+
+        return (dx, dy)
     }
 
     private func luminanceSample(for image: CIImage) -> LuminanceSample? {
@@ -511,7 +743,7 @@ private struct ColorStats {
     let luminance: Double
 }
 
-private extension CIImage {
+extension CIImage {
     func normalizedForStacking() -> CIImage {
         let orientation = properties[kCGImagePropertyOrientation as String] as? UInt32
         guard let orientation else { return self }

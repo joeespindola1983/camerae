@@ -15,6 +15,8 @@ struct RepeatableProjectRuntimeView: View {
     @State private var isShowingShareSheet = false
     @State private var exportedArchiveURLs: [URL] = []
     @State private var isShowingExportedArchives = false
+    @State private var exportProgress: OriginalFrameExportProgress?
+    @State private var exportTask: Task<Void, Never>?
     @State private var errorMessage: String?
 
     private let store: TimelapseSessionStore
@@ -54,7 +56,11 @@ struct RepeatableProjectRuntimeView: View {
                 BlockingProgressOverlay(
                     title: "Exportando ZIP",
                     message: "Gerando pacote com os frames originais",
-                    detail: "Aguarde"
+                    detail: exportProgress?.detailText ?? "Preparando",
+                    cancelTitle: "Parar",
+                    cancelAction: {
+                        exportTask?.cancel()
+                    }
                 )
             }
         }
@@ -127,9 +133,7 @@ struct RepeatableProjectRuntimeView: View {
                                     shareMedia(for: summary)
                                 },
                                 exportOriginalFramesAction: {
-                                    Task {
-                                        await exportOriginalFrames(for: summary.session)
-                                    }
+                                    startExportOriginalFrames(for: summary.session)
                                 }
                             )
                         }
@@ -260,15 +264,31 @@ struct RepeatableProjectRuntimeView: View {
     private func exportOriginalFrames(for session: TimelapseSession) async {
         guard exportingOriginalFramesSessionID == nil, renderingSessionID == nil else { return }
         exportingOriginalFramesSessionID = session.id
+        exportProgress = nil
 
         do {
-            exportedArchiveURLs = try await store.exportOriginalFramesArchivesInBackground(for: session)
+            exportedArchiveURLs = try await store.exportOriginalFramesArchivesInBackground(for: session) { progress in
+                await MainActor.run {
+                    exportProgress = progress
+                }
+            }
             isShowingExportedArchives = true
+        } catch is CancellationError {
+            exportedArchiveURLs = TimelapseSessionStore.existingOriginalFrameArchives(for: session)
+            isShowingExportedArchives = !exportedArchiveURLs.isEmpty
         } catch {
             errorMessage = error.localizedDescription
         }
 
         exportingOriginalFramesSessionID = nil
+        exportProgress = nil
+        exportTask = nil
+    }
+
+    private func startExportOriginalFrames(for session: TimelapseSession) {
+        exportTask = Task {
+            await exportOriginalFrames(for: session)
+        }
     }
 }
 
