@@ -24,3 +24,4 @@ processing/tmp/
 # Local ML models are large and may have separate redistribution terms.
 ios/LocalModels/
 ios/Pods/
+ios/build/

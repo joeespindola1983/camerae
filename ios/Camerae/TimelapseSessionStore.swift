@@ -916,7 +916,7 @@ enum RepeatableCaptureKind: String, Identifiable, Codable, Hashable {
 
     var id: String { rawValue }
 
-    static let captureOptions: [RepeatableCaptureKind] = [.timelapse, .video]
+    static let captureOptions: [RepeatableCaptureKind] = [.video, .timelapse]
 
     var title: String {
         switch self {

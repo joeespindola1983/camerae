@@ -13,8 +13,17 @@ struct RepeatableCameraView: View {
     @Binding private var videoSettings: WorkflowVideoSettings
 
     @State private var intervalSeconds = 5.0
-    @State private var selectedCaptureKind = RepeatableCaptureKind.timelapse
+    @State private var selectedCaptureKind = RepeatableCaptureKind.video
     @State private var overlayOpacity = 0.45
+    @State private var alignmentOverlayStyle = AlignmentOverlayStyle.normal
+    @State private var edgeReferenceImage: UIImage?
+    @State private var edgeOverlayTint = EdgeOverlayTint.green
+    @State private var edgeOverlayStroke = EdgeOverlayStroke.fine
+    @State private var isReferenceBlinking = false
+    @State private var isReferenceBlinkVisible = true
+    @State private var referenceBlinkInterval = ReferenceBlinkInterval.five
+    @State private var referenceBlinkOpacity = ReferenceBlinkOpacity.half
+    @State private var referenceBlinkTask: Task<Void, Never>?
     @State private var evBias = 0.0
     @State private var referenceImage: UIImage?
     @State private var referenceMotion: MotionAttitude?
@@ -25,12 +34,14 @@ struct RepeatableCameraView: View {
     @State private var deleteErrorMessage: String?
     @State private var capturePhase = RepeatableCapturePhase.setup
     @State private var isPositionHUDVisible = true
-    @State private var isScaleHUDVisible = true
+    @State private var isScaleHUDVisible = false
     @State private var isMotionHUDVisible = true
-    @State private var isTimelapseInfoVisible = true
+    @State private var isTimelapseInfoVisible = false
     @State private var isGridVisible = true
     @State private var isVisualMatchGuideVisible = true
+    @State private var activeHUDCategory: AlignmentHUDCategory?
     @State private var referenceOverlayID = UUID()
+    @State private var edgeReferenceRenderID = UUID()
     @State private var currentAlignmentOrientation = CaptureDisplayOrientation.portrait
 
     init(
@@ -79,6 +90,7 @@ struct RepeatableCameraView: View {
             }
         }
         .onDisappear {
+            stopReferenceBlinking()
             AppOrientationLock.shared.unlock()
         }
         .alert("Excluir esta captura?", isPresented: $isShowingDeleteConfirmation) {
@@ -218,13 +230,13 @@ struct RepeatableCameraView: View {
 
                 if let referenceImage {
                     ReferenceOverlayImage(
-                        image: referenceImage,
+                        image: overlayImage(for: referenceImage),
                         referenceOrientation: referenceOrientation,
                         displayOrientation: currentAlignmentOrientation
                     )
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .clipped()
-                        .opacity(overlayOpacity)
+                        .opacity(referenceOverlayOpacity)
                         .allowsHitTesting(false)
                         .ignoresSafeArea()
                         .id(referenceOverlayID)
@@ -259,9 +271,10 @@ struct RepeatableCameraView: View {
                 }
 
                 if isScaleHUDVisible, let visualAlignment = camera.visualAlignment {
+                    let hudWidth = min(proxy.size.width * 0.44, 250)
                     VisualDistanceHUD(estimate: visualAlignment)
-                        .frame(width: min(proxy.size.width * 0.58, 260), height: 74)
-                        .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                        .frame(width: hudWidth, height: 74)
+                        .position(x: min(proxy.size.width * 0.25, 145), y: 154)
                 }
 
                 if isPositionHUDVisible, let referenceGeoPose, let currentGeoPose = camera.currentGeoPose {
@@ -272,12 +285,22 @@ struct RepeatableCameraView: View {
                 }
 
                 if isPositionHUDVisible, let currentHeading = camera.currentGeoPose?.heading {
+                    let hudWidth = min(proxy.size.width * 0.44, 250)
                     CompassHeadingBar(
                         referenceHeading: referenceGeoPose?.heading,
                         currentHeading: currentHeading
                     )
-                    .frame(width: min(proxy.size.width * 0.44, 250), height: 54)
+                    .frame(width: hudWidth, height: 54)
                     .position(x: min(proxy.size.width * 0.25, 145), y: 82)
+                }
+
+                if activeHUDCategory != nil {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            activeHUDCategory = nil
+                        }
                 }
 
                 VStack(spacing: 0) {
@@ -289,8 +312,13 @@ struct RepeatableCameraView: View {
                 .foregroundStyle(.white)
                 .shadow(radius: 12)
 
-                hudTogglePanel
-                    .position(x: proxy.size.width - 32, y: proxy.size.height / 2)
+                VStack {
+                    Spacer(minLength: 0)
+                    hudTogglePanel
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                .padding(.leading, 12)
             }
             .onAppear {
                 updateAlignmentOrientation(for: proxy.size)
@@ -303,74 +331,271 @@ struct RepeatableCameraView: View {
     }
 
     private var hudTogglePanel: some View {
-        VStack(spacing: 10) {
-            hudToggleButton(
-                systemImage: "location.north.line",
-                isOn: isPositionHUDVisible,
-                accessibilityLabel: "Alternar GPS e direcao"
-            ) {
-                isPositionHUDVisible.toggle()
-            }
+        HStack(spacing: 8) {
+            VStack(spacing: 10) {
+                categoryButton(
+                    category: .trace,
+                    systemImage: "scribble",
+                    accessibilityLabel: "Abrir controles de traco"
+                )
 
-            hudToggleButton(
-                systemImage: "arrow.up.left.and.arrow.down.right",
-                isOn: isScaleHUDVisible,
-                accessibilityLabel: "Alternar escala visual"
-            ) {
-                isScaleHUDVisible.toggle()
-            }
+                categoryButton(
+                    category: .guides,
+                    systemImage: "viewfinder",
+                    accessibilityLabel: "Abrir controles de guias"
+                )
 
-            hudToggleButton(
-                systemImage: "point.3.connected.trianglepath.dotted",
-                isOn: isVisualMatchGuideVisible,
-                accessibilityLabel: "Alternar pontos de similaridade"
-            ) {
-                isVisualMatchGuideVisible.toggle()
-            }
+                categoryButton(
+                    category: .blink,
+                    systemImage: "eye",
+                    accessibilityLabel: "Abrir controles de piscar referencia"
+                )
 
-            hudToggleButton(
-                systemImage: "gyroscope",
-                isOn: isMotionHUDVisible,
-                accessibilityLabel: "Alternar orientacao"
-            ) {
-                isMotionHUDVisible.toggle()
-            }
+                categoryButton(
+                    category: .sensors,
+                    systemImage: "location.north.line",
+                    accessibilityLabel: "Abrir controles de sensores"
+                )
 
-            hudToggleButton(
-                systemImage: "square.grid.3x3",
-                isOn: isGridVisible,
-                accessibilityLabel: "Alternar grade de enquadramento"
-            ) {
-                isGridVisible.toggle()
+                categoryButton(
+                    category: .info,
+                    systemImage: "info.circle",
+                    accessibilityLabel: "Abrir controles de informacoes"
+                )
             }
+            .padding(6)
+            .background(.black.opacity(0.24), in: Capsule())
 
-            hudToggleButton(
-                systemImage: "info.circle",
-                isOn: isTimelapseInfoVisible,
-                accessibilityLabel: "Alternar informacoes do timelapse"
-            ) {
-                isTimelapseInfoVisible.toggle()
+            if let activeHUDCategory {
+                hudCategoryOptions(for: activeHUDCategory)
+                    .transition(.move(edge: .leading).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.18), value: activeHUDCategory)
+        .animation(.easeInOut(duration: 0.18), value: alignmentOverlayStyle)
+    }
+
+    private func hudCategoryOptions(for category: AlignmentHUDCategory) -> some View {
+        HStack(spacing: 8) {
+            switch category {
+            case .trace:
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        hudToggleButton(
+                            systemImage: "scribble.variable",
+                            isOn: alignmentOverlayStyle.isEdgeEnabled,
+                            accessibilityLabel: "Alternar traco da referencia",
+                            tint: edgeOverlayTint.swiftUIColor
+                        ) {
+                            alignmentOverlayStyle = alignmentOverlayStyle.isEdgeEnabled ? .normal : .referenceEdges
+                            refreshReferenceOverlay()
+                        }
+
+                        ForEach(EdgeOverlayTint.allCases, id: \.self) { tint in
+                            edgeColorButton(tint)
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(EdgeOverlayStroke.allCases, id: \.self) { stroke in
+                            edgeStrokeButton(stroke)
+                        }
+                    }
+                }
+
+            case .guides:
+                hudToggleButton(
+                    systemImage: "square.grid.3x3",
+                    isOn: isGridVisible,
+                    accessibilityLabel: "Alternar grade de enquadramento"
+                ) {
+                    isGridVisible.toggle()
+                }
+
+                hudToggleButton(
+                    systemImage: "point.3.connected.trianglepath.dotted",
+                    isOn: isVisualMatchGuideVisible,
+                    accessibilityLabel: "Alternar pontos de similaridade"
+                ) {
+                    isVisualMatchGuideVisible.toggle()
+                }
+
+                hudToggleButton(
+                    systemImage: "arrow.up.left.and.arrow.down.right",
+                    isOn: isScaleHUDVisible,
+                    accessibilityLabel: "Alternar escala visual"
+                ) {
+                    isScaleHUDVisible.toggle()
+                }
+
+            case .blink:
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        hudToggleButton(
+                            systemImage: isReferenceBlinking ? "eye" : "eye.slash",
+                            isOn: isReferenceBlinking,
+                            accessibilityLabel: "Alternar piscar referencia"
+                        ) {
+                            setReferenceBlinking(!isReferenceBlinking)
+                        }
+
+                        ForEach(ReferenceBlinkInterval.allCases, id: \.self) { interval in
+                            textOptionButton(
+                                label: interval.label,
+                                isSelected: referenceBlinkInterval == interval,
+                                accessibilityLabel: "Usar intervalo de \(interval.label)"
+                            ) {
+                                referenceBlinkInterval = interval
+                                restartReferenceBlinkingIfNeeded()
+                            }
+                        }
+                    }
+
+                    HStack(spacing: 8) {
+                        ForEach(ReferenceBlinkOpacity.allCases, id: \.self) { opacity in
+                            textOptionButton(
+                                label: opacity.label,
+                                isSelected: referenceBlinkOpacity == opacity,
+                                accessibilityLabel: "Usar opacidade de \(opacity.label)"
+                            ) {
+                                referenceBlinkOpacity = opacity
+                                refreshReferenceOverlay()
+                            }
+                        }
+                    }
+                }
+
+            case .sensors:
+                hudToggleButton(
+                    systemImage: "location.north.line",
+                    isOn: isPositionHUDVisible,
+                    accessibilityLabel: "Alternar GPS e direcao"
+                ) {
+                    isPositionHUDVisible.toggle()
+                }
+
+                hudToggleButton(
+                    systemImage: "gyroscope",
+                    isOn: isMotionHUDVisible,
+                    accessibilityLabel: "Alternar orientacao"
+                ) {
+                    isMotionHUDVisible.toggle()
+                }
+
+            case .info:
+                hudToggleButton(
+                    systemImage: "info.circle",
+                    isOn: isTimelapseInfoVisible,
+                    accessibilityLabel: "Alternar informacoes do timelapse"
+                ) {
+                    isTimelapseInfoVisible.toggle()
+                }
             }
         }
         .padding(6)
         .background(.black.opacity(0.24), in: Capsule())
     }
 
+    private func categoryButton(
+        category: AlignmentHUDCategory,
+        systemImage: String,
+        accessibilityLabel: String
+    ) -> some View {
+        hudToggleButton(
+            systemImage: systemImage,
+            isOn: activeHUDCategory == category,
+            accessibilityLabel: accessibilityLabel
+        ) {
+            activeHUDCategory = activeHUDCategory == category ? nil : category
+        }
+    }
+
+    private func edgeColorButton(_ tint: EdgeOverlayTint) -> some View {
+        Button {
+            edgeOverlayTint = tint
+            if let referenceImage {
+                renderEdgeReferenceImage(from: referenceImage)
+            }
+        } label: {
+            Circle()
+                .fill(tint.swiftUIColor)
+                .frame(width: 28, height: 28)
+                .overlay {
+                    Circle()
+                        .stroke(edgeOverlayTint == tint ? .white.opacity(0.95) : .white.opacity(0.18), lineWidth: edgeOverlayTint == tint ? 3 : 1)
+                }
+                .frame(width: 40, height: 40)
+                .background(edgeOverlayTint == tint ? tint.swiftUIColor.opacity(0.2) : .black.opacity(0.22), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Usar traco \(tint.accessibilityName)")
+    }
+
+    private func edgeStrokeButton(_ stroke: EdgeOverlayStroke) -> some View {
+        let isSelected = edgeOverlayStroke == stroke
+
+        return Button {
+            edgeOverlayStroke = stroke
+            if let referenceImage {
+                renderEdgeReferenceImage(from: referenceImage)
+            }
+        } label: {
+            VStack(spacing: 4) {
+                Capsule()
+                    .fill(edgeOverlayTint.swiftUIColor)
+                    .frame(width: 22, height: stroke.previewLineHeight)
+                Capsule()
+                    .fill(edgeOverlayTint.swiftUIColor.opacity(stroke == .fine ? 0 : 0.58))
+                    .frame(width: 18, height: max(1, stroke.previewLineHeight - 1))
+            }
+            .frame(width: 40, height: 40)
+            .background(isSelected ? edgeOverlayTint.swiftUIColor.opacity(0.2) : .black.opacity(0.22), in: Circle())
+            .overlay {
+                Circle()
+                    .stroke(isSelected ? .white.opacity(0.95) : .white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Usar linhas \(stroke.accessibilityName)")
+    }
+
+    private func textOptionButton(
+        label: String,
+        isSelected: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(isSelected ? .white : .white.opacity(0.62))
+                .frame(width: 40, height: 40)
+                .background(isSelected ? .white.opacity(0.2) : .black.opacity(0.22), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(isSelected ? .white.opacity(0.34) : .white.opacity(0.1), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+    }
+
     private func hudToggleButton(
         systemImage: String,
         isOn: Bool,
         accessibilityLabel: String,
+        tint: Color? = nil,
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isOn ? .white : .white.opacity(0.42))
+                .foregroundStyle(isOn ? (tint ?? .white) : .white.opacity(0.42))
                 .frame(width: 40, height: 40)
-                .background(isOn ? .white.opacity(0.2) : .black.opacity(0.22), in: Circle())
+                .background(isOn ? (tint ?? .white).opacity(0.2) : .black.opacity(0.22), in: Circle())
                 .overlay {
                     Circle()
-                        .stroke(isOn ? .white.opacity(0.28) : .white.opacity(0.1), lineWidth: 1)
+                        .stroke(isOn ? (tint ?? .white).opacity(0.34) : .white.opacity(0.1), lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)
@@ -681,6 +906,10 @@ struct RepeatableCameraView: View {
         guard let referenceURL = activeReferenceURL,
               let image = UIImage(contentsOfFile: referenceURL.path) else {
             referenceImage = nil
+            edgeReferenceImage = nil
+            edgeReferenceRenderID = UUID()
+            isReferenceBlinking = false
+            stopReferenceBlinking()
             referenceMotion = nil
             referenceGeoPose = nil
             referenceOrientation = nil
@@ -692,12 +921,88 @@ struct RepeatableCameraView: View {
         }
 
         referenceImage = image
+        renderEdgeReferenceImage(from: image)
         referenceMotion = store.referenceMotion(forFrameURL: referenceURL)
         referenceGeoPose = store.referenceGeoPose(forFrameURL: referenceURL)
         referenceOrientation = store.referenceOrientation(forFrameURL: referenceURL) ?? CaptureDisplayOrientation(image: image)
         referenceName = referenceURL.lastPathComponent.replacingOccurrences(of: "frame_", with: "")
         Task {
             await camera.setVisualReference(referenceURL)
+        }
+    }
+
+    private func overlayImage(for referenceImage: UIImage) -> UIImage {
+        guard alignmentOverlayStyle.isEdgeEnabled else {
+            return referenceImage
+        }
+
+        return edgeReferenceImage ?? referenceImage
+    }
+
+    private var referenceOverlayOpacity: Double {
+        if isReferenceBlinking {
+            return isReferenceBlinkVisible ? referenceBlinkOpacity.opacity : 0
+        }
+
+        return alignmentOverlayStyle.isEdgeEnabled ? 1 : overlayOpacity
+    }
+
+    private func setReferenceBlinking(_ isEnabled: Bool) {
+        isReferenceBlinking = isEnabled
+        if isEnabled {
+            startReferenceBlinking()
+        } else {
+            stopReferenceBlinking()
+        }
+        refreshReferenceOverlay()
+    }
+
+    private func restartReferenceBlinkingIfNeeded() {
+        guard isReferenceBlinking else { return }
+        startReferenceBlinking()
+    }
+
+    private func startReferenceBlinking() {
+        referenceBlinkTask?.cancel()
+        isReferenceBlinkVisible = true
+        let interval = referenceBlinkInterval.seconds
+
+        referenceBlinkTask = Task {
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+                guard !Task.isCancelled else { break }
+                await MainActor.run {
+                    isReferenceBlinkVisible.toggle()
+                    refreshReferenceOverlay()
+                }
+            }
+        }
+    }
+
+    private func stopReferenceBlinking() {
+        referenceBlinkTask?.cancel()
+        referenceBlinkTask = nil
+        isReferenceBlinkVisible = true
+    }
+
+    private func renderEdgeReferenceImage(from image: UIImage) {
+        edgeReferenceImage = nil
+        let renderID = UUID()
+        let tint = edgeOverlayTint
+        let stroke = edgeOverlayStroke
+        edgeReferenceRenderID = renderID
+
+        Task.detached(priority: .userInitiated) {
+            let rendered = EdgeOverlayRenderer.render(
+                image: image,
+                options: EdgeOverlayOptions(tint: tint, stroke: stroke, inverted: false)
+            )
+
+            await MainActor.run {
+                guard edgeReferenceRenderID == renderID else { return }
+                edgeReferenceImage = rendered
+                refreshReferenceOverlay()
+            }
         }
     }
 
@@ -732,6 +1037,118 @@ struct RepeatableCameraView: View {
             onDeletedOpenedTimelapse()
         } catch {
             deleteErrorMessage = error.localizedDescription
+        }
+    }
+}
+
+private extension EdgeOverlayStroke {
+    var previewLineHeight: CGFloat {
+        switch self {
+        case .fine:
+            return 2
+        case .medium:
+            return 4
+        case .thick:
+            return 6
+        }
+    }
+
+    var accessibilityName: String {
+        switch self {
+        case .fine:
+            return "finas"
+        case .medium:
+            return "medias"
+        case .thick:
+            return "grossas"
+        }
+    }
+}
+
+private extension EdgeOverlayTint {
+    var swiftUIColor: Color {
+        switch self {
+        case .red:
+            return .red
+        case .green:
+            return .green
+        case .blue:
+            return .blue
+        }
+    }
+
+    var accessibilityName: String {
+        switch self {
+        case .red:
+            return "vermelho"
+        case .green:
+            return "verde"
+        case .blue:
+            return "azul"
+        }
+    }
+}
+
+private enum AlignmentHUDCategory {
+    case trace
+    case guides
+    case blink
+    case sensors
+    case info
+}
+
+private enum ReferenceBlinkInterval: CaseIterable {
+    case two
+    case five
+    case ten
+
+    var seconds: Double {
+        switch self {
+        case .two:
+            return 2
+        case .five:
+            return 5
+        case .ten:
+            return 10
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .two:
+            return "2s"
+        case .five:
+            return "5s"
+        case .ten:
+            return "10s"
+        }
+    }
+}
+
+private enum ReferenceBlinkOpacity: CaseIterable {
+    case quarter
+    case half
+    case full
+
+    var opacity: Double {
+        switch self {
+        case .quarter:
+            return 0.25
+        case .half:
+            return 0.5
+        case .full:
+            return 1
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .quarter:
+            return "25"
+        case .half:
+            return "50"
+        case .full:
+            return "100"
         }
     }
 }
