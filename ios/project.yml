@@ -13,12 +13,10 @@ targets:
     type: application
     platform: iOS
     sources:
-      - Camerae
+      - path: Camerae
+        excludes:
+          - DeepSNRDenoiser.swift
       - path: Camerae/GoogleService-Info.plist
-        buildPhase: resources
-      - path: LocalModels/DeepSNR
-        type: folder
-        optional: true
         buildPhase: resources
     configFiles:
       Debug: Config/Debug.xcconfig

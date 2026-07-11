@@ -26,7 +26,7 @@ xcodebuild \
   build
 ```
 
-The iOS target uses CocoaPods for Firebase, OpenCV, and ONNX Runtime, so CI and local command-line builds must build `Camerae.xcworkspace`, not `Camerae.xcodeproj`.
+The iOS target uses CocoaPods for Firebase and OpenCV, so CI and local command-line builds must build `Camerae.xcworkspace`, not `Camerae.xcodeproj`. ONNX Runtime/DeepSNR is temporarily disabled while CI/CD signing and distribution are stabilized.
 
 ## Release Flow
 

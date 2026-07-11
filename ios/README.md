@@ -25,6 +25,7 @@ MVP iOS para timelapse de baixa luz e captura repetivel.
 - `manifest.json` por sessao.
 - Exportacao ZIP da sessao.
 - Firebase configurado para `com.espindola.camerae` com suporte a App Distribution via script local.
+- DeepSNR/ONNX esta desabilitado temporariamente no iOS para estabilizar CI/CD.
 - Alinhamento `Repeatable` com modo de contorno da referencia, cores RGB, espessuras fina/media/grossa e blink da referencia.
 - O modo blink alterna a referencia em intervalos de 2s, 5s ou 10s, com opacidade de 25%, 50% ou 100%.
 - A captura `Repeatable` abre com `Video` como primeira opcao.
@@ -77,7 +78,7 @@ No GitHub Actions:
 
 ## Modelos locais
 
-Modelos grandes ficam fora do Git. Para ativar DeepSNR no iOS, coloque os arquivos locais aqui:
+Modelos grandes ficam fora do Git. DeepSNR esta desabilitado temporariamente no target iOS. Quando reativado, coloque os arquivos locais aqui:
 
 ```text
 ios/LocalModels/DeepSNR/DeepSNR_weights_v2.onnx
@@ -85,10 +86,10 @@ ios/LocalModels/DeepSNR/LICENSE.txt
 ios/LocalModels/DeepSNR/README.txt
 ```
 
-Essa pasta e ignorada pelo Git, mas e adicionada ao bundle local pelo XcodeGen quando existir.
+Essa pasta e ignorada pelo Git. Ela nao e adicionada ao bundle enquanto DeepSNR estiver desabilitado.
 
 ## Processamento nativo
 
-- ONNX Runtime entra via CocoaPods para o DeepSNR local.
+- ONNX Runtime fica fora do target iOS enquanto DeepSNR estiver desabilitado.
 - OpenCV entra via CocoaPods (`OpenCV2`) e fica disponivel para pontes Objective-C++.
 - O Laboratorio Astro mostra a versao carregada do OpenCV na secao de tratamento.

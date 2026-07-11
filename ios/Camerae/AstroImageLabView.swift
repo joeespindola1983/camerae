@@ -256,10 +256,6 @@ struct AstroImageLabView: View {
             }
             .disabled(!settings.appliesDenoise)
 
-            if settings.appliesDenoise && settings.denoiseBackend == .deepSNR && !DeepSNRDenoiser.isAvailable {
-                LabeledContent("DeepSNR", value: "Modelo ausente")
-            }
-
             LabeledContent("OpenCV", value: OpenCVBridge.versionString())
 
             VStack(alignment: .leading, spacing: 6) {

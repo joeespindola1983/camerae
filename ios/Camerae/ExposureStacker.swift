@@ -80,7 +80,6 @@ enum AstroProcessingProfile: String, CaseIterable, Identifiable {
 
 enum AstroDenoiseBackend: String, CaseIterable, Identifiable {
     case coreImage
-    case deepSNR
 
     var id: String { rawValue }
 
@@ -88,8 +87,6 @@ enum AstroDenoiseBackend: String, CaseIterable, Identifiable {
         switch self {
         case .coreImage:
             return "Core Image"
-        case .deepSNR:
-            return "DeepSNR"
         }
     }
 }
@@ -302,9 +299,6 @@ final class ExposureStacker {
         }
 
         accumulator = postProcessedStack(accumulator, settings: settings).cropped(to: extent)
-        if settings.appliesDenoise && settings.denoiseBackend == .deepSNR {
-            accumulator = try DeepSNRDenoiser().denoisedImage(accumulator, context: context).cropped(to: extent)
-        }
 
         let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
         guard let data = context.jpegRepresentation(
@@ -363,24 +357,6 @@ final class ExposureStacker {
             unsharpAmount: settings.unsharpAmount,
             unsharpRadius: settings.unsharpRadius
         )
-
-        if settings.appliesDenoise && settings.denoiseBackend == .deepSNR {
-            guard let image = CIImage(contentsOf: outputURL)?.normalizedForStacking() else {
-                throw CameraError.photoEncodingFailed
-            }
-
-            let denoised = try DeepSNRDenoiser().denoisedImage(image, context: context)
-            let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
-            guard let data = context.jpegRepresentation(
-                of: denoised,
-                colorSpace: colorSpace,
-                options: [CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String): 0.95]
-            ) else {
-                throw CameraError.photoEncodingFailed
-            }
-            context.clearCaches()
-            return data
-        }
 
         return try Data(contentsOf: outputURL, options: [.mappedIfSafe])
     }

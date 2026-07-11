@@ -92,17 +92,11 @@ PODS:
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
-  - onnxruntime-c (1.27.0)
-  - onnxruntime-objc (1.27.0):
-    - onnxruntime-objc/Core (= 1.27.0)
-  - onnxruntime-objc/Core (1.27.0):
-    - onnxruntime-c (= 1.27.0)
   - OpenCV2 (4.3.0)
   - PromisesObjC (2.4.0)
 
 DEPENDENCIES:
   - Firebase/Core
-  - onnxruntime-objc
   - OpenCV2
 
 SPEC REPOS:
@@ -116,8 +110,6 @@ SPEC REPOS:
     - GoogleAppMeasurement
     - GoogleUtilities
     - nanopb
-    - onnxruntime-c
-    - onnxruntime-objc
     - OpenCV2
     - PromisesObjC
 
@@ -131,11 +123,9 @@ SPEC CHECKSUMS:
   GoogleAppMeasurement: 3b4687de50ab25ee2d4d541849f10ca8df862a12
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
-  onnxruntime-c: 412ab51682e622e3d77ddc9176aa92517d171820
-  onnxruntime-objc: f88cca350e7603f81c31b5823f3ddfaa67da9f84
   OpenCV2: ffe82e5cb5d16dc3fc01a5f4127b9a5b3cfc7d1b
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
 
-PODFILE CHECKSUM: 47b4ef1889aab92b1729db3bcb0de98eedb7ab17
+PODFILE CHECKSUM: 3ac1f86c48ba6d9b664a0b661e4a2a68f1daa7f7
 
 COCOAPODS: 1.16.2
