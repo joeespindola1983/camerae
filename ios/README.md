@@ -69,6 +69,12 @@ Distribuicao Firebase para testers:
 scripts/distribute-firebase.sh --groups testers --release-notes "Build de teste"
 ```
 
+No GitHub Actions:
+
+- pushes em `qa` arquivam e distribuem para o grupo Firebase `testers`;
+- pushes em `release/**` arquivam e enviam para App Store Connect;
+- os secrets ficam no GitHub Actions, nao no repositorio.
+
 ## Modelos locais
 
 Modelos grandes ficam fora do Git. Para ativar DeepSNR no iOS, coloque os arquivos locais aqui:

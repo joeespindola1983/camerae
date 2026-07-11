@@ -24,6 +24,10 @@ Environment overrides:
   FIREBASE_TESTERS          Same as --testers.
   RELEASE_NOTES             Same as --release-notes.
   RELEASE_NOTES_FILE        Same as --release-notes-file.
+  APPLE_TEAM_ID             Apple Developer Team ID for automatic signing.
+  APP_STORE_CONNECT_KEY_PATH App Store Connect API private key path for CI signing.
+  APP_STORE_CONNECT_KEY_ID   App Store Connect API key ID for CI signing.
+  APP_STORE_CONNECT_ISSUER_ID App Store Connect API issuer ID for CI signing.
   ALLOW_PROVISIONING_UPDATES Set to 0 to disable Xcode-managed profile updates.
   EXPORT_METHOD             Same as --export-method.
   CONFIGURATION             Same as --configuration.
@@ -49,6 +53,10 @@ FIREBASE_GROUPS="${FIREBASE_GROUPS:-}"
 FIREBASE_TESTERS="${FIREBASE_TESTERS:-}"
 RELEASE_NOTES="${RELEASE_NOTES:-}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-}"
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
+APP_STORE_CONNECT_KEY_PATH="${APP_STORE_CONNECT_KEY_PATH:-}"
+APP_STORE_CONNECT_KEY_ID="${APP_STORE_CONNECT_KEY_ID:-}"
+APP_STORE_CONNECT_ISSUER_ID="${APP_STORE_CONNECT_ISSUER_ID:-}"
 SKIP_ARCHIVE=0
 
 while [[ $# -gt 0 ]]; do
@@ -134,6 +142,10 @@ cat > "$EXPORT_OPTIONS" <<PLIST
 </plist>
 PLIST
 
+if [[ -n "$APPLE_TEAM_ID" ]]; then
+  /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" "$EXPORT_OPTIONS"
+fi
+
 if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
   rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR"
   mkdir -p "$EXPORT_DIR"
@@ -143,13 +155,32 @@ if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
     provisioning_args=(-allowProvisioningUpdates)
   fi
 
+  if [[ -n "$APP_STORE_CONNECT_KEY_PATH" || -n "$APP_STORE_CONNECT_KEY_ID" || -n "$APP_STORE_CONNECT_ISSUER_ID" ]]; then
+    if [[ -z "$APP_STORE_CONNECT_KEY_PATH" || -z "$APP_STORE_CONNECT_KEY_ID" || -z "$APP_STORE_CONNECT_ISSUER_ID" ]]; then
+      echo "Set APP_STORE_CONNECT_KEY_PATH, APP_STORE_CONNECT_KEY_ID, and APP_STORE_CONNECT_ISSUER_ID together." >&2
+      exit 1
+    fi
+
+    provisioning_args+=(
+      -authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH"
+      -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID"
+      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+    )
+  fi
+
+  build_settings=()
+  if [[ -n "$APPLE_TEAM_ID" ]]; then
+    build_settings+=(DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic)
+  fi
+
   xcodebuild archive \
     -workspace "$WORKSPACE" \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -destination "generic/platform=iOS" \
     -archivePath "$ARCHIVE_PATH" \
-    "${provisioning_args[@]}"
+    "${provisioning_args[@]}" \
+    "${build_settings[@]}"
 
   xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \

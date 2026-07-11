@@ -29,14 +29,22 @@ GitHub Actions runs iOS and Android builds on:
 
 The iOS workflow runs `pod install` and builds `Camerae.xcworkspace`. Building `Camerae.xcodeproj` directly will miss CocoaPods dependencies and fail in CI.
 
-## App Store Connect Plan
+## Distribution Automation
 
-Release branches are the right place for future App Store Connect automation. The upload workflow should be added only after these secrets are configured:
+Additional iOS distribution workflows are branch-based:
 
-- App Store Connect API key id.
-- App Store Connect issuer id.
-- App Store Connect private key.
-- Distribution certificate.
-- Provisioning profile for `com.espindola.camerae`.
+- `qa`: archives the app and distributes the IPA to the Firebase App Distribution `testers` group.
+- `release/**`: archives the app and uploads it to App Store Connect.
 
-Until then, release branches validate archive/build readiness, and Firebase tester distribution remains available through `ios/scripts/distribute-firebase.sh`.
+Required GitHub Actions secrets:
+
+- `APPLE_TEAM_ID`
+- `APP_STORE_CONNECT_KEY_ID`
+- `APP_STORE_CONNECT_ISSUER_ID`
+- `APP_STORE_CONNECT_PRIVATE_KEY`
+- `FIREBASE_APP_ID`
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_GROUPS`
+- `FIREBASE_TOKEN`
+
+The workflows use Xcode automatic signing with the App Store Connect API key. If the first signed archive fails, confirm that the bundle id `com.espindola.camerae` exists in Apple Developer and that the API key has access to manage signing assets.
