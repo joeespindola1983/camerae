@@ -17,13 +17,27 @@ The iOS app is the reference implementation. Android should follow the same prod
 
 ```sh
 cd ios
+pod install
 xcodebuild \
-  -project Camerae.xcodeproj \
+  -workspace Camerae.xcworkspace \
   -scheme Camerae \
   -destination 'generic/platform=iOS' \
   CODE_SIGNING_ALLOWED=NO \
   build
 ```
+
+The iOS target uses CocoaPods for Firebase, OpenCV, and ONNX Runtime, so CI and local command-line builds must build `Camerae.xcworkspace`, not `Camerae.xcodeproj`.
+
+## Release Flow
+
+Camerae uses a lightweight GitFlow:
+
+- `main` receives completed development work.
+- `qa` receives stabilization builds for tester validation.
+- `release/*` receives release candidates and future App Store Connect automation.
+- Tags use `vMAJOR.MINOR.PATCH`, for example `v2.1.0`.
+
+See `docs/GITFLOW.md` for branch, CI, and release details.
 
 ## Processing Lab
 

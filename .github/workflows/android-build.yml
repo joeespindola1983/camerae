@@ -4,11 +4,16 @@ on:
   push:
     branches:
       - main
+      - qa
+      - "release/**"
     tags:
       - "v*"
   pull_request:
     branches:
       - main
+      - qa
+      - "release/**"
+  workflow_dispatch:
 
 jobs:
   build:

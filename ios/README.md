@@ -24,6 +24,10 @@ MVP iOS para timelapse de baixa luz e captura repetivel.
 - Frames originais salvos como JPEG sequencial: `frame_000001.jpg`, `frame_000002.jpg`, etc.
 - `manifest.json` por sessao.
 - Exportacao ZIP da sessao.
+- Firebase configurado para `com.espindola.camerae` com suporte a App Distribution via script local.
+- Alinhamento `Repeatable` com modo de contorno da referencia, cores RGB, espessuras fina/media/grossa e blink da referencia.
+- O modo blink alterna a referencia em intervalos de 2s, 5s ou 10s, com opacidade de 25%, 50% ou 100%.
+- A captura `Repeatable` abre com `Video` como primeira opcao.
 
 ## Observacoes
 
@@ -46,6 +50,23 @@ Rode em um iPhone fisico. Se voce regenerar o projeto, use:
 ```sh
 xcodegen generate
 pod install
+```
+
+Build de CI/local sem assinatura:
+
+```sh
+xcodebuild \
+  -workspace Camerae.xcworkspace \
+  -scheme Camerae \
+  -destination 'generic/platform=iOS' \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+Distribuicao Firebase para testers:
+
+```sh
+scripts/distribute-firebase.sh --groups testers --release-notes "Build de teste"
 ```
 
 ## Modelos locais

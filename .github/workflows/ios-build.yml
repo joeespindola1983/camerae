@@ -4,11 +4,16 @@ on:
   push:
     branches:
       - main
+      - qa
+      - "release/**"
     tags:
       - "v*"
   pull_request:
     branches:
       - main
+      - qa
+      - "release/**"
+  workflow_dispatch:
 
 jobs:
   build:
@@ -22,11 +27,15 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Install CocoaPods dependencies
+        working-directory: ios
+        run: pod install
+
       - name: Build
         working-directory: ios
         run: |
           xcodebuild \
-            -project Camerae.xcodeproj \
+            -workspace Camerae.xcworkspace \
             -scheme Camerae \
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
