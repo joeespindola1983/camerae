@@ -18,7 +18,7 @@ struct RepeatableCameraView: View {
     @State private var alignmentOverlayStyle = AlignmentOverlayStyle.normal
     @State private var edgeReferenceImage: UIImage?
     @State private var edgeOverlayTint = EdgeOverlayTint.green
-    @State private var edgeOverlayStroke = EdgeOverlayStroke.fine
+    @State private var edgeOverlayStroke = EdgeOverlayStroke()
     @State private var isReferenceBlinking = false
     @State private var isReferenceBlinkVisible = true
     @State private var referenceBlinkInterval = ReferenceBlinkInterval.five
@@ -396,11 +396,7 @@ struct RepeatableCameraView: View {
                         }
                     }
 
-                    HStack(spacing: 8) {
-                        ForEach(EdgeOverlayStroke.allCases, id: \.self) { stroke in
-                            edgeStrokeButton(stroke)
-                        }
-                    }
+                    edgeStrokeSlider
                 }
 
             case .guides:
@@ -531,32 +527,42 @@ struct RepeatableCameraView: View {
         .accessibilityLabel("Usar traco \(tint.accessibilityName)")
     }
 
-    private func edgeStrokeButton(_ stroke: EdgeOverlayStroke) -> some View {
-        let isSelected = edgeOverlayStroke == stroke
+    private var edgeStrokeSlider: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "line.diagonal")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(edgeOverlayTint.swiftUIColor)
+                .frame(width: 22)
 
-        return Button {
-            edgeOverlayStroke = stroke
-            if let referenceImage {
-                renderEdgeReferenceImage(from: referenceImage)
-            }
-        } label: {
-            VStack(spacing: 4) {
-                Capsule()
-                    .fill(edgeOverlayTint.swiftUIColor)
-                    .frame(width: 22, height: stroke.previewLineHeight)
-                Capsule()
-                    .fill(edgeOverlayTint.swiftUIColor.opacity(stroke == .fine ? 0 : 0.58))
-                    .frame(width: 18, height: max(1, stroke.previewLineHeight - 1))
-            }
-            .frame(width: 40, height: 40)
-            .background(isSelected ? edgeOverlayTint.swiftUIColor.opacity(0.2) : .black.opacity(0.22), in: Circle())
-            .overlay {
-                Circle()
-                    .stroke(isSelected ? .white.opacity(0.95) : .white.opacity(0.1), lineWidth: isSelected ? 2 : 1)
-            }
+            Slider(
+                value: Binding(
+                    get: { edgeOverlayStroke.detail },
+                    set: { newValue in
+                        edgeOverlayStroke.detail = newValue
+                        if let referenceImage {
+                            renderEdgeReferenceImage(from: referenceImage)
+                        }
+                    }
+                ),
+                in: 0...1,
+                step: 0.05
+            )
+            .tint(edgeOverlayTint.swiftUIColor)
+            .frame(width: 138)
+
+            Text("\(edgeOverlayStroke.displayValue)")
+                .font(.system(.caption, design: .monospaced, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.88))
+                .frame(width: 28, alignment: .trailing)
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Usar linhas \(stroke.accessibilityName)")
+        .padding(.horizontal, 10)
+        .frame(height: 40)
+        .background(.black.opacity(0.22), in: Capsule())
+        .overlay {
+            Capsule()
+                .stroke(.white.opacity(0.1), lineWidth: 1)
+        }
+        .accessibilityLabel("Ajustar detalhe das linhas")
     }
 
     private func textOptionButton(
@@ -1037,30 +1043,6 @@ struct RepeatableCameraView: View {
             onDeletedOpenedTimelapse()
         } catch {
             deleteErrorMessage = error.localizedDescription
-        }
-    }
-}
-
-private extension EdgeOverlayStroke {
-    var previewLineHeight: CGFloat {
-        switch self {
-        case .fine:
-            return 2
-        case .medium:
-            return 4
-        case .thick:
-            return 6
-        }
-    }
-
-    var accessibilityName: String {
-        switch self {
-        case .fine:
-            return "finas"
-        case .medium:
-            return "medias"
-        case .thick:
-            return "grossas"
         }
     }
 }

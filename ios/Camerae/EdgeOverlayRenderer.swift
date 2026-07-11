@@ -39,48 +39,33 @@ enum EdgeOverlayTint: CaseIterable {
     }
 }
 
-enum EdgeOverlayStroke: CaseIterable {
-    case fine
-    case medium
-    case thick
+struct EdgeOverlayStroke: Equatable {
+    var detail: Double = 0.12
 
     var edgeIntensity: Float {
-        switch self {
-        case .fine:
-            return 2.3
-        case .medium:
-            return 3.0
-        case .thick:
-            return 3.8
-        }
+        Float(1.45 + clampedDetail * 1.8)
     }
 
     var threshold: Float {
-        switch self {
-        case .fine:
-            return 0.24
-        case .medium:
-            return 0.2
-        case .thick:
-            return 0.16
-        }
+        Float(0.36 - clampedDetail * 0.18)
     }
 
     var dilationRadius: Float {
-        switch self {
-        case .fine:
-            return 0
-        case .medium:
-            return 0.7
-        case .thick:
-            return 1.4
-        }
+        Float(max(0, (clampedDetail - 0.62) * 2.2))
+    }
+
+    var displayValue: Int {
+        Int((clampedDetail * 100).rounded())
+    }
+
+    private var clampedDetail: Double {
+        min(max(detail, 0), 1)
     }
 }
 
 struct EdgeOverlayOptions {
     var tint: EdgeOverlayTint = .green
-    var stroke: EdgeOverlayStroke = .fine
+    var stroke: EdgeOverlayStroke = EdgeOverlayStroke()
     var inverted: Bool = false
     var maxPixelDimension: CGFloat = 1800
     var backgroundOpacity: CGFloat = 0.1
