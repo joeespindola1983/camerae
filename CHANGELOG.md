@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.2.1-qa.1
+
+- Fixed iOS archives to use the configured marketing version and build number in Firebase App Distribution.
+
 ## v2.2.0-qa.1
 
 - Added a live elapsed-time display while recording Repeatable video clips.
