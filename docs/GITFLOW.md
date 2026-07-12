@@ -20,7 +20,7 @@ Camerae uses a lightweight GitFlow aimed at keeping tester builds and release ca
 
 ## CI
 
-GitHub Actions runs iOS and Android builds on:
+GitHub Actions runs iOS builds on:
 
 - pushes to `main`, `qa`, and `release/**`;
 - pull requests targeting `main`, `qa`, and `release/**`;
@@ -28,6 +28,8 @@ GitHub Actions runs iOS and Android builds on:
 - manual `workflow_dispatch`.
 
 The iOS workflow runs `pod install` and builds `Camerae.xcworkspace`. Building `Camerae.xcodeproj` directly will miss CocoaPods dependencies and fail in CI.
+
+Android automation is intentionally paused while Camerae is developed and validated on iOS.
 
 ## Distribution Automation
 
