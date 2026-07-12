@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.2.0-qa.1
+
+- Added a live elapsed-time display while recording Repeatable video clips.
+- Refined Repeatable capture rows with readable titles, saved video duration, and a vertical-friendly layout.
+- Added the ability to import a photo or video from the iOS Photo Library as the first Repeatable reference; videos provide a reference frame automatically.
+
 ## v2.1.0
 
 - Added Firebase setup for `com.espindola.camerae` and a local Firebase App Distribution script.
