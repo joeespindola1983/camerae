@@ -1,5 +1,6 @@
 import CoreGraphics
 import Foundation
+import UIKit
 
 struct TimelapseSession: Identifiable, Equatable, Hashable {
     let id: UUID
@@ -105,6 +106,29 @@ final class TimelapseSessionStore {
         let fileURL = session.directoryURL.appendingPathComponent(fileName)
         try data.write(to: fileURL, options: [.atomic])
         return fileURL
+    }
+
+    func importReferenceImage(_ image: UIImage) throws -> TimelapseSession {
+        let normalizedImage = image.normalizedForStorage()
+        guard let data = normalizedImage.jpegData(compressionQuality: 0.95) else {
+            throw TimelapseStoreError.referenceImageEncodingFailed
+        }
+
+        let session = try createSession(captureKind: .photo)
+        do {
+            let orientation: CaptureDisplayOrientation = normalizedImage.size.width > normalizedImage.size.height
+                ? .landscapeRight
+                : .portrait
+            let orientedSession = try updateReferenceOrientation(
+                orientation,
+                for: session
+            )
+            _ = try saveFrame(data, in: orientedSession, index: 1)
+            return orientedSession
+        } catch {
+            try? deleteSession(session)
+            throw error
+        }
     }
 
     func saveAstroStackFrame(_ data: Data, in session: TimelapseSession, index: Int) throws -> URL {
@@ -946,6 +970,7 @@ private enum TimelapseStoreError: LocalizedError {
     case unsafeSessionPath
     case noOriginalFrames
     case notEnoughStorageForExport
+    case referenceImageEncodingFailed
 
     var errorDescription: String? {
         switch self {
@@ -957,6 +982,8 @@ private enum TimelapseStoreError: LocalizedError {
             return "nenhum frame original encontrado para exportar"
         case .notEnoughStorageForExport:
             return "espaco insuficiente para exportar os frames originais"
+        case .referenceImageEncodingFailed:
+            return "Nao foi possivel preparar a imagem de referencia."
         }
     }
 }
@@ -971,4 +998,15 @@ private struct SessionManifest: Decodable {
     let referenceOrientation: String?
     let name: String
     let createdAt: String
+}
+
+private extension UIImage {
+    func normalizedForStorage() -> UIImage {
+        guard imageOrientation != .up else { return self }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = scale
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
 }

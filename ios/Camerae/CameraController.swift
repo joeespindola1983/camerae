@@ -13,6 +13,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var isTimelapseRunning = false
     @Published private(set) var isSinglePhotoCaptureRunning = false
     @Published private(set) var isVideoRecording = false
+    @Published private(set) var videoRecordingStartedAt: Date?
     @Published private(set) var frameCount = 0
     @Published private(set) var astroCompositeFrameCount = 0
     @Published private(set) var baseExposureLabel = "-"
@@ -842,6 +843,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             lastExportURL = nil
             lastExportURLs = []
             isVideoRecording = true
+            videoRecordingStartedAt = Date()
             status = "Gravando video"
 
             let delegate = MovieRecordingDelegate { [weak self] result in
@@ -865,6 +867,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     private func finishVideoRecording(result: Result<URL, Error>) async {
         isVideoRecording = false
+        videoRecordingStartedAt = nil
 
         do {
             let outputURL = try result.get()

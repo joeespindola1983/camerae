@@ -618,6 +618,10 @@ struct RepeatableCameraView: View {
                     .foregroundStyle(.secondary)
             }
 
+            if let startedAt = camera.videoRecordingStartedAt {
+                recordingTimer(startedAt: startedAt)
+            }
+
             Spacer()
         }
     }
@@ -878,6 +882,25 @@ struct RepeatableCameraView: View {
         case .photo:
             return "Finalizar"
         }
+    }
+
+    @ViewBuilder
+    private func recordingTimer(startedAt: Date) -> some View {
+        TimelineView(.periodic(from: startedAt, by: 1)) { context in
+            let elapsed = max(0, Int(context.date.timeIntervalSince(startedAt)))
+            Label(Self.formattedRecordingDuration(elapsed), systemImage: "record.circle.fill")
+                .font(.system(.body, design: .monospaced, weight: .semibold))
+                .foregroundStyle(.red)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(.ultraThinMaterial, in: Capsule())
+                .accessibilityLabel("Tempo de gravacao")
+                .accessibilityValue(Self.formattedRecordingDuration(elapsed))
+        }
+    }
+
+    private static func formattedRecordingDuration(_ seconds: Int) -> String {
+        String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     private func performPrimaryCaptureAction() async {
