@@ -8,12 +8,22 @@ final class CameraeSmokeUITests: XCTestCase {
     func testHomeExposesIndependentModuleActions() {
         let app = XCUIApplication()
         app.launchArguments.append("-ui-testing")
+        XCUIDevice.shared.orientation = .portrait
         app.launch()
 
         XCTAssertTrue(app.images["Camerae"].waitForExistence(timeout: 5))
-        XCTAssertTrue(app.buttons["Criar projeto Repeatable"].exists)
-        XCTAssertTrue(app.buttons["Projetos Repeatable, 0"].exists || app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Projetos Repeatable'" )).firstMatch.exists)
-        XCTAssertTrue(app.buttons["Criar projeto Astrophotography"].exists)
-        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Projetos Astrophotography'" )).firstMatch.exists)
+        let repeatableCreate = app.buttons["Criar projeto Repeatable"]
+        let repeatableProjects = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Projetos Repeatable'" )).firstMatch
+        let astroCreate = app.buttons["Criar projeto Astrophotography"]
+        let astroProjects = app.buttons.matching(NSPredicate(format: "label BEGINSWITH 'Projetos Astrophotography'" )).firstMatch
+
+        XCTAssertTrue(repeatableCreate.exists)
+        XCTAssertTrue(repeatableProjects.exists)
+        XCTAssertTrue(astroCreate.exists)
+        XCTAssertTrue(astroProjects.exists)
+
+        XCTAssertEqual(repeatableCreate.frame.midY, astroCreate.frame.midY, accuracy: 2)
+        XCTAssertEqual(repeatableProjects.frame.midY, astroProjects.frame.midY, accuracy: 2)
+        XCTAssertLessThan(repeatableCreate.frame.midX, astroCreate.frame.midX)
     }
 }

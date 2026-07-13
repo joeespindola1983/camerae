@@ -99,15 +99,12 @@ private struct ModuleSelectionView: View {
 
     @ViewBuilder
     private func moduleCards(isLandscape: Bool) -> some View {
-        let layout = isLandscape
-            ? AnyLayout(HStackLayout(spacing: 28))
-            : AnyLayout(VStackLayout(spacing: 14))
-
-        layout {
+        HStack(alignment: .top, spacing: isLandscape ? 28 : 12) {
             HomeModuleCard(
                 module: .repeatable,
                 accent: Color(red: 1, green: 0.55, blue: 0.2),
                 projectCount: projectStore.projects(for: .repeatable).count,
+                isCompact: !isLandscape,
                 createAction: { startCreating(.repeatable) },
                 projectsAction: { path.append(CameraModule.repeatable) }
             )
@@ -116,11 +113,12 @@ private struct ModuleSelectionView: View {
                 module: .astrophotography,
                 accent: Color(red: 0.48, green: 0.52, blue: 1),
                 projectCount: projectStore.projects(for: .astrophotography).count,
+                isCompact: !isLandscape,
                 createAction: { startCreating(.astrophotography) },
                 projectsAction: { path.append(CameraModule.astrophotography) }
             )
         }
-        .frame(maxWidth: isLandscape ? 700 : 330)
+        .frame(maxWidth: isLandscape ? 700 : 380)
     }
 
     private func lastProjectCard(_ project: CameraProject, isLandscape: Bool) -> some View {
@@ -192,6 +190,7 @@ private struct HomeModuleCard: View {
     let module: CameraModule
     let accent: Color
     let projectCount: Int
+    let isCompact: Bool
     let createAction: () -> Void
     let projectsAction: () -> Void
 
@@ -200,6 +199,7 @@ private struct HomeModuleCard: View {
             Image(systemName: module.systemImage)
                 .font(.system(size: 36, weight: .light))
                 .foregroundStyle(accent)
+                .frame(height: 44)
 
             Text(module == .astrophotography ? "ASTRO" : "REPEATABLE")
                 .font(.system(size: 18, weight: .medium))
@@ -233,15 +233,9 @@ private struct HomeModuleCard: View {
             .contentShape(Rectangle())
             .accessibilityLabel("Projetos \(module.title), \(projectCount)")
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, isCompact ? 10 : 28)
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(.white.opacity(0.2), lineWidth: 1)
-        }
-        .shadow(color: accent.opacity(0.14), radius: 24, y: 10)
     }
 }
 
