@@ -6,9 +6,33 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "2.2.1"
-    CURRENT_PROJECT_VERSION: "6"
+    MARKETING_VERSION: "3.0.0"
+    CURRENT_PROJECT_VERSION: "7"
 targets:
+  CameraeCore:
+    type: framework
+    platform: iOS
+    sources:
+      - path: CameraeCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.core
+        DEFINES_MODULE: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+  CameraeMedia:
+    type: framework
+    platform: iOS
+    sources:
+      - path: CameraeMedia
+    dependencies:
+      - target: CameraeCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.media
+        DEFINES_MODULE: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
   Camerae:
     type: application
     platform: iOS
@@ -25,6 +49,8 @@ targets:
       path: Camerae/Info.plist
       properties:
         CFBundleDisplayName: Camerae
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
         NSCameraUsageDescription: Camerae usa a camera para capturar timelapses e alinhar fotos com uma referencia.
         NSLocationWhenInUseUsageDescription: Camerae usa sua posicao para ajudar a repetir o enquadramento no mesmo local.
@@ -37,3 +63,114 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Camerae/Camerae-Bridging-Header.h
+        # OpenCV2 4.3 has no arm64 Simulator slice; OpenCVBridge uses a stub there.
+        "OTHER_LDFLAGS[sdk=iphonesimulator*]": >-
+          -ObjC -lc++ -lz
+          -framework AVFoundation
+          -framework Accelerate
+          -framework AssetsLibrary
+          -framework CoreGraphics
+          -framework CoreImage
+          -framework CoreMedia
+          -framework CoreVideo
+          -framework FirebaseCore
+          -framework FirebaseCoreInternal
+          -framework Foundation
+          -framework GoogleUtilities
+          -framework QuartzCore
+          -framework Security
+          -framework UIKit
+    dependencies:
+      - target: CameraeCore
+      - target: CameraeMedia
+  CameraeCoreTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CameraeCoreTests
+    dependencies:
+      - target: CameraeCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.core-tests
+        GENERATE_INFOPLIST_FILE: YES
+  CameraeMediaTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CameraeMediaTests
+    dependencies:
+      - target: CameraeMedia
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.media-tests
+        GENERATE_INFOPLIST_FILE: YES
+  CameraeIntegrationTests:
+    type: bundle.unit-test
+    platform: iOS
+    hostApplication: Camerae
+    sources:
+      - path: CameraeIntegrationTests
+    dependencies:
+      - target: Camerae
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.integration-tests
+        GENERATE_INFOPLIST_FILE: YES
+  CameraePerformanceTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CameraePerformanceTests
+    dependencies:
+      - target: CameraeCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.performance-tests
+        GENERATE_INFOPLIST_FILE: YES
+  CameraeUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - path: CameraeUITests
+    dependencies:
+      - target: Camerae
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.ui-tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Camerae:
+    build:
+      targets:
+        Camerae: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - CameraeCoreTests
+        - CameraeMediaTests
+        - CameraeIntegrationTests
+    profile:
+      config: Release
+    analyze:
+      config: Debug
+    archive:
+      config: Release
+  CameraePerformance:
+    build:
+      targets:
+        CameraeCore: all
+    test:
+      config: Debug
+      targets:
+        - CameraePerformanceTests
+  CameraeUI:
+    build:
+      targets:
+        Camerae: all
+    test:
+      config: Debug
+      targets:
+        - CameraeUITests

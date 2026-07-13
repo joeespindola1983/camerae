@@ -1,4 +1,45 @@
 #import "OpenCVBridge.h"
+#import <TargetConditionals.h>
+
+#if TARGET_OS_SIMULATOR
+
+@implementation OpenCVBridge
+
++ (NSString *)versionString {
+    return @"indisponivel no Simulator";
+}
+
++ (BOOL)renderStackWithFramePaths:(NSArray<NSString *> *)framePaths
+                        outputPath:(NSString *)outputPath
+                      maxDimension:(NSInteger)maxDimension
+                        alignStars:(BOOL)alignStars
+                   normalizeFrames:(BOOL)normalizeFrames
+                            denoise:(BOOL)denoise
+                   denoiseStrength:(float)denoiseStrength
+                              gamma:(float)gamma
+                           contrast:(float)contrast
+                         brightness:(float)brightness
+                         saturation:(float)saturation
+                       shadowAmount:(float)shadowAmount
+                    highlightAmount:(float)highlightAmount
+                           vibrance:(float)vibrance
+                      unsharpAmount:(float)unsharpAmount
+                      unsharpRadius:(float)unsharpRadius
+                              error:(NSError **)error {
+    if (error != nullptr) {
+        *error = [NSError errorWithDomain:@"Camerae.OpenCV"
+                                     code:2
+                                 userInfo:@{
+                                     NSLocalizedDescriptionKey:
+                                         @"O processamento OpenCV requer um aparelho iOS real."
+                                 }];
+    }
+    return NO;
+}
+
+@end
+
+#else
 
 #import <opencv2/core.hpp>
 #import <opencv2/imgcodecs/ios.h>
@@ -325,3 +366,5 @@ bool SaveJPEG(const cv::Mat &bgr, NSString *path, NSError **error) {
 }
 
 @end
+
+#endif

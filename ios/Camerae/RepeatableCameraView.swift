@@ -53,13 +53,20 @@ struct RepeatableCameraView: View {
         onDeletedOpenedTimelapse: @escaping () -> Void = {}
     ) {
         self.project = project
-        self.store = TimelapseSessionStore(project: project)
+        let sessionStore = TimelapseSessionStore(project: project)
+        self.store = sessionStore
         self.onCompletedTimelapse = onCompletedTimelapse
         self.onDeletedOpenedTimelapse = onDeletedOpenedTimelapse
         self.explicitReferenceURL = referenceURL
         self.openedSession = openedSession
         _videoSettings = videoSettings
-        _camera = StateObject(wrappedValue: CameraController(project: project, captureMode: .repeatable))
+        let referenceLens = openedSession?.cameraLens
+            ?? sessionStore.cameraLens(forFrameURL: referenceURL ?? sessionStore.firstReferenceFrameURL())
+        _camera = StateObject(wrappedValue: CameraController(
+            project: project,
+            captureMode: .repeatable,
+            initialRepeatableLens: referenceLens
+        ))
     }
 
     var body: some View {
@@ -122,6 +129,21 @@ struct RepeatableCameraView: View {
                 }
                 .pickerStyle(.segmented)
                 .disabled(isCaptureActive)
+
+                if activeReferenceURL != nil {
+                    RepeatableLensIndicator(lens: camera.selectedRepeatableLens)
+                } else if !camera.availableRepeatableLenses.isEmpty {
+                    RepeatableLensPicker(
+                        lenses: camera.availableRepeatableLenses,
+                        selectedLens: camera.selectedRepeatableLens,
+                        isDisabled: isCaptureActive,
+                        selectAction: { lens in
+                            Task {
+                                await camera.selectRepeatableLens(lens)
+                            }
+                        }
+                    )
+                }
             }
 
             Section("Ajustes") {
@@ -1388,6 +1410,94 @@ private extension CaptureDisplayOrientation {
         } else {
             self = .portrait
         }
+    }
+}
+
+private struct RepeatableLensPicker: View {
+    let lenses: [RepeatableCameraLens]
+    let selectedLens: RepeatableCameraLens
+    let isDisabled: Bool
+    let selectAction: (RepeatableCameraLens) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Camera")
+                .font(.subheadline.weight(.medium))
+
+            LazyVGrid(
+                columns: Array(
+                    repeating: GridItem(.flexible(), spacing: 10),
+                    count: max(lenses.count, 1)
+                ),
+                spacing: 10
+            ) {
+                ForEach(lenses) { lens in
+                    Button {
+                        selectAction(lens)
+                    } label: {
+                        VStack(spacing: 7) {
+                            Image(systemName: lens.systemImage)
+                                .font(.system(size: 22, weight: .medium))
+                            Text(lens.shortTitle)
+                                .font(.subheadline.monospacedDigit().weight(.semibold))
+                            Text(lens.title)
+                                .font(.caption2)
+                                .lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 12)
+                        .foregroundStyle(selectedLens == lens ? Color.white : Color.primary)
+                        .background(
+                            selectedLens == lens ? Color.accentColor : Color.secondary.opacity(0.1),
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(
+                                    selectedLens == lens ? Color.accentColor : Color.secondary.opacity(0.2),
+                                    lineWidth: 1
+                                )
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isDisabled)
+                    .accessibilityLabel("Camera \(lens.title), \(lens.shortTitle)")
+                    .accessibilityAddTraits(selectedLens == lens ? .isSelected : [])
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+private struct RepeatableLensIndicator: View {
+    let lens: RepeatableCameraLens
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: lens.systemImage)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 38, height: 38)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Camera em uso")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("\(lens.title) · \(lens.shortTitle)")
+                    .font(.subheadline.weight(.semibold))
+            }
+
+            Spacer()
+
+            Image(systemName: "lock.fill")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Camera em uso: \(lens.title), \(lens.shortTitle)")
     }
 }
 

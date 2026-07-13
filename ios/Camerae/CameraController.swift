@@ -32,6 +32,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var lastExportURL: URL?
     @Published private(set) var lastExportURLs: [URL] = []
     @Published private(set) var originalFrameExportProgress: OriginalFrameExportProgress?
+    @Published private(set) var availableRepeatableLenses = RepeatableCameraLens.availableBackLenses()
+    @Published private(set) var selectedRepeatableLens = RepeatableCameraLens.wide
 
     private let captureMode: CameraCaptureMode
     private let captureQueue = DispatchQueue(label: "camerae.capture.queue")
@@ -58,10 +60,22 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
 
-    init(project: CameraProject, captureMode: CameraCaptureMode = .astro) {
+    init(
+        project: CameraProject,
+        captureMode: CameraCaptureMode = .astro,
+        initialRepeatableLens: RepeatableCameraLens? = nil
+    ) {
         self.captureMode = captureMode
         store = TimelapseSessionStore(project: project)
         super.init()
+        if let initialRepeatableLens,
+           availableRepeatableLenses.contains(initialRepeatableLens) {
+            selectedRepeatableLens = initialRepeatableLens
+        }
+        if !availableRepeatableLenses.contains(selectedRepeatableLens),
+           let firstAvailableLens = availableRepeatableLenses.first {
+            selectedRepeatableLens = firstAvailableLens
+        }
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         locationManager.distanceFilter = kCLDistanceFilterNone
@@ -118,7 +132,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         defer { isSinglePhotoCaptureRunning = false }
 
         do {
-            currentSession = try store.createSession(captureKind: .photo)
+            currentSession = try store.createSession(
+                captureKind: .photo,
+                cameraLens: captureMode == .repeatable ? selectedRepeatableLens : nil
+            )
             completedSession = nil
             frameCount = 0
             astroCompositeFrameCount = 0
@@ -185,6 +202,65 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    func selectRepeatableLens(_ lens: RepeatableCameraLens) async {
+        guard captureMode == .repeatable,
+              availableRepeatableLenses.contains(lens),
+              !isTimelapseRunning,
+              !isSinglePhotoCaptureRunning,
+              !isVideoRecording,
+              lens != selectedRepeatableLens else {
+            return
+        }
+
+        do {
+            try await configureIfNeeded()
+            try await withCheckedThrowingContinuation { continuation in
+                captureQueue.async {
+                    do {
+                        guard let newDevice = AVCaptureDevice.default(
+                            lens.deviceType,
+                            for: .video,
+                            position: .back
+                        ) else {
+                            throw CameraError.noCamera
+                        }
+
+                        let newInput = try AVCaptureDeviceInput(device: newDevice)
+                        let previousInput = self.session.inputs
+                            .compactMap { $0 as? AVCaptureDeviceInput }
+                            .first { $0.device.hasMediaType(.video) }
+
+                        self.session.beginConfiguration()
+                        if let previousInput {
+                            self.session.removeInput(previousInput)
+                        }
+
+                        guard self.session.canAddInput(newInput) else {
+                            if let previousInput, self.session.canAddInput(previousInput) {
+                                self.session.addInput(previousInput)
+                            }
+                            self.session.commitConfiguration()
+                            throw CameraError.configurationFailed
+                        }
+
+                        self.session.addInput(newInput)
+                        self.session.commitConfiguration()
+                        self.device = newDevice
+                        _ = try self.prepareCapture(device: newDevice)
+                        continuation.resume(returning: ())
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+
+            selectedRepeatableLens = lens
+            status = "Camera \(lens.shortTitle) selecionada"
+        } catch {
+            status = "Camera falhou: \(error.localizedDescription)"
+        }
+    }
+
     func setVisualReference(_ url: URL?) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             visualAlignmentQueue.async {
@@ -248,7 +324,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     private func startTimelapse(interval: Double) async {
         do {
-            currentSession = try store.createSession(captureKind: .timelapse)
+            currentSession = try store.createSession(
+                captureKind: .timelapse,
+                cameraLens: captureMode == .repeatable ? selectedRepeatableLens : nil
+            )
             completedSession = nil
             frameCount = 0
             astroCompositeFrameCount = 0
@@ -829,7 +908,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             try await configureIfNeeded()
             guard movieOutput.isRecording == false else { return }
 
-            let videoSession = try store.createSession(captureKind: .video)
+            let videoSession = try store.createSession(
+                captureKind: .video,
+                cameraLens: selectedRepeatableLens
+            )
             let sessionWithMotion = try saveReferencePoseIfAvailable(for: videoSession)
             let outputURL = store.videoClipURL(for: videoSession)
             if FileManager.default.fileExists(atPath: outputURL.path) {
@@ -993,6 +1075,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     private func configureIfNeeded() async throws {
+        let preferredRepeatableLens = selectedRepeatableLens
         try await withCheckedThrowingContinuation { continuation in
             captureQueue.async {
                 do {
@@ -1011,7 +1094,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                         self.session.sessionPreset = .photo
                     }
 
-                    guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back) else {
+                    let deviceType = self.captureMode == .repeatable
+                        ? preferredRepeatableLens.deviceType
+                        : .builtInWideAngleCamera
+                    guard let device = AVCaptureDevice.default(deviceType, for: .video, position: .back) else {
                         throw CameraError.noCamera
                     }
 
@@ -1358,9 +1444,55 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 }
 
-enum CameraCaptureMode {
+enum CameraCaptureMode: Equatable {
     case astro
     case repeatable
+}
+
+enum RepeatableCameraLens: String, CaseIterable, Codable, Hashable, Identifiable, Sendable {
+    case ultraWide
+    case wide
+    case telephoto
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ultraWide: return "Ultra-wide"
+        case .wide: return "Wide"
+        case .telephoto: return "Tele"
+        }
+    }
+
+    var shortTitle: String {
+        switch self {
+        case .ultraWide: return "0,5×"
+        case .wide: return "1×"
+        case .telephoto: return "Tele"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .ultraWide: return "camera.macro"
+        case .wide: return "camera"
+        case .telephoto: return "scope"
+        }
+    }
+
+    var deviceType: AVCaptureDevice.DeviceType {
+        switch self {
+        case .ultraWide: return .builtInUltraWideCamera
+        case .wide: return .builtInWideAngleCamera
+        case .telephoto: return .builtInTelephotoCamera
+        }
+    }
+
+    static func availableBackLenses() -> [RepeatableCameraLens] {
+        allCases.filter { lens in
+            AVCaptureDevice.default(lens.deviceType, for: .video, position: .back) != nil
+        }
+    }
 }
 
 private enum AstroExposureStrategy {

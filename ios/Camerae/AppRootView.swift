@@ -6,7 +6,7 @@ struct AppRootView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ModuleSelectionView()
+            ModuleSelectionView(path: $path)
                 .navigationDestination(for: CameraModule.self) { module in
                     ProjectListView(module: module, path: $path)
                 }
@@ -19,35 +19,229 @@ struct AppRootView: View {
 }
 
 private struct ModuleSelectionView: View {
+    @EnvironmentObject private var projectStore: ProjectStore
+    @Binding var path: NavigationPath
+
+    @State private var creatingModule: CameraModule?
+    @State private var projectName = ""
+    @State private var errorMessage: String?
+
+    private var lastOpenedProject: CameraProject? {
+        projectStore.projects.first { !$0.isArchived }
+    }
+
     var body: some View {
-        List(CameraModule.allCases) { module in
-            NavigationLink(value: module) {
-                ModuleRow(module: module)
+        GeometryReader { proxy in
+            let isLandscape = proxy.size.width > proxy.size.height
+
+            ZStack {
+                Image(isLandscape ? "HomeBackgroundLandscape" : "HomeBackgroundPortrait")
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
+
+                LinearGradient(
+                    colors: [.black.opacity(0.18), .clear, .black.opacity(0.62)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .ignoresSafeArea()
+
+                ScrollView {
+                    VStack(spacing: isLandscape ? 28 : 18) {
+                        Image("CameraeLogoWhite")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: isLandscape ? 510 : 280)
+                            .accessibilityLabel("Camerae")
+
+                        moduleCards(isLandscape: isLandscape)
+
+                        if let lastOpenedProject {
+                            lastProjectCard(lastOpenedProject, isLandscape: isLandscape)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, isLandscape ? 42 : 20)
+                    .padding(.top, isLandscape ? 18 : 28)
+                    .padding(.bottom, 28)
+                    .frame(minHeight: proxy.size.height, alignment: .center)
+                }
+                .scrollIndicators(.hidden)
             }
         }
-        .navigationTitle("Camerae")
+        .toolbar(.hidden, for: .navigationBar)
+        .preferredColorScheme(.dark)
+        .sheet(item: $creatingModule) { module in
+            NewProjectSheet(
+                module: module,
+                name: $projectName,
+                defaultName: projectStore.defaultProjectName(for: module),
+                createAction: {
+                    createProject(module: module, named: projectName)
+                }
+            )
+        }
+        .alert("Erro", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+        .onAppear {
+            projectStore.reload()
+        }
+    }
+
+    @ViewBuilder
+    private func moduleCards(isLandscape: Bool) -> some View {
+        let layout = isLandscape
+            ? AnyLayout(HStackLayout(spacing: 28))
+            : AnyLayout(VStackLayout(spacing: 14))
+
+        layout {
+            HomeModuleCard(
+                module: .repeatable,
+                accent: Color(red: 1, green: 0.55, blue: 0.2),
+                projectCount: projectStore.projects(for: .repeatable).count,
+                createAction: { startCreating(.repeatable) },
+                projectsAction: { path.append(CameraModule.repeatable) }
+            )
+
+            HomeModuleCard(
+                module: .astrophotography,
+                accent: Color(red: 0.48, green: 0.52, blue: 1),
+                projectCount: projectStore.projects(for: .astrophotography).count,
+                createAction: { startCreating(.astrophotography) },
+                projectsAction: { path.append(CameraModule.astrophotography) }
+            )
+        }
+        .frame(maxWidth: isLandscape ? 700 : 330)
+    }
+
+    private func lastProjectCard(_ project: CameraProject, isLandscape: Bool) -> some View {
+        let summary = ProjectRowSummary(project: project)
+        let thumbnailURL = project.referenceFrameURL
+
+        return Button {
+            path.append(project)
+        } label: {
+            HStack(spacing: 14) {
+                ReferenceThumbnail(imageURL: thumbnailURL, systemImage: project.module.systemImage)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("ULTIMO PROJETO")
+                        .font(.caption2.weight(.semibold))
+                        .tracking(1.6)
+                        .foregroundStyle(.white.opacity(0.62))
+                    Text(project.name)
+                        .font(isLandscape ? .title3 : .headline)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                    Text(summary.detail ?? summary.subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.66))
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 8)
+
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 17, weight: .medium))
+                    .frame(width: 42, height: 42)
+                    .background(.white.opacity(0.08), in: Circle())
+                    .overlay {
+                        Circle().stroke(.white.opacity(0.24), lineWidth: 1)
+                    }
+            }
+            .padding(16)
+            .frame(maxWidth: isLandscape ? 700 : 360)
+            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(.white.opacity(0.2), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Abrir ultimo projeto, \(project.name)")
+    }
+
+    private func startCreating(_ module: CameraModule) {
+        projectName = ""
+        creatingModule = module
+    }
+
+    private func createProject(module: CameraModule, named name: String) {
+        Task {
+            do {
+                let project = try await projectStore.createProject(module: module, name: name)
+                creatingModule = nil
+                path.append(project)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 }
 
-private struct ModuleRow: View {
+private struct HomeModuleCard: View {
     let module: CameraModule
+    let accent: Color
+    let projectCount: Int
+    let createAction: () -> Void
+    let projectsAction: () -> Void
 
     var body: some View {
-        HStack(spacing: 14) {
+        VStack(spacing: 16) {
             Image(systemName: module.systemImage)
-                .font(.system(size: 20, weight: .semibold))
-                .frame(width: 38, height: 38)
-                .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .font(.system(size: 36, weight: .light))
+                .foregroundStyle(accent)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(module.title)
-                    .font(.headline)
-                Text(module.subtitle)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+            Text(module == .astrophotography ? "ASTRO" : "REPEATABLE")
+                .font(.system(size: 18, weight: .medium))
+                .tracking(5)
+                .foregroundStyle(.white)
+
+            Rectangle()
+                .fill(accent)
+                .frame(width: 36, height: 1)
+
+            Button(action: createAction) {
+                Text("+ Criar")
+                    .font(.headline.weight(.medium))
+                    .frame(maxWidth: .infinity)
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(accent)
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Criar projeto \(module.title)")
+
+            Button(action: projectsAction) {
+                Text("Projetos (\(projectCount))")
+                    .font(.subheadline.weight(.medium))
+                    .monospacedDigit()
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.white.opacity(0.86))
+            .frame(height: 44)
+            .contentShape(Rectangle())
+            .accessibilityLabel("Projetos \(module.title), \(projectCount)")
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 28)
+        .padding(.vertical, 24)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .stroke(.white.opacity(0.2), lineWidth: 1)
+        }
+        .shadow(color: accent.opacity(0.14), radius: 24, y: 10)
     }
 }
 
@@ -156,20 +350,24 @@ private struct ProjectListView: View {
     }
 
     private func createProject(named name: String) {
-        do {
-            let project = try projectStore.createProject(module: module, name: name)
-            isCreatingProject = false
-            path.append(project)
-        } catch {
-            errorMessage = error.localizedDescription
+        Task {
+            do {
+                let project = try await projectStore.createProject(module: module, name: name)
+                isCreatingProject = false
+                path.append(project)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
     private func setArchived(_ project: CameraProject, _ isArchived: Bool) {
-        do {
-            try projectStore.setArchived(project, isArchived: isArchived)
-        } catch {
-            errorMessage = error.localizedDescription
+        Task {
+            do {
+                try await projectStore.setArchived(project, isArchived: isArchived)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
         }
     }
 
@@ -198,7 +396,7 @@ private struct ProjectRow: View {
     }
 
     private var thumbnailURL: URL? {
-        TimelapseSessionStore(project: project).firstReferenceFrameURL()
+        project.referenceFrameURL
     }
 
     var body: some View {
@@ -245,10 +443,6 @@ private struct ProjectRow: View {
 private struct ProjectRowSummary {
     let project: CameraProject
 
-    private var store: TimelapseSessionStore {
-        TimelapseSessionStore(project: project)
-    }
-
     var subtitle: String {
         if let lastOpenedAt = project.lastOpenedAt {
             return "Aberto \(lastOpenedAt.formatted(date: .abbreviated, time: .shortened))"
@@ -258,14 +452,8 @@ private struct ProjectRowSummary {
     }
 
     var detail: String? {
-        guard project.module == .astrophotography,
-              let latest = store.latestSessionSummaryWithFrames() else {
-            return nil
-        }
-
-        var parts = ["\(latest.frameCount) frames"]
-        parts.append(latest.isAstroProcessed ? "processado" : "nao processado")
-        return parts.joined(separator: " · ")
+        guard let summary = project.summary else { return nil }
+        return "\(summary.sessionCount) capturas · \(summary.mediaCount) frames"
     }
 }
 
@@ -324,7 +512,9 @@ private struct ModuleRuntimeView: View {
             }
         }
         .onAppear {
-            projectStore.markOpened(project)
+            Task {
+                await projectStore.markOpened(project)
+            }
         }
     }
 }

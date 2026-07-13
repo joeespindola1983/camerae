@@ -29,6 +29,14 @@ struct RepeatableProjectRuntimeView: View {
 
     private let store: TimelapseSessionStore
 
+    private var firstReferenceFrameURL: URL? {
+        sessions
+            .filter { $0.frameCount > 0 }
+            .sorted { $0.session.createdAt < $1.session.createdAt }
+            .compactMap(\.referenceFrameURL)
+            .first
+    }
+
     init(project: CameraProject, onDeleteProject: @escaping () throws -> Void = {}) {
         self.project = project
         self.onDeleteProject = onDeleteProject
@@ -113,12 +121,12 @@ struct RepeatableProjectRuntimeView: View {
         List {
             Section {
                 Button {
-                    mode = .capture(referenceURL: store.firstReferenceFrameURL(), sourceSession: nil)
+                    mode = .capture(referenceURL: firstReferenceFrameURL, sourceSession: nil)
                 } label: {
                     Label("Criar timelapse", systemImage: "camera.viewfinder")
                 }
 
-                if store.firstReferenceFrameURL() == nil {
+                if firstReferenceFrameURL == nil {
                     PhotosPicker(
                         selection: $importedReferenceItem,
                         matching: .any(of: [.images, .videos]),
@@ -196,7 +204,13 @@ struct RepeatableProjectRuntimeView: View {
     }
 
     private func reloadSessions() {
-        sessions = store.sessionSummaries()
+        Task {
+            do {
+                sessions = try await store.sessionSummariesFromCatalog()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     @MainActor

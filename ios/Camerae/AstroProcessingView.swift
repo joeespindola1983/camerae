@@ -1,4 +1,5 @@
 import AVKit
+import CameraeMedia
 import ImageIO
 import SwiftUI
 
@@ -163,6 +164,11 @@ struct AstroProcessingView: View {
             }
             .onChange(of: processor.recommendedStackingStartFrame) {
                 applyRecommendedStackingStartIfNeeded()
+            }
+            .onChange(of: selectedTab) { _, tab in
+                if tab == .files {
+                    processor.reloadStorageSummary()
+                }
             }
     }
 
@@ -1003,7 +1009,7 @@ private struct AstroCachedZoomableFrameView: View {
         }
         .task(id: url.path) {
             didFail = false
-            image = await ThumbnailCache.thumbnail(for: url, maxPixelSize: 1800)
+            image = await ThumbnailPipeline.shared.thumbnail(for: url, maxPixelSize: 1800)?.image
             didFail = image == nil
         }
     }
@@ -1082,7 +1088,7 @@ private struct AstroZoomableImageView: UIViewRepresentable {
 
 private enum AstroFrameThumbnailLoader {
     static func thumbnail(for url: URL, maxPixelSize: Int) async -> UIImage? {
-        await ThumbnailCache.thumbnail(for: url, maxPixelSize: maxPixelSize)
+        await ThumbnailPipeline.shared.thumbnail(for: url, maxPixelSize: maxPixelSize)?.image
     }
 }
 
@@ -1160,7 +1166,7 @@ private struct AstroProcessedFramePreview: View {
                 .padding(8)
         }
         .task(id: frameURL.path) {
-            image = await ThumbnailCache.thumbnail(for: frameURL, maxPixelSize: 1400)
+            image = await ThumbnailPipeline.shared.thumbnail(for: frameURL, maxPixelSize: 1400)?.image
         }
     }
 }
@@ -1287,6 +1293,133 @@ struct AstroStorageSummary: Equatable {
     }
 }
 
+private struct AstroInventorySnapshot: Sendable {
+    let rejectedNames: Set<String>
+    let totalOriginalFrameCount: Int
+    let activeOriginalFrameCount: Int
+    let compositeFrameCount: Int
+    let recommendedStackingStartFrame: Int?
+}
+
+private enum AstroInventoryLoader {
+    static func load(session: TimelapseSession) -> AstroInventorySnapshot {
+        let fileManager = FileManager.default
+        let originals = imageFiles(
+            in: session.directoryURL,
+            prefix: "frame_",
+            fileManager: fileManager
+        )
+        let rejectedURL = session.directoryURL.appendingPathComponent("rejected_original_frames.json")
+        let storedRejected = (try? Data(contentsOf: rejectedURL))
+            .flatMap { try? JSONDecoder().decode([String].self, from: $0) } ?? []
+        let existingNames = Set(originals.map(\.lastPathComponent))
+        let rejected = Set(storedRejected).intersection(existingNames)
+        let active = originals.filter { !rejected.contains($0.lastPathComponent) }
+        let composites = imageFiles(
+            in: session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true),
+            prefix: "astro_frame_",
+            fileManager: fileManager
+        )
+        let storedStart = storedStackingStartFrame(session: session)
+        let recommended = storedStart.map { min(max($0, 1), max(active.count, 1)) } ??
+            active.enumerated().first { _, url in exposureSeconds(url) >= 0.8 }.map { $0.offset + 1 }
+        return AstroInventorySnapshot(
+            rejectedNames: rejected,
+            totalOriginalFrameCount: originals.count,
+            activeOriginalFrameCount: active.count,
+            compositeFrameCount: composites.count,
+            recommendedStackingStartFrame: recommended
+        )
+    }
+
+    static func storageSummary(session: TimelapseSession) -> AstroStorageSummary {
+        let fileManager = FileManager.default
+        let originals = imageFiles(in: session.directoryURL, prefix: "frame_", fileManager: fileManager)
+        let originalBytes = originals.reduce(UInt64(0)) { $0 + fileSize($1) }
+        let astroFrames = session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true)
+        let previewFrames = session.directoryURL.appendingPathComponent("Preview Frames", isDirectory: true)
+        let renders = session.directoryURL.appendingPathComponent("Astro Renders", isDirectory: true)
+        let intermediateBytes = directorySize(astroFrames, fileManager: fileManager)
+        let previewBytes = directorySize(previewFrames, fileManager: fileManager)
+        var processedBytes: UInt64 = 0
+        var videoBytes: UInt64 = 0
+        for url in directoryURLs(in: renders, fileManager: fileManager) {
+            for file in regularFiles(in: url, fileManager: fileManager) {
+                if file.pathExtension.lowercased() == "jpg" {
+                    processedBytes += fileSize(file)
+                } else if file.pathExtension.lowercased() == "mp4" {
+                    videoBytes += fileSize(file)
+                }
+            }
+        }
+        return AstroStorageSummary(
+            originalBytes: originalBytes,
+            processedFrameBytes: intermediateBytes + processedBytes,
+            videoBytes: videoBytes,
+            cacheBytes: previewBytes,
+            hasProcessingCache: intermediateBytes > 0 || previewBytes > 0
+        )
+    }
+
+    private static func imageFiles(in directory: URL, prefix: String, fileManager: FileManager) -> [URL] {
+        regularFiles(in: directory, fileManager: fileManager)
+            .filter { $0.lastPathComponent.hasPrefix(prefix) && $0.pathExtension.lowercased() == "jpg" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+    }
+
+    private static func regularFiles(in directory: URL, fileManager: FileManager) -> [URL] {
+        ((try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []).filter {
+            (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
+        }
+    }
+
+    private static func directoryURLs(in directory: URL, fileManager: FileManager) -> [URL] {
+        ((try? fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []).filter {
+            (try? $0.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
+        }
+    }
+
+    private static func storedStackingStartFrame(session: TimelapseSession) -> Int? {
+        let url = session.directoryURL.appendingPathComponent("astro_capture.json")
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return object["stackingStartFrame"] as? Int
+    }
+
+    private static func exposureSeconds(_ url: URL) -> Double {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let exif = properties[kCGImagePropertyExifDictionary] as? [CFString: Any],
+              let exposure = exif[kCGImagePropertyExifExposureTime] as? Double else { return 0 }
+        return exposure
+    }
+
+    private static func fileSize(_ url: URL) -> UInt64 {
+        UInt64((try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+    }
+
+    private static func directorySize(_ directory: URL, fileManager: FileManager) -> UInt64 {
+        guard let enumerator = fileManager.enumerator(
+            at: directory,
+            includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey]
+        ) else { return 0 }
+        var total: UInt64 = 0
+        for case let url as URL in enumerator {
+            guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { continue }
+            total += fileSize(url)
+        }
+        return total
+    }
+}
+
 @MainActor
 final class AstroProcessingController: ObservableObject {
     @Published private(set) var totalOriginalFrameCount = 0
@@ -1319,16 +1452,29 @@ final class AstroProcessingController: ObservableObject {
     }
 
     func reload() {
-        rejectedOriginalFrameNames = loadRejectedOriginalFrameNames()
-        totalOriginalFrameCount = allOriginalFrames().count
-        let frames = originalFrames()
-        originalFrameCount = frames.count
-        compositeFrameCount = compositeFrames().count
-        recommendedStackingStartFrame = recommendedStackingStartFrame(in: frames)
-        renderedClips = renderClips()
-        lastVideoURL = renderedClips.first?.videoURL
-        lastRenderURL = renderedClips.first?.renderURL
-        storageSummary = calculateStorageSummary()
+        let session = self.session
+        Task {
+            let snapshot = await Task.detached(priority: .utility) {
+                AstroInventoryLoader.load(session: session)
+            }.value
+            rejectedOriginalFrameNames = snapshot.rejectedNames
+            totalOriginalFrameCount = snapshot.totalOriginalFrameCount
+            originalFrameCount = snapshot.activeOriginalFrameCount
+            compositeFrameCount = snapshot.compositeFrameCount
+            recommendedStackingStartFrame = snapshot.recommendedStackingStartFrame
+            renderedClips = renderClips()
+            lastVideoURL = renderedClips.first?.videoURL
+            lastRenderURL = renderedClips.first?.renderURL
+        }
+    }
+
+    func reloadStorageSummary() {
+        let session = self.session
+        Task {
+            storageSummary = await Task.detached(priority: .utility) {
+                AstroInventoryLoader.storageSummary(session: session)
+            }.value
+        }
     }
 
     var progressText: String? {
@@ -1426,8 +1572,7 @@ final class AstroProcessingController: ObservableObject {
 
         let cacheDirectories = [
             session.directoryURL.appendingPathComponent("Preview Frames", isDirectory: true),
-            session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true),
-            session.directoryURL.appendingPathComponent(ThumbnailCache.directoryName, isDirectory: true)
+            session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true)
         ]
 
         for directory in cacheDirectories where fileManager.fileExists(atPath: directory.path) {
@@ -1923,12 +2068,11 @@ final class AstroProcessingController: ObservableObject {
 
         let astroFramesURL = session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true)
         let previewFramesURL = session.directoryURL.appendingPathComponent("Preview Frames", isDirectory: true)
-        let thumbnailCacheURL = session.directoryURL.appendingPathComponent(ThumbnailCache.directoryName, isDirectory: true)
         let rendersURL = session.directoryURL.appendingPathComponent("Astro Renders", isDirectory: true)
 
         let intermediateFrameBytes = directorySize(astroFramesURL)
         let previewBytes = directorySize(previewFramesURL)
-        let thumbnailBytes = directorySize(thumbnailCacheURL)
+        let thumbnailBytes: UInt64 = 0
         var processedRenderFrameBytes: UInt64 = 0
         var videoBytes: UInt64 = 0
 

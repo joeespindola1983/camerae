@@ -1,4 +1,5 @@
 import CoreGraphics
+import CameraeCore
 import Foundation
 import UIKit
 
@@ -10,6 +11,7 @@ struct TimelapseSession: Identifiable, Equatable, Hashable {
     let referenceMotion: MotionAttitude?
     let referenceGeoPose: GeoPose?
     let referenceOrientation: CaptureDisplayOrientation?
+    let cameraLens: RepeatableCameraLens?
     let name: String
     let directoryURL: URL
     let createdAt: Date
@@ -75,7 +77,10 @@ final class TimelapseSessionStore {
         dateFormatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
     }
 
-    func createSession(captureKind: RepeatableCaptureKind = .timelapse) throws -> TimelapseSession {
+    func createSession(
+        captureKind: RepeatableCaptureKind = .timelapse,
+        cameraLens: RepeatableCameraLens? = nil
+    ) throws -> TimelapseSession {
         try fileManager.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
         try fileManager.createDirectory(at: exportsDirectory, withIntermediateDirectories: true)
 
@@ -93,6 +98,7 @@ final class TimelapseSessionStore {
             referenceMotion: nil,
             referenceGeoPose: nil,
             referenceOrientation: nil,
+            cameraLens: cameraLens,
             name: name,
             directoryURL: directoryURL,
             createdAt: createdAt
@@ -170,6 +176,7 @@ final class TimelapseSessionStore {
             referenceMotion: motion,
             referenceGeoPose: session.referenceGeoPose,
             referenceOrientation: session.referenceOrientation,
+            cameraLens: session.cameraLens,
             name: session.name,
             directoryURL: session.directoryURL,
             createdAt: session.createdAt
@@ -187,6 +194,7 @@ final class TimelapseSessionStore {
             referenceMotion: session.referenceMotion,
             referenceGeoPose: geoPose,
             referenceOrientation: session.referenceOrientation,
+            cameraLens: session.cameraLens,
             name: session.name,
             directoryURL: session.directoryURL,
             createdAt: session.createdAt
@@ -207,6 +215,7 @@ final class TimelapseSessionStore {
             referenceMotion: session.referenceMotion,
             referenceGeoPose: session.referenceGeoPose,
             referenceOrientation: orientation,
+            cameraLens: session.cameraLens,
             name: session.name,
             directoryURL: session.directoryURL,
             createdAt: session.createdAt
@@ -242,6 +251,53 @@ final class TimelapseSessionStore {
         return sessions
             .sorted { $0.createdAt > $1.createdAt }
             .map(summary)
+    }
+
+    func sessionSummariesFromCatalog() async throws -> [TimelapseSessionSummary] {
+        let summaries = try await SessionCatalog(project: project.coreRecord).loadSummaries()
+        return summaries.map { summary in
+            let record = summary.session
+            let session = TimelapseSession(
+                id: record.id,
+                projectID: record.projectID,
+                module: CameraModule(rawValue: record.module.rawValue) ?? project.module,
+                captureKind: RepeatableCaptureKind(rawValue: record.captureKind.rawValue) ?? .timelapse,
+                referenceMotion: record.referenceMotion.map { MotionAttitude(x: $0.x, y: $0.y, z: $0.z) },
+                referenceGeoPose: record.referenceGeoPose.map {
+                    GeoPose(
+                        latitude: $0.latitude,
+                        longitude: $0.longitude,
+                        horizontalAccuracy: $0.horizontalAccuracy,
+                        heading: $0.heading,
+                        timestamp: $0.timestamp
+                    )
+                },
+                referenceOrientation: record.referenceOrientation.flatMap(CaptureDisplayOrientation.init(rawValue:)),
+                cameraLens: record.cameraLens.flatMap(RepeatableCameraLens.init(rawValue:)),
+                name: record.name,
+                directoryURL: record.directoryURL,
+                createdAt: record.createdAt
+            )
+            let referenceURL = summary.frameSummary.firstFileName.map {
+                record.directoryURL.appendingPathComponent($0)
+            }
+            let videoURL = summary.videoSummary?.videoFileName.map {
+                record.directoryURL.appendingPathComponent($0)
+            }
+            let clipURL = summary.videoSummary?.clipFileName.map {
+                record.directoryURL.appendingPathComponent($0)
+            }
+            return TimelapseSessionSummary(
+                session: session,
+                captureKind: session.captureKind,
+                frameCount: summary.frameSummary.count,
+                referenceFrameURL: referenceURL,
+                videoURL: videoURL,
+                videoClipURL: clipURL,
+                isAstroProcessed: (summary.astroSummary?.frameCount ?? 0) > 0 ||
+                    (summary.astroSummary?.hasRenderedClip ?? false)
+            )
+        }
     }
 
     private func summary(for session: TimelapseSession) -> TimelapseSessionSummary {
@@ -302,6 +358,18 @@ final class TimelapseSessionStore {
         return sessions.first { session in
             firstFrameURL(in: session)?.standardizedFileURL.path == referencePath
         }?.referenceOrientation
+    }
+
+    func cameraLens(forFrameURL referenceURL: URL?) -> RepeatableCameraLens? {
+        guard let referenceURL,
+              let sessions = try? loadSessions() else {
+            return nil
+        }
+
+        let referencePath = referenceURL.standardizedFileURL.path
+        return sessions.first { session in
+            firstFrameURL(in: session)?.standardizedFileURL.path == referencePath
+        }?.cameraLens
     }
 
     func firstFrameURL(in session: TimelapseSession) -> URL? {
@@ -734,16 +802,27 @@ final class TimelapseSessionStore {
     }
 
     private func writeManifest(for session: TimelapseSession) throws {
-        var manifest: [String: Any] = [
-            "id": session.id.uuidString,
-            "projectId": session.projectID.uuidString,
-            "projectName": project.name,
-            "module": session.module.rawValue,
-            "captureKind": session.captureKind.rawValue,
-            "name": session.name,
-            "createdAt": ISO8601DateFormatter().string(from: session.createdAt),
-            "format": "original_jpeg_sequence"
-        ]
+        let manifestURL = session.directoryURL.appendingPathComponent("manifest.json")
+        var manifest = ((try? Data(contentsOf: manifestURL))
+            .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }) ?? [:]
+        manifest["schemaVersion"] = 3
+        manifest["id"] = session.id.uuidString
+        manifest["projectId"] = session.projectID.uuidString
+        manifest["projectName"] = project.name
+        manifest["module"] = session.module.rawValue
+        manifest["captureKind"] = session.captureKind.rawValue
+        manifest["name"] = session.name
+        manifest["createdAt"] = ISO8601DateFormatter().string(from: session.createdAt)
+        manifest["format"] = "original_jpeg_sequence"
+        if manifest["frameSummary"] == nil {
+            manifest["frameSummary"] = [
+                "count": 0,
+                "nextFrameIndex": 1,
+                "knownBytes": 0
+            ]
+            manifest["inventoryState"] = "dirty"
+            manifest["generation"] = 0
+        }
 
         if let referenceMotion = session.referenceMotion {
             manifest["referenceMotion"] = [
@@ -770,8 +849,12 @@ final class TimelapseSessionStore {
             manifest["referenceOrientation"] = referenceOrientation.rawValue
         }
 
+        if let cameraLens = session.cameraLens {
+            manifest["cameraLens"] = cameraLens.rawValue
+        }
+
         let data = try JSONSerialization.data(withJSONObject: manifest, options: [.prettyPrinted, .sortedKeys])
-        try data.write(to: session.directoryURL.appendingPathComponent("manifest.json"), options: [.atomic])
+        try data.write(to: manifestURL, options: [.atomic])
     }
 
     private func isSafeSessionDirectory(_ url: URL) -> Bool {
@@ -814,6 +897,7 @@ final class TimelapseSessionStore {
                 referenceMotion: manifest.referenceMotion,
                 referenceGeoPose: manifest.referenceGeoPose,
                 referenceOrientation: CaptureDisplayOrientation(rawValue: manifest.referenceOrientation ?? ""),
+                cameraLens: RepeatableCameraLens(rawValue: manifest.cameraLens ?? ""),
                 name: manifest.name,
                 directoryURL: directory,
                 createdAt: createdAt
@@ -996,6 +1080,7 @@ private struct SessionManifest: Decodable {
     let referenceMotion: MotionAttitude?
     let referenceGeoPose: GeoPose?
     let referenceOrientation: String?
+    let cameraLens: String?
     let name: String
     let createdAt: String
 }

@@ -5,4 +5,8 @@ use_frameworks!
 target 'Camerae' do
   pod 'Firebase/CoreOnly'
   pod 'OpenCV2'
+
+  target 'CameraeIntegrationTests' do
+    inherit! :search_paths
+  end
 end

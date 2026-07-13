@@ -17,7 +17,7 @@ on:
 
 jobs:
   build:
-    name: Build Camerae
+    name: Build and test Camerae
     runs-on: macos-latest
 
     steps:
@@ -31,6 +31,20 @@ jobs:
         working-directory: ios
         run: pod install
 
+      - name: Check architecture boundaries
+        working-directory: ios
+        run: ./scripts/check-architecture.sh
+
+      - name: Run Swift component and integration tests
+        working-directory: ios
+        run: |
+          xcodebuild \
+            -workspace Camerae.xcworkspace \
+            -scheme Camerae \
+            -destination 'platform=iOS Simulator,name=iPhone 16 Pro,OS=latest' \
+            CODE_SIGNING_ALLOWED=NO \
+            test
+
       - name: Build
         working-directory: ios
         run: |
@@ -40,3 +54,23 @@ jobs:
             -destination 'generic/platform=iOS' \
             CODE_SIGNING_ALLOWED=NO \
             build
+
+  processing-tests:
+    name: Test C++ processing core
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install OpenCV
+        run: sudo apt-get update && sudo apt-get install -y libopencv-dev
+
+      - name: Configure
+        run: cmake -S processing -B .build/processing -DBUILD_TESTING=ON
+
+      - name: Build
+        run: cmake --build .build/processing --parallel 2
+
+      - name: Test
+        run: ctest --test-dir .build/processing --output-on-failure
