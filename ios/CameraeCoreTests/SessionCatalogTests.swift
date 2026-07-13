@@ -59,7 +59,12 @@ struct SessionCatalogComponentTests {
         defer { library.remove() }
         let project = library.project
         let ids = FixedIDProvider([UUID(uuidString: "66666666-6666-6666-6666-666666666666")!])
-        let catalog = SessionCatalog(project: project, idProvider: ids)
+        let captureDate = Date(timeIntervalSince1970: 1_700_000_100)
+        let catalog = SessionCatalog(
+            project: project,
+            dateProvider: FixedDateProvider(captureDate),
+            idProvider: ids
+        )
 
         let session = try await catalog.createSession(captureKind: .timelapse)
         try await catalog.beginCapture(sessionID: session.id)
@@ -76,6 +81,7 @@ struct SessionCatalogComponentTests {
         #expect(summaries[0].frameSummary.firstFileName == "frame_000001.jpg")
         #expect(summaries[0].frameSummary.lastFileName == "frame_000002.jpg")
         #expect(summaries[0].frameSummary.knownBytes == 5)
+        #expect(summaries[0].frameSummary.captureDuration == 0)
         #expect(summaries[0].inventoryState == .clean)
     }
 

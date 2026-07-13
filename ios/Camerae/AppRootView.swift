@@ -517,7 +517,9 @@ private struct AstroProjectRuntimeView: View {
     let project: CameraProject
     @Binding var path: NavigationPath
 
-    @State private var mode = AstroProjectMode.loading
+    @State private var mode = AstroProjectMode.list
+    @State private var sessions: [TimelapseSessionSummary] = []
+    @State private var errorMessage: String?
     private let store: TimelapseSessionStore
 
     init(project: CameraProject, path: Binding<NavigationPath>) {
@@ -529,38 +531,126 @@ private struct AstroProjectRuntimeView: View {
     var body: some View {
         Group {
             switch mode {
-            case .loading:
-                ProgressView()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .navigationTitle(project.name)
-                    .navigationBarTitleDisplayMode(.inline)
+            case .list:
+                sessionList
             case .capture:
-                CameraView(project: project) {
-                    try store.deleteProject()
-                    path.removeLast()
-                }
+                CameraView(
+                    project: project,
+                    onDeleteProject: deleteProject,
+                    onClose: {
+                        reloadSessions()
+                        mode = .list
+                    },
+                    onCompletedSession: { session in
+                        reloadSessions()
+                        mode = .processing(session)
+                    }
+                )
             case .processing(let session):
                 AstroProcessingView(session: session) {
-                    mode = .capture
+                    reloadSessions()
+                    mode = .list
                 } onDeleteProject: {
-                    try store.deleteProject()
-                    path.removeLast()
+                    deleteProject()
                 }
             }
         }
         .onAppear {
-            guard mode == .loading else { return }
-            if let session = store.latestSessionWithFrames() {
-                mode = .processing(session)
-            } else {
-                mode = .capture
+            reloadSessions()
+        }
+        .alert("Erro", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var sessionList: some View {
+        List {
+            Section {
+                Button {
+                    mode = .capture
+                } label: {
+                    Label("Criar timelapse Astro", systemImage: "camera.viewfinder")
+                }
             }
+
+            Section("Timelapses") {
+                if sessions.isEmpty {
+                    Text("Nenhum timelapse ainda")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(sessions) { summary in
+                        RepeatableSessionRow(
+                                summary: summary,
+                                isRendering: false,
+                                isExportingOriginalFrames: false,
+                                isBusy: false,
+                                showsActions: false,
+                                renderAction: {},
+                                shareAction: {},
+                                exportOriginalFramesAction: {}
+                            )
+                        .onTapGesture {
+                            mode = .processing(summary.session)
+                        }
+                        .accessibilityAddTraits(.isButton)
+                        .swipeActions {
+                            Button(role: .destructive) {
+                                deleteSession(summary.session)
+                            } label: {
+                                Label("Excluir captura", systemImage: "trash")
+                            }
+                        }
+                    }
+                }
+            }
+
+            Section {
+                Button(role: .destructive, action: deleteProject) {
+                    Label("Excluir projeto", systemImage: "trash")
+                }
+            }
+        }
+        .navigationTitle(project.name)
+        .navigationBarTitleDisplayMode(.inline)
+    }
+
+    private func reloadSessions() {
+        Task {
+            do {
+                sessions = try await store.sessionSummariesFromCatalog()
+                    .filter { $0.frameCount > 0 }
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deleteSession(_ session: TimelapseSession) {
+        do {
+            try store.deleteSession(session)
+            reloadSessions()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func deleteProject() {
+        do {
+            try store.deleteProject()
+            path.removeLast()
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }
 
 private enum AstroProjectMode: Equatable {
-    case loading
+    case list
     case capture
     case processing(TimelapseSession)
 }

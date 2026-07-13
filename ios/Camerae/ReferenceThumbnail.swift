@@ -5,6 +5,9 @@ import UIKit
 struct ReferenceThumbnail: View {
     let imageURL: URL?
     let systemImage: String
+    var width: CGFloat? = 64
+    var height: CGFloat = 48
+    var maxPixelSize = 220
 
     @State private var image: UIImage?
 
@@ -19,13 +22,14 @@ struct ReferenceThumbnail: View {
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.thinMaterial)
+                    .background(Color.secondary.opacity(0.12))
             }
         }
-        .frame(width: 64, height: 48)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .frame(maxWidth: width == nil ? .infinity : nil)
+        .frame(width: width, height: height)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .stroke(.secondary.opacity(0.2), lineWidth: 1)
         }
         .task(id: imageURL) {
@@ -39,6 +43,6 @@ struct ReferenceThumbnail: View {
             return
         }
 
-        image = await ThumbnailPipeline.shared.thumbnail(for: imageURL, maxPixelSize: 220)?.image
+        image = await ThumbnailPipeline.shared.thumbnail(for: imageURL, maxPixelSize: maxPixelSize)?.image
     }
 }

@@ -5,6 +5,8 @@ struct CameraView: View {
     @StateObject private var camera: CameraController
     private let project: CameraProject
     private let onDeleteProject: () throws -> Void
+    private let onClose: (() -> Void)?
+    private let onCompletedSession: ((TimelapseSession) -> Void)?
 
     @State private var timelapseIntervalSeconds = 5.0
     @State private var astroIntervalSeconds = 1.0
@@ -17,9 +19,16 @@ struct CameraView: View {
     @State private var exportTask: Task<Void, Never>?
     @State private var processingSession: TimelapseSession?
 
-    init(project: CameraProject, onDeleteProject: @escaping () throws -> Void = {}) {
+    init(
+        project: CameraProject,
+        onDeleteProject: @escaping () throws -> Void = {},
+        onClose: (() -> Void)? = nil,
+        onCompletedSession: ((TimelapseSession) -> Void)? = nil
+    ) {
         self.project = project
         self.onDeleteProject = onDeleteProject
+        self.onClose = onClose
+        self.onCompletedSession = onCompletedSession
         _camera = StateObject(wrappedValue: CameraController(project: project))
     }
 
@@ -69,12 +78,27 @@ struct CameraView: View {
             }
         }
         .onChange(of: camera.completedSession) { _, session in
-            processingSession = session
+            guard let session else { return }
+            if let onCompletedSession {
+                onCompletedSession(session)
+            } else {
+                processingSession = session
+            }
         }
     }
 
     private var topBar: some View {
         HStack(spacing: 12) {
+            if let onClose {
+                Button(action: onClose) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .accessibilityLabel("Voltar para capturas")
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(project.name)
                     .font(.system(size: 18, weight: .semibold))

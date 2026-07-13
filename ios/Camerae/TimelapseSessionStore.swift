@@ -21,10 +21,12 @@ struct TimelapseSessionSummary: Identifiable, Equatable, Hashable {
     let session: TimelapseSession
     let captureKind: RepeatableCaptureKind
     let frameCount: Int
+    let captureDuration: TimeInterval?
     let referenceFrameURL: URL?
     let videoURL: URL?
     let videoClipURL: URL?
     let isAstroProcessed: Bool
+    let hasRenderedOutput: Bool
 
     var id: UUID { session.id }
 }
@@ -291,11 +293,14 @@ final class TimelapseSessionStore {
                 session: session,
                 captureKind: session.captureKind,
                 frameCount: summary.frameSummary.count,
+                captureDuration: summary.frameSummary.captureDuration,
                 referenceFrameURL: referenceURL,
                 videoURL: videoURL,
                 videoClipURL: clipURL,
                 isAstroProcessed: (summary.astroSummary?.frameCount ?? 0) > 0 ||
-                    (summary.astroSummary?.hasRenderedClip ?? false)
+                    (summary.astroSummary?.hasRenderedClip ?? false),
+                hasRenderedOutput: (summary.astroSummary?.hasRenderedClip ?? false) ||
+                    videoURL != nil || clipURL != nil
             )
         }
     }
@@ -305,10 +310,13 @@ final class TimelapseSessionStore {
             session: session,
             captureKind: session.captureKind,
             frameCount: frameCount(in: session),
+            captureDuration: captureDuration(in: session),
             referenceFrameURL: firstFrameURL(in: session),
             videoURL: existingVideoURL(for: session),
             videoClipURL: existingVideoClipURL(for: session),
-            isAstroProcessed: isAstroProcessed(session)
+            isAstroProcessed: isAstroProcessed(session),
+            hasRenderedOutput: hasAstroRenderedClip(in: session) ||
+                existingVideoURL(for: session) != nil || existingVideoClipURL(for: session) != nil
         )
     }
 
@@ -322,6 +330,13 @@ final class TimelapseSessionStore {
             .sorted { $0.createdAt < $1.createdAt }
             .compactMap { firstFrameURL(in: $0) }
             .first
+    }
+
+    private func captureDuration(in session: TimelapseSession) -> TimeInterval? {
+        guard let lastFrame = frameURLs(in: session).last,
+              let values = try? lastFrame.resourceValues(forKeys: [.contentModificationDateKey]),
+              let modifiedAt = values.contentModificationDate else { return nil }
+        return max(0, modifiedAt.timeIntervalSince(session.createdAt))
     }
 
     func referenceMotion(forFrameURL referenceURL: URL?) -> MotionAttitude? {

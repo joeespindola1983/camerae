@@ -72,7 +72,8 @@ public actor SessionCatalog {
             firstFileName: previous.firstFileName ?? fileName,
             lastFileName: fileName,
             nextFrameIndex: max(previous.nextFrameIndex, index + 1),
-            knownBytes: previous.knownBytes + UInt64(data.count)
+            knownBytes: previous.knownBytes + UInt64(data.count),
+            captureDuration: max(0, dateProvider.now().timeIntervalSince(document.session.createdAt))
         )
         document = replacing(document, frameSummary: summary)
         captures[sessionID] = document
@@ -103,7 +104,9 @@ public actor SessionCatalog {
             guard (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
             do {
                 var document = try read(directory: directory)
-                if document.frameSummary == nil || document.inventoryState == .dirty {
+                if document.frameSummary == nil ||
+                    document.inventoryState == .dirty ||
+                    (document.frameSummary?.count ?? 0) > 0 && document.frameSummary?.captureDuration == nil {
                     document = try repair(document)
                     try write(document)
                 }
@@ -127,7 +130,7 @@ public actor SessionCatalog {
     private func repair(_ document: SessionManifestDocument) throws -> SessionManifestDocument {
         let urls = try fileManager.contentsOfDirectory(
             at: document.session.directoryURL,
-            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey],
             options: [.skipsHiddenFiles]
         )
         let frames = urls.filter { url in
@@ -140,12 +143,16 @@ public actor SessionCatalog {
             result += UInt64(max(size, 0))
         }
         let lastIndex = frames.last.flatMap { frameIndex(fileName: $0.lastPathComponent) } ?? 0
+        let lastModifiedAt = frames.last.flatMap {
+            try? $0.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        } ?? nil
         let frameSummary = FrameSummary(
             count: frames.count,
             firstFileName: frames.first?.lastPathComponent,
             lastFileName: frames.last?.lastPathComponent,
             nextFrameIndex: lastIndex + 1,
-            knownBytes: bytes
+            knownBytes: bytes,
+            captureDuration: lastModifiedAt.map { max(0, $0.timeIntervalSince(document.session.createdAt)) }
         )
         let astroDirectory = document.session.directoryURL.appendingPathComponent("Astro Frames", isDirectory: true)
         let astroFrameCount = ((try? fileManager.contentsOfDirectory(

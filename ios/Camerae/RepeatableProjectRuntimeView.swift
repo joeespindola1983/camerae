@@ -157,10 +157,7 @@ struct RepeatableProjectRuntimeView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(sessions) { summary in
-                        Button {
-                            mode = .capture(referenceURL: summary.referenceFrameURL, sourceSession: summary.session)
-                        } label: {
-                            RepeatableSessionRow(
+                        RepeatableSessionRow(
                                 summary: summary,
                                 isRendering: renderingSessionID == summary.id,
                                 isExportingOriginalFrames: exportingOriginalFramesSessionID == summary.id,
@@ -177,8 +174,10 @@ struct RepeatableProjectRuntimeView: View {
                                     startExportOriginalFrames(for: summary.session)
                                 }
                             )
+                        .onTapGesture {
+                            mode = .capture(referenceURL: summary.referenceFrameURL, sourceSession: summary.session)
                         }
-                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(.isButton)
                         .swipeActions {
                             Button(role: .destructive) {
                                 pendingSessionDelete = summary.session
@@ -446,118 +445,163 @@ private enum RepeatableProjectMode: Equatable {
     case capture(referenceURL: URL?, sourceSession: TimelapseSession?)
 }
 
-private struct RepeatableSessionRow: View {
+struct SessionCardMetadata: Equatable {
+    let title: String
+    let mediaDescription: String
+    let frameDescription: String
+    let durationDescription: String
+    let compilationDescription: String
+    let isCompiled: Bool
+
+    init(summary: TimelapseSessionSummary, duration: TimeInterval?) {
+        switch summary.captureKind {
+        case .video:
+            title = "Clipe de vídeo"
+            mediaDescription = "Vídeo"
+        case .timelapse:
+            title = summary.session.module == .astrophotography ? "Timelapse Astro" : "Timelapse"
+            mediaDescription = "Sequência de imagens"
+        case .photo:
+            title = "Imagem de referencia"
+            mediaDescription = "Imagem"
+        }
+
+        frameDescription = summary.frameCount == 1 ? "1 frame" : "\(summary.frameCount) frames"
+        durationDescription = duration.map(Self.formattedDuration) ?? "Duração indisponível"
+        isCompiled = summary.hasRenderedOutput
+
+        if summary.captureKind == .video {
+            compilationDescription = summary.videoClipURL == nil ? "Vídeo indisponível" : "Vídeo pronto"
+        } else if summary.captureKind == .photo {
+            compilationDescription = "Não requer compilação"
+        } else {
+            compilationDescription = isCompiled ? "Compilado" : "Aguardando compilação"
+        }
+    }
+
+    private static func formattedDuration(_ duration: TimeInterval) -> String {
+        let seconds = max(0, Int(duration.rounded()))
+        if seconds >= 3600 {
+            return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
+        }
+        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
+    }
+}
+
+struct RepeatableSessionRow: View {
     let summary: TimelapseSessionSummary
     let isRendering: Bool
     let isExportingOriginalFrames: Bool
     let isBusy: Bool
+    var showsActions = true
     let renderAction: () -> Void
     let shareAction: () -> Void
     let exportOriginalFramesAction: () -> Void
     @State private var videoDuration: TimeInterval?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            ReferenceThumbnail(imageURL: summary.referenceFrameURL, systemImage: "photo")
+        let metadata = SessionCardMetadata(
+            summary: summary,
+            duration: videoDuration ?? summary.captureDuration
+        )
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(displayTitle)
-                    .font(.headline)
-                    .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 12) {
+            ReferenceThumbnail(
+                imageURL: summary.referenceFrameURL,
+                systemImage: summary.session.module == .astrophotography ? "sparkles" : "photo.stack",
+                width: nil,
+                height: 180,
+                maxPixelSize: 720
+            )
 
-                Text(summary.session.createdAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                Label(summary.captureKind.title, systemImage: summary.captureKind.systemImage)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let videoDuration {
-                    Label(Self.formattedDuration(videoDuration), systemImage: "clock")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if summary.captureKind != .video {
-                    Label("\(summary.frameCount) frames", systemImage: "photo.stack")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if summary.captureKind == .timelapse, summary.videoURL != nil {
-                    Label("MP4 pronto", systemImage: "film")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                } else if summary.captureKind == .video, summary.videoClipURL != nil {
-                    Label("Video pronto", systemImage: "video.fill")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                actionButtons
-                    .padding(.top, 4)
+            HStack(alignment: .firstTextBaseline) {
+                Text(metadata.title)
+                    .font(.title3.weight(.semibold))
+                Spacer(minLength: 8)
+                Label(
+                    metadata.compilationDescription,
+                    systemImage: metadata.isCompiled ? "checkmark.circle.fill" : "clock"
+                )
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(metadata.isCompiled ? Color.green : Color.secondary)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
+
+            Text(summary.session.createdAt.formatted(date: .abbreviated, time: .shortened))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 16) {
+                metadataItem(metadata.mediaDescription, systemImage: summary.captureKind.systemImage)
+                metadataItem(metadata.frameDescription, systemImage: "photo.stack")
+                metadataItem(metadata.durationDescription, systemImage: "clock")
+            }
+
+            if showsActions {
+                actionButtons
+            }
         }
-        .padding(.vertical, 6)
-        .task(id: summary.videoClipURL) {
-            videoDuration = await loadVideoDuration(from: summary.videoClipURL)
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .task(id: durationURL) {
+            videoDuration = await loadVideoDuration(from: durationURL)
         }
     }
 
-    private var displayTitle: String {
-        switch summary.captureKind {
-        case .video: return "Clipe de video"
-        case .timelapse: return "Timelapse"
-        case .photo: return "Foto"
-        }
+    private var durationURL: URL? {
+        summary.videoClipURL ?? summary.videoURL
+    }
+
+    private func metadataItem(_ text: String, systemImage: String) -> some View {
+        Label(text, systemImage: systemImage)
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
     }
 
     private var actionButtons: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
+            Button {
+                exportOriginalFramesAction()
+            } label: {
+                if isExportingOriginalFrames {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Label("Originais", systemImage: "photo.stack")
+                        .frame(maxWidth: .infinity)
+                }
+            }
+            .buttonStyle(.bordered)
+            .disabled(isBusy || summary.frameCount == 0)
+
+            if (summary.captureKind == .timelapse && summary.videoURL != nil) ||
+                (summary.captureKind == .video && summary.videoClipURL != nil) {
                 Button {
-                    exportOriginalFramesAction()
+                    shareAction()
                 } label: {
-                    if isExportingOriginalFrames {
-                        ProgressView()
-                            .frame(width: 44, height: 36)
-                    } else {
-                        Label("Originais", systemImage: "photo.stack")
-                            .labelStyle(.iconOnly)
-                            .frame(width: 44, height: 36)
-                    }
+                    Label("Exportar", systemImage: "square.and.arrow.up")
+                        .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
+                .disabled(isBusy)
+            }
+
+            if summary.captureKind == .timelapse {
+                Button {
+                    renderAction()
+                } label: {
+                    if isRendering {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        Label(summary.videoURL == nil ? "Compilar" : "Recompilar", systemImage: "film")
+                            .frame(maxWidth: .infinity)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
                 .disabled(isBusy || summary.frameCount == 0)
-
-                if (summary.captureKind == .timelapse && summary.videoURL != nil) ||
-                    (summary.captureKind == .video && summary.videoClipURL != nil) {
-                    Button {
-                        shareAction()
-                    } label: {
-                        Label("Exportar", systemImage: "square.and.arrow.up")
-                            .labelStyle(.iconOnly)
-                            .frame(width: 44, height: 36)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isBusy)
-                }
-
-                if summary.captureKind == .timelapse {
-                    Button {
-                        renderAction()
-                    } label: {
-                        if isRendering {
-                            ProgressView()
-                                .frame(width: 44, height: 36)
-                        } else {
-                            Label("MP4", systemImage: "film")
-                                .labelStyle(.iconOnly)
-                                .frame(width: 44, height: 36)
-                        }
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(isBusy || summary.frameCount == 0)
-                }
+            }
         }
     }
 
@@ -569,11 +613,4 @@ private struct RepeatableSessionRow: View {
         return seconds.isFinite && seconds >= 0 ? seconds : nil
     }
 
-    private static func formattedDuration(_ duration: TimeInterval) -> String {
-        let seconds = Int(duration.rounded())
-        if seconds >= 3600 {
-            return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-        }
-        return String(format: "%02d:%02d", seconds / 60, seconds % 60)
-    }
 }

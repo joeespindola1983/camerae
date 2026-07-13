@@ -80,13 +80,22 @@ public struct FrameSummary: Codable, Equatable, Hashable, Sendable {
     public let lastFileName: String?
     public let nextFrameIndex: Int
     public let knownBytes: UInt64
+    public let captureDuration: TimeInterval?
 
-    public init(count: Int, firstFileName: String?, lastFileName: String?, nextFrameIndex: Int, knownBytes: UInt64) {
+    public init(
+        count: Int,
+        firstFileName: String?,
+        lastFileName: String?,
+        nextFrameIndex: Int,
+        knownBytes: UInt64,
+        captureDuration: TimeInterval? = nil
+    ) {
         self.count = count
         self.firstFileName = firstFileName
         self.lastFileName = lastFileName
         self.nextFrameIndex = nextFrameIndex
         self.knownBytes = knownBytes
+        self.captureDuration = captureDuration
     }
 
     public static let empty = FrameSummary(
@@ -94,7 +103,8 @@ public struct FrameSummary: Codable, Equatable, Hashable, Sendable {
         firstFileName: nil,
         lastFileName: nil,
         nextFrameIndex: 1,
-        knownBytes: 0
+        knownBytes: 0,
+        captureDuration: nil
     )
 }
 
