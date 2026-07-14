@@ -238,6 +238,73 @@ struct AppCompositionTests {
         #expect(presentation.detail.contains("1 KB"))
     }
 
+    @Test("video metrics never describe encoded video as HEIC image frames")
+    func videoPreflightMetrics() throws {
+        let plan = try CapturePlan(
+            workflow: .repeatableVideo,
+            plannedDuration: 120,
+            captureInterval: nil,
+            sourceFormat: .heic,
+            captureFPS: 30,
+            renderFPS: nil,
+            resolution: .ultraHD,
+            astroPipeline: nil
+        )
+        let estimate = CaptureEstimate(
+            expectedFrameCount: 3_600,
+            captureBytes: 300_000_000,
+            processingBytes: 0,
+            publicationBytes: 30_000_000,
+            renderedDuration: 120
+        )
+
+        let metrics = CapturePreflightMetricsPresentation(plan: plan, estimate: estimate)
+
+        #expect(metrics.primary == "Vídeo 02:00")
+        #expect(metrics.secondary.contains("4K"))
+        #expect(metrics.secondary.contains("30 FPS"))
+        #expect(!metrics.secondary.contains("HEIC"))
+        #expect(!metrics.secondary.contains("frames"))
+    }
+
+    @Test("a cancelled preflight cannot publish stale mode information")
+    func cancelledPreflightDoesNotPublish() async throws {
+        let now = Date(timeIntervalSince1970: 400)
+        let service = CapturePreflightService(
+            storageProvider: DelayedStorageProvider(snapshotValue: .init(
+                availableForImportantUsage: 10_000_000_000,
+                capturedAt: now,
+                source: .testFixture
+            )),
+            batteryProvider: AppFixedBatteryProvider(.unknown(at: now))
+        )
+        let model = CapturePlanningViewModel(service: service)
+        let plan = try CapturePlan.preset(
+            .repeatableTimelapse(.fiveMinutes),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullSensor
+        )
+
+        let task = Task {
+            await model.evaluate(
+                plan: plan,
+                sizeProfile: .init(bytesPerFrameUpperBound: 1_000),
+                capabilityProfile: .init(
+                    supportedSourceFormats: [.heic, .jpeg],
+                    supportedAstroPipelines: []
+                ),
+                observedDrainPerHour: nil
+            )
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        task.cancel()
+        await task.value
+
+        #expect(model.result == nil)
+    }
+
     @Test("magnifier stays fully visible while dragging")
     func magnifierClampsToDisplayBounds() {
         let geometry = AlignmentMagnifierGeometry(
@@ -338,6 +405,14 @@ private struct AppFixedBatteryProvider: BatterySnapshotProviding {
     let value: BatterySnapshot
     init(_ value: BatterySnapshot) { self.value = value }
     func snapshot() async -> BatterySnapshot { value }
+}
+
+private struct DelayedStorageProvider: StorageCapacityProviding {
+    let snapshotValue: StorageCapacitySnapshot
+    func snapshot() async -> StorageCapacitySnapshot {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        return snapshotValue
+    }
 }
 
 private actor EditVideoComposerStub: EditVideoComposing {

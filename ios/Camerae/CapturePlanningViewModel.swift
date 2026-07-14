@@ -11,6 +11,7 @@ final class CapturePlanningViewModel: ObservableObject {
     @Published private(set) var errorMessage: String?
 
     private let service: CapturePreflightService
+    private var evaluationID: UUID?
 
     init(service: CapturePreflightService) {
         self.service = service
@@ -29,18 +30,30 @@ final class CapturePlanningViewModel: ObservableObject {
         capabilityProfile: DeviceCapabilityProfile,
         observedDrainPerHour: Double?
     ) async {
+        let currentID = UUID()
+        evaluationID = currentID
         isLoading = true
+        result = nil
         errorMessage = nil
-        defer { isLoading = false }
+        defer {
+            if evaluationID == currentID {
+                isLoading = false
+            }
+        }
 
         do {
-            result = try await service.evaluate(
+            let evaluated = try await service.evaluate(
                 plan: plan,
                 sizeProfile: sizeProfile,
                 capabilityProfile: capabilityProfile,
                 observedDrainPerHour: observedDrainPerHour
             )
+            guard !Task.isCancelled, evaluationID == currentID else { return }
+            result = evaluated
+        } catch is CancellationError {
+            return
         } catch {
+            guard evaluationID == currentID else { return }
             result = nil
             errorMessage = error.localizedDescription
         }
@@ -85,6 +98,40 @@ struct CapturePreflightPresentation: Equatable {
     }
 }
 
+struct CapturePreflightMetricsPresentation: Equatable {
+    let primary: String
+    let secondary: String
+
+    init(plan: CapturePlan, estimate: CaptureEstimate) {
+        switch plan.workflow {
+        case .repeatableVideo:
+            primary = "Vídeo \(Self.duration(plan.plannedDuration))"
+            secondary = "\(Self.resolution(plan.resolution)) • \(plan.captureFPS ?? 0) FPS • captura ~\(Self.bytes(estimate.captureBytes))"
+        case .repeatableTimelapse, .astro:
+            primary = "\(estimate.expectedFrameCount) frames • vídeo \(Self.duration(estimate.renderedDuration ?? 0))"
+            secondary = "\(plan.sourceFormat.rawValue.uppercased()) • captura ~\(Self.bytes(estimate.captureBytes))"
+        }
+    }
+
+    private static func resolution(_ resolution: CaptureResolution) -> String {
+        switch resolution {
+        case .highDefinition: "HD"
+        case .fullHD: "FHD"
+        case .ultraHD: "4K"
+        case .fullSensor: "Resolução máxima"
+        }
+    }
+
+    private static func duration(_ seconds: TimeInterval) -> String {
+        let total = max(Int(seconds.rounded()), 0)
+        return String(format: "%02d:%02d", total / 60, total % 60)
+    }
+
+    private static func bytes(_ value: UInt64) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(clamping: value), countStyle: .file)
+    }
+}
+
 struct CapturePreflightCard: View {
     @ObservedObject var model: CapturePlanningViewModel
 
@@ -97,6 +144,10 @@ struct CapturePreflightCard: View {
                 }
             } else if let result = model.result {
                 let presentation = CapturePreflightPresentation(storage: result.storage)
+                let metrics = CapturePreflightMetricsPresentation(
+                    plan: result.resolvedPlan,
+                    estimate: result.estimate
+                )
                 VStack(alignment: .leading, spacing: 4) {
                     Label(
                         presentation.title,
@@ -105,7 +156,9 @@ struct CapturePreflightCard: View {
                     .font(.caption.weight(.semibold))
                     Text(presentation.detail)
                         .font(.caption2)
-                    Text("\(result.estimate.expectedFrameCount) frames • \(Self.duration(result.estimate.renderedDuration)) • \(result.resolvedPlan.sourceFormat.rawValue.uppercased())")
+                    Text(metrics.primary)
+                        .font(.caption2.weight(.semibold))
+                    Text(metrics.secondary)
                         .font(.caption2)
                     if result.energy.externalPowerRecommended {
                         Text("Alimentação externa recomendada")
@@ -126,11 +179,6 @@ struct CapturePreflightCard: View {
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
     }
 
-    private static func duration(_ seconds: TimeInterval?) -> String {
-        guard let seconds, seconds.isFinite else { return "vídeo n/d" }
-        let total = Int(seconds.rounded())
-        return String(format: "%02d:%02d", total / 60, total % 60)
-    }
 }
 
 struct SystemBatterySnapshotProvider: BatterySnapshotProviding, @unchecked Sendable {

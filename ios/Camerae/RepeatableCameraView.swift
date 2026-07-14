@@ -1101,12 +1101,12 @@ struct RepeatableCameraView: View {
                 sourceFormat: sourceFormat,
                 captureFPS: selectedCaptureKind == .video ? videoSettings.fps : nil,
                 renderFPS: selectedCaptureKind == .timelapse ? videoSettings.fps : nil,
-                resolution: .fullHD,
+                resolution: captureResolution,
                 astroPipeline: nil
             )
             let profile = selectedCaptureKind == .video
                 ? CaptureSizeProfile(
-                    videoBitsPerSecondUpperBound: 20_000_000,
+                    videoBitsPerSecondUpperBound: videoBitsPerSecondUpperBound,
                     publicationOverheadFraction: 0.10
                 )
                 : CaptureSizeProfile(
@@ -1126,6 +1126,26 @@ struct RepeatableCameraView: View {
         } catch {
             // Invalid transient UI input leaves capture blocked.
         }
+    }
+
+    private var captureResolution: CaptureResolution {
+        guard selectedCaptureKind == .video else { return .fullSensor }
+        switch videoSettings.resolution {
+        case .preview: return .fullHD
+        case .fourK: return .ultraHD
+        case .full: return .fullSensor
+        }
+    }
+
+    private var videoBitsPerSecondUpperBound: UInt64 {
+        let base: Double
+        switch videoSettings.resolution {
+        case .preview: base = 16_000_000
+        case .fourK: base = 60_000_000
+        case .full: base = 80_000_000
+        }
+        let frameRateFactor = max(Double(videoSettings.fps) / 30, 1)
+        return UInt64(ceil(base * frameRateFactor * videoSettings.quality.bitRateMultiplier))
     }
 
     private var activeReferenceURL: URL? {
