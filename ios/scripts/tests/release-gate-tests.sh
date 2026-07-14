@@ -51,6 +51,10 @@ if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$
   echo "App Store upload must disable provisioning updates by default" >&2
   exit 1
 fi
+if rg -n '^ +"\$\{(provisioning_args|build_settings)\[@\]\}" \\$' "$IOS_DIR/scripts/distribute-firebase.sh"; then
+  echo "Firebase distribution must not expand optional empty arrays under set -u" >&2
+  exit 1
+fi
 if rg -n '^  (push|pull_request):' "$ROOT_DIR/.github/workflows"/*.yml; then
   echo "Release workflows must not run automatically" >&2
   exit 1
