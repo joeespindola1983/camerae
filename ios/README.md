@@ -64,17 +64,23 @@ xcodebuild \
   build
 ```
 
-Distribuicao Firebase para testers:
+Gate local sem publicação:
 
 ```sh
-scripts/distribute-firebase.sh --groups testers --release-notes "Build de teste"
+scripts/release-gate.sh check
 ```
 
-No GitHub Actions:
+Distribuição após configurar `Config/Release.local.env`:
 
-- pushes em `qa` arquivam e distribuem para o grupo Firebase `testers`;
-- pushes em `release/**` arquivam e enviam para App Store Connect;
-- os secrets ficam no GitHub Actions, nao no repositorio.
+```sh
+# Execute a partir da branch qa sincronizada.
+scripts/release-gate.sh firebase --publish
+
+# Execute a partir de release/vX.Y.Z sincronizada.
+scripts/release-gate.sh appstore --publish
+```
+
+O gate valida Git, versão, assinatura local, arquitetura, testes Swift/C++, build e somente então publica. Workflows GitHub permanecem manuais e não disparam em pushes.
 
 ## Modelos locais
 

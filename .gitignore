@@ -9,6 +9,7 @@ DerivedData/
 xcuserdata/
 Config/Signing.local.xcconfig
 ios/Config/Signing.local.xcconfig
+ios/Config/Release.local.env
 
 # Android
 android/.gradle/

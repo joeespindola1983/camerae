@@ -1,20 +1,6 @@
 name: iOS Build
 
 on:
-  push:
-    branches:
-      - main
-      - develop
-      - qa
-      - "release/**"
-    tags:
-      - "v*"
-  pull_request:
-    branches:
-      - main
-      - develop
-      - qa
-      - "release/**"
   workflow_dispatch:
 
 jobs:
