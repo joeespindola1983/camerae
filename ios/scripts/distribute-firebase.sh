@@ -28,7 +28,7 @@ Environment overrides:
   APP_STORE_CONNECT_KEY_PATH App Store Connect API private key path for CI signing.
   APP_STORE_CONNECT_KEY_ID   App Store Connect API key ID for CI signing.
   APP_STORE_CONNECT_ISSUER_ID App Store Connect API issuer ID for CI signing.
-  ALLOW_PROVISIONING_UPDATES Set to 0 to disable Xcode-managed profile updates.
+  ALLOW_PROVISIONING_UPDATES Set to 1 only for an intentional local profile update.
   EXPORT_METHOD             Same as --export-method.
   CONFIGURATION             Same as --configuration.
 
@@ -45,7 +45,7 @@ WORKSPACE="$IOS_DIR/Camerae.xcworkspace"
 SCHEME="Camerae"
 CONFIGURATION="${CONFIGURATION:-Release}"
 EXPORT_METHOD="${EXPORT_METHOD:-release-testing}"
-ALLOW_PROVISIONING_UPDATES="${ALLOW_PROVISIONING_UPDATES:-1}"
+ALLOW_PROVISIONING_UPDATES="${ALLOW_PROVISIONING_UPDATES:-0}"
 FIREBASE_PROJECT_NUMBER="${FIREBASE_PROJECT_NUMBER:-413701042509}"
 FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-camerae-59c4b}"
 FIREBASE_APP_ID="${FIREBASE_APP_ID:-1:${FIREBASE_PROJECT_NUMBER}:ios:b08c2a5a1594459dd20704}"
@@ -173,20 +173,28 @@ if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
     build_settings+=(DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic)
   fi
 
-  xcodebuild archive \
+  archive_command=(xcodebuild archive \
     -workspace "$WORKSPACE" \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -destination "generic/platform=iOS" \
-    -archivePath "$ARCHIVE_PATH" \
-    "${provisioning_args[@]}" \
-    "${build_settings[@]}"
+    -archivePath "$ARCHIVE_PATH")
+  if [[ ${#provisioning_args[@]} -gt 0 ]]; then
+    archive_command+=("${provisioning_args[@]}")
+  fi
+  if [[ ${#build_settings[@]} -gt 0 ]]; then
+    archive_command+=("${build_settings[@]}")
+  fi
+  "${archive_command[@]}"
 
-  xcodebuild -exportArchive \
+  export_command=(xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "$EXPORT_OPTIONS" \
-    "${provisioning_args[@]}"
+    -exportOptionsPlist "$EXPORT_OPTIONS")
+  if [[ ${#provisioning_args[@]} -gt 0 ]]; then
+    export_command+=("${provisioning_args[@]}")
+  fi
+  "${export_command[@]}"
 fi
 
 if [[ ! -f "$IPA_PATH" ]]; then

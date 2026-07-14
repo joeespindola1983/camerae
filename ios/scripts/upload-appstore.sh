@@ -12,6 +12,7 @@ APP_STORE_CONNECT_KEY_PATH="${APP_STORE_CONNECT_KEY_PATH:?Set APP_STORE_CONNECT_
 APP_STORE_CONNECT_KEY_ID="${APP_STORE_CONNECT_KEY_ID:?Set APP_STORE_CONNECT_KEY_ID.}"
 APP_STORE_CONNECT_ISSUER_ID="${APP_STORE_CONNECT_ISSUER_ID:?Set APP_STORE_CONNECT_ISSUER_ID.}"
 TESTFLIGHT_INTERNAL_ONLY="${TESTFLIGHT_INTERNAL_ONLY:-0}"
+ALLOW_PROVISIONING_UPDATES="${ALLOW_PROVISIONING_UPDATES:-0}"
 
 BUILD_DIR="$IOS_DIR/build/appstore-connect"
 ARCHIVE_PATH="$BUILD_DIR/Camerae.xcarchive"
@@ -55,11 +56,14 @@ if [[ "$TESTFLIGHT_INTERNAL_ONLY" == "1" ]]; then
 fi
 
 auth_args=(
-  -allowProvisioningUpdates
   -authenticationKeyPath "$APP_STORE_CONNECT_KEY_PATH"
   -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID"
   -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
 )
+
+if [[ "$ALLOW_PROVISIONING_UPDATES" == "1" ]]; then
+  auth_args=(-allowProvisioningUpdates "${auth_args[@]}")
+fi
 
 xcodebuild archive \
   -workspace "$WORKSPACE" \

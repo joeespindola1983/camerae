@@ -29,6 +29,34 @@ struct SessionManifestCompatibilityTests {
         #expect(migrated.session.cameraLens == document.session.cameraLens)
     }
 
+    @Test("legacy session writes upgrade to v5")
+    func upgradesLegacySessionToV5() throws {
+        let directory = URL(fileURLWithPath: "/tmp/session", isDirectory: true)
+        let codec = SessionManifestCodec()
+        let legacy = try codec.decode(Data(Self.legacyJSON.utf8), directoryURL: directory)
+
+        let upgraded = try codec.decode(codec.encode(legacy), directoryURL: directory)
+
+        #expect(upgraded.schemaVersion == 5)
+    }
+
+    @Test("future session schemas are rejected without reinterpretation")
+    func rejectsFutureSessionSchema() {
+        let json = Self.legacyJSON.replacingOccurrences(
+            of: "{",
+            with: "{ \"schemaVersion\": 99,",
+            options: [],
+            range: Self.legacyJSON.range(of: "{")
+        )
+
+        #expect(throws: ManifestCompatibilityError.unsupportedSessionSchema(99)) {
+            try SessionManifestCodec().decode(
+                Data(json.utf8),
+                directoryURL: URL(fileURLWithPath: "/tmp/session", isDirectory: true)
+            )
+        }
+    }
+
     private static let legacyJSON = #"""
     {
       "id": "44444444-4444-4444-4444-444444444444",
@@ -127,6 +155,33 @@ struct SessionCatalogComponentTests {
         #expect(summary?.videoSummary?.videoFileName == "timelapse.mp4")
         #expect(summary?.videoSummary?.clipFileName == "video.mov")
         #expect(summary?.astroSummary?.hasRenderedClip == true)
+    }
+
+    @Test("HEIC frames keep their format and survive inventory repair")
+    func heicFramesRepair() async throws {
+        let library = try SessionTemporaryLibrary()
+        defer { library.remove() }
+        let catalog = SessionCatalog(project: library.project)
+        let session = try await catalog.createSession(captureKind: .timelapse)
+        try await catalog.beginCapture(sessionID: session.id)
+
+        let first = try await catalog.saveFrame(
+            Data([1, 2]),
+            sessionID: session.id,
+            index: 1,
+            format: .heic
+        )
+        try await catalog.checkpoint(sessionID: session.id)
+        try Data([3, 4, 5]).write(
+            to: session.directoryURL.appendingPathComponent("frame_000002.heic")
+        )
+
+        let summary = try await SessionCatalog(project: library.project).loadSummaries().first
+
+        #expect(first.pathExtension == "heic")
+        #expect(summary?.frameSummary.count == 2)
+        #expect(summary?.frameSummary.knownBytes == 5)
+        #expect(summary?.frameSummary.nextFrameIndex == 3)
     }
 }
 

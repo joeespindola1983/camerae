@@ -1,9 +1,11 @@
 import AVFoundation
+import CameraeCore
 import SwiftUI
 import UIKit
 
 struct RepeatableCameraView: View {
     @StateObject private var camera: CameraController
+    @StateObject private var planning: CapturePlanningViewModel
 
     private let project: CameraProject
     private let store: TimelapseSessionStore
@@ -49,6 +51,10 @@ struct RepeatableCameraView: View {
     @State private var referenceOverlayID = UUID()
     @State private var edgeReferenceRenderID = UUID()
     @State private var currentAlignmentOrientation = CaptureDisplayOrientation.portrait
+    @State private var durationOption = RepeatableDurationOption.short
+    @State private var customVideoSeconds = 90
+    @State private var customTimelapseMinutes = 45
+    @State private var sourceFormat = CaptureSourceFormat.heic
 
     init(
         project: CameraProject,
@@ -74,6 +80,9 @@ struct RepeatableCameraView: View {
             project: project,
             captureMode: .repeatable,
             initialRepeatableLens: referenceLens
+        ))
+        _planning = StateObject(wrappedValue: CapturePlanningViewModel(
+            projectDirectoryURL: project.directoryURL
         ))
     }
 
@@ -104,6 +113,9 @@ struct RepeatableCameraView: View {
             await camera.start()
             await camera.setExposureBias(evBias)
             loadReference()
+        }
+        .task(id: planningInput) {
+            await refreshPreflight()
         }
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             refreshReferenceOverlay()
@@ -166,6 +178,41 @@ struct RepeatableCameraView: View {
             }
 
             Section("Ajustes") {
+                Picker("Tamanho do clipe", selection: $durationOption) {
+                    ForEach(RepeatableDurationOption.options(for: selectedCaptureKind)) { option in
+                        Text(option.title(for: selectedCaptureKind)).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .disabled(isCaptureActive)
+
+                if durationOption == .custom {
+                    if selectedCaptureKind == .video {
+                        Stepper(
+                            "Duração: \(customVideoSeconds)s",
+                            value: $customVideoSeconds,
+                            in: 10...3_600,
+                            step: 10
+                        )
+                    } else {
+                        Stepper(
+                            "Duração: \(customTimelapseMinutes) min",
+                            value: $customTimelapseMinutes,
+                            in: 1...720,
+                            step: 5
+                        )
+                    }
+                }
+
+                if selectedCaptureKind == .timelapse {
+                    Picker("Formato", selection: $sourceFormat) {
+                        Text("HEIC").tag(CaptureSourceFormat.heic)
+                        Text("JPEG").tag(CaptureSourceFormat.jpeg)
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(isCaptureActive)
+                }
+
                 RepeatableControlSlider(
                     title: "EV",
                     value: $evBias,
@@ -201,6 +248,10 @@ struct RepeatableCameraView: View {
                         isDisabled: isCaptureActive
                     )
                 }
+            }
+
+            Section("Planejamento") {
+                CapturePreflightCard(model: planning)
             }
 
             if selectedCaptureKind == .video {
@@ -260,6 +311,7 @@ struct RepeatableCameraView: View {
 
     private var alignmentView: some View {
         GeometryReader { proxy in
+            let safeTop = proxy.safeAreaInsets.top
             ZStack {
                 Color.black
                     .ignoresSafeArea()
@@ -315,14 +367,14 @@ struct RepeatableCameraView: View {
                     let hudWidth = min(proxy.size.width * 0.44, 250)
                     VisualDistanceHUD(estimate: visualAlignment)
                         .frame(width: hudWidth, height: 74)
-                        .position(x: min(proxy.size.width * 0.25, 145), y: 154)
+                        .position(x: min(proxy.size.width * 0.25, 145), y: safeTop + 154)
                 }
 
                 if isPositionHUDVisible, let referenceGeoPose, let currentGeoPose = camera.currentGeoPose {
                     let hudSize = min(proxy.size.width * 0.34, 150)
                     GeoAlignmentHUD(reference: referenceGeoPose, current: currentGeoPose)
                         .frame(width: hudSize, height: hudSize)
-                        .position(x: proxy.size.width - hudSize / 2 - 12, y: hudSize / 2 + 74)
+                        .position(x: proxy.size.width - hudSize / 2 - 12, y: safeTop + hudSize / 2 + 74)
                 }
 
                 if isPositionHUDVisible, let currentHeading = camera.currentGeoPose?.heading {
@@ -332,7 +384,7 @@ struct RepeatableCameraView: View {
                         currentHeading: currentHeading
                     )
                     .frame(width: hudWidth, height: 54)
-                    .position(x: min(proxy.size.width * 0.25, 145), y: 82)
+                    .position(x: min(proxy.size.width * 0.25, 145), y: safeTop + 82)
                 }
 
                 if isMagnifierVisible {
@@ -362,7 +414,9 @@ struct RepeatableCameraView: View {
                     Spacer(minLength: 0)
                     alignmentBottomBar(for: proxy.size)
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, safeTop + 12)
+                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
                 .foregroundStyle(.white)
                 .shadow(radius: 12)
 
@@ -385,7 +439,6 @@ struct RepeatableCameraView: View {
                 updateAlignmentOrientation(for: size)
             }
         }
-        .ignoresSafeArea()
     }
 
     private var hudTogglePanel: some View {
@@ -688,7 +741,7 @@ struct RepeatableCameraView: View {
             }
 
             if let startedAt = camera.videoRecordingStartedAt {
-                recordingTimer(startedAt: startedAt)
+                recordingCountdown(startedAt: startedAt)
             }
 
             Spacer()
@@ -893,9 +946,21 @@ struct RepeatableCameraView: View {
                 Task {
                     switch selectedCaptureKind {
                     case .timelapse:
-                        await camera.toggleTimelapse(interval: intervalSeconds)
+                        guard let plan = planning.result?.resolvedPlan else { return }
+                        if let preflight = planning.result {
+                            camera.configureCapturePreflight(preflight)
+                        }
+                        camera.setCaptureSourceFormat(plan.sourceFormat)
+                        await camera.toggleTimelapse(
+                            interval: intervalSeconds,
+                            plan: plan
+                        )
                     case .video:
-                        await camera.toggleVideoRecording()
+                        guard let plan = planning.result?.resolvedPlan else { return }
+                        if let preflight = planning.result {
+                            camera.configureCapturePreflight(preflight)
+                        }
+                        await camera.toggleVideoRecording(plan: plan)
                     case .photo:
                         await camera.captureSinglePhoto()
                     }
@@ -912,6 +977,7 @@ struct RepeatableCameraView: View {
             .buttonStyle(.borderedProminent)
             .tint(camera.isTimelapseRunning || camera.isVideoRecording ? .red : .blue)
             .disabled(camera.isSinglePhotoCaptureRunning)
+            .disabled(!isCaptureActive && !canStartCapture)
         }
         .foregroundStyle(.white)
         .padding(12)
@@ -947,38 +1013,53 @@ struct RepeatableCameraView: View {
         case .timelapse:
             return "Finalizar timelapse"
         case .video:
-            return "Finalizar video"
+            return "Encerrar e manter clipe"
         case .photo:
             return "Finalizar"
         }
     }
 
     @ViewBuilder
-    private func recordingTimer(startedAt: Date) -> some View {
+    private func recordingCountdown(startedAt: Date) -> some View {
         TimelineView(.periodic(from: startedAt, by: 1)) { context in
-            let elapsed = max(0, Int(context.date.timeIntervalSince(startedAt)))
-            Label(Self.formattedRecordingDuration(elapsed), systemImage: "record.circle.fill")
+            let remaining = RepeatableRecordingCountdown.remainingSeconds(
+                startedAt: startedAt,
+                plannedDuration: plannedDuration,
+                now: context.date
+            )
+            Label(
+                RepeatableRecordingCountdown.label(seconds: remaining),
+                systemImage: "timer"
+            )
                 .font(.system(.body, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.red)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(.ultraThinMaterial, in: Capsule())
-                .accessibilityLabel("Tempo de gravacao")
-                .accessibilityValue(Self.formattedRecordingDuration(elapsed))
+                .accessibilityLabel("Tempo restante do clipe")
+                .accessibilityValue(RepeatableRecordingCountdown.label(seconds: remaining))
         }
-    }
-
-    private static func formattedRecordingDuration(_ seconds: Int) -> String {
-        String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     private func performPrimaryCaptureAction() async {
         camera.setPendingReferenceOrientation(currentAlignmentOrientation)
         switch selectedCaptureKind {
         case .timelapse:
-            await camera.toggleTimelapse(interval: intervalSeconds)
+            guard let plan = planning.result?.resolvedPlan else { return }
+            if let preflight = planning.result {
+                camera.configureCapturePreflight(preflight)
+            }
+            camera.setCaptureSourceFormat(plan.sourceFormat)
+            await camera.toggleTimelapse(
+                interval: intervalSeconds,
+                plan: plan
+            )
         case .video:
-            await camera.toggleVideoRecording()
+            guard let plan = planning.result?.resolvedPlan else { return }
+            if let preflight = planning.result {
+                camera.configureCapturePreflight(preflight)
+            }
+            await camera.toggleVideoRecording(plan: plan)
         case .photo:
             await camera.captureSinglePhoto()
         }
@@ -986,6 +1067,91 @@ struct RepeatableCameraView: View {
 
     private var isCaptureActive: Bool {
         camera.isTimelapseRunning || camera.isVideoRecording || camera.isSinglePhotoCaptureRunning
+    }
+
+    private var plannedDuration: TimeInterval {
+        if let preset = durationOption.duration(for: selectedCaptureKind) {
+            return preset
+        }
+        return selectedCaptureKind == .video
+            ? TimeInterval(customVideoSeconds)
+            : TimeInterval(customTimelapseMinutes * 60)
+    }
+
+    private var planningInput: RepeatablePlanningInput {
+        RepeatablePlanningInput(
+            kind: selectedCaptureKind,
+            duration: plannedDuration,
+            interval: intervalSeconds,
+            format: sourceFormat,
+            fps: videoSettings.fps,
+            supportedFormats: camera.supportedSourceFormats
+        )
+    }
+
+    private var canStartCapture: Bool {
+        guard let result = planning.result else { return false }
+        return CapturePreflightPresentation(storage: result.storage).canStart
+    }
+
+    private func refreshPreflight() async {
+        guard selectedCaptureKind != .photo else { return }
+        do {
+            let workflow: CaptureWorkflow = selectedCaptureKind == .video
+                ? .repeatableVideo
+                : .repeatableTimelapse
+            let plan = try CapturePlan(
+                workflow: workflow,
+                plannedDuration: plannedDuration,
+                captureInterval: selectedCaptureKind == .timelapse ? intervalSeconds : nil,
+                sourceFormat: sourceFormat,
+                captureFPS: selectedCaptureKind == .video ? videoSettings.fps : nil,
+                renderFPS: selectedCaptureKind == .timelapse ? videoSettings.fps : nil,
+                resolution: captureResolution,
+                astroPipeline: nil
+            )
+            let profile = selectedCaptureKind == .video
+                ? CaptureSizeProfile(
+                    videoBitsPerSecondUpperBound: videoBitsPerSecondUpperBound,
+                    publicationOverheadFraction: 0.10
+                )
+                : CaptureSizeProfile(
+                    bytesPerFrameUpperBound: sourceFormat == .heic ? 4_000_000 : 8_000_000,
+                    processingOverheadFraction: 0.10,
+                    publicationOverheadFraction: 0.20
+                )
+            await planning.evaluate(
+                plan: plan,
+                sizeProfile: profile,
+                capabilityProfile: .init(
+                    supportedSourceFormats: camera.supportedSourceFormats,
+                    supportedAstroPipelines: []
+                ),
+                observedDrainPerHour: selectedCaptureKind == .video ? 0.12 : 0.10
+            )
+        } catch {
+            // Invalid transient UI input leaves capture blocked.
+        }
+    }
+
+    private var captureResolution: CaptureResolution {
+        guard selectedCaptureKind == .video else { return .fullSensor }
+        switch videoSettings.resolution {
+        case .preview: return .fullHD
+        case .fourK: return .ultraHD
+        case .full: return .fullSensor
+        }
+    }
+
+    private var videoBitsPerSecondUpperBound: UInt64 {
+        let base: Double
+        switch videoSettings.resolution {
+        case .preview: base = 16_000_000
+        case .fourK: base = 60_000_000
+        case .full: base = 80_000_000
+        }
+        let frameRateFactor = max(Double(videoSettings.fps) / 30, 1)
+        return UInt64(ceil(base * frameRateFactor * videoSettings.quality.bitRateMultiplier))
     }
 
     private var activeReferenceURL: URL? {
@@ -2174,5 +2340,66 @@ private struct RepeatableControlSlider: View {
         .font(.system(size: 12, weight: .semibold))
         .opacity(isDisabled ? 0.55 : 1)
         .disabled(isDisabled)
+    }
+}
+
+private enum RepeatableDurationOption: String, CaseIterable, Identifiable {
+    case short
+    case medium
+    case long
+    case custom
+
+    var id: String { rawValue }
+
+    static func options(for kind: RepeatableCaptureKind) -> [RepeatableDurationOption] {
+        kind == .video ? [.short, .medium, .custom] : allCases
+    }
+
+    func duration(for kind: RepeatableCaptureKind) -> TimeInterval? {
+        switch (kind, self) {
+        case (.video, .short): 30
+        case (.video, .medium): 60
+        case (.timelapse, .short): 5 * 60
+        case (.timelapse, .medium): 10 * 60
+        case (.timelapse, .long): 30 * 60
+        case (_, .custom), (.video, .long), (.photo, _): nil
+        }
+    }
+
+    func title(for kind: RepeatableCaptureKind) -> String {
+        switch (kind, self) {
+        case (.video, .short): "30s"
+        case (.video, .medium): "1m"
+        case (.timelapse, .short): "5m"
+        case (.timelapse, .medium): "10m"
+        case (.timelapse, .long): "30m"
+        case (_, .custom): "Custom"
+        default: "—"
+        }
+    }
+}
+
+private struct RepeatablePlanningInput: Hashable {
+    let kind: RepeatableCaptureKind
+    let duration: TimeInterval
+    let interval: TimeInterval
+    let format: CaptureSourceFormat
+    let fps: Int
+    let supportedFormats: Set<CaptureSourceFormat>
+}
+
+struct RepeatableRecordingCountdown: Equatable, Sendable {
+    static func remainingSeconds(
+        startedAt: Date,
+        plannedDuration: TimeInterval,
+        now: Date
+    ) -> Int {
+        let remaining = plannedDuration - max(0, now.timeIntervalSince(startedAt))
+        return max(0, Int(ceil(remaining)))
+    }
+
+    static func label(seconds: Int) -> String {
+        let safeSeconds = max(0, seconds)
+        return String(format: "%02d:%02d", safeSeconds / 60, safeSeconds % 60)
     }
 }

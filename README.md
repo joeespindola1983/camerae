@@ -38,8 +38,10 @@ Camerae uses a lightweight GitFlow:
 
 - `main` receives completed development work.
 - `qa` receives stabilization builds for tester validation.
-- `release/*` receives release candidates and future App Store Connect automation.
+- `release/*` receives release candidates for local App Store Connect publication.
 - Tags use `vMAJOR.MINOR.PATCH`, for example `v2.1.0`.
+
+Releases run through the local macOS gate in `ios/scripts/release-gate.sh`; GitHub Actions workflows are manual-only.
 
 See `docs/GITFLOW.md` for branch, CI, and release details.
 
