@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -40,6 +41,10 @@ struct RepeatableCameraView: View {
     @State private var isTimelapseInfoVisible = false
     @State private var isGridVisible = true
     @State private var isVisualMatchGuideVisible = true
+    @State private var isMagnifierVisible = false
+    @State private var magnifierCenter = CGPoint.zero
+    @State private var magnifierZoom = AlignmentMagnifierZoom.four
+    @State private var alignmentDisplaySize = CGSize.zero
     @State private var activeHUDCategory: AlignmentHUDCategory?
     @State private var referenceOverlayID = UUID()
     @State private var edgeReferenceRenderID = UUID()
@@ -330,6 +335,19 @@ struct RepeatableCameraView: View {
                     .position(x: min(proxy.size.width * 0.25, 145), y: 82)
                 }
 
+                if isMagnifierVisible {
+                    AlignmentMagnifierHUD(
+                        session: camera.session,
+                        referenceImage: referenceImage.map(overlayImage),
+                        referenceOrientation: referenceOrientation,
+                        displayOrientation: currentAlignmentOrientation,
+                        referenceOpacity: referenceOverlayOpacity,
+                        displaySize: proxy.size,
+                        center: $magnifierCenter,
+                        zoom: $magnifierZoom
+                    )
+                }
+
                 if activeHUDCategory != nil {
                     Color.clear
                         .contentShape(Rectangle())
@@ -357,9 +375,13 @@ struct RepeatableCameraView: View {
                 .padding(.leading, 12)
             }
             .onAppear {
+                alignmentDisplaySize = proxy.size
+                initializeMagnifierPositionIfNeeded(for: proxy.size)
                 updateAlignmentOrientation(for: proxy.size)
             }
             .onChange(of: proxy.size) { _, size in
+                alignmentDisplaySize = size
+                clampMagnifierPosition(for: size)
                 updateAlignmentOrientation(for: size)
             }
         }
@@ -458,6 +480,17 @@ struct RepeatableCameraView: View {
                     accessibilityLabel: "Alternar escala visual"
                 ) {
                     isScaleHUDVisible.toggle()
+                }
+
+                hudToggleButton(
+                    systemImage: "magnifyingglass",
+                    isOn: isMagnifierVisible,
+                    accessibilityLabel: "Alternar lupa de alinhamento"
+                ) {
+                    isMagnifierVisible.toggle()
+                    if isMagnifierVisible {
+                        initializeMagnifierPositionIfNeeded(for: alignmentDisplaySize)
+                    }
                 }
 
             case .blink:
@@ -1094,6 +1127,20 @@ struct RepeatableCameraView: View {
         }
     }
 
+    private func initializeMagnifierPositionIfNeeded(for size: CGSize) {
+        guard size.width > 0, size.height > 0, magnifierCenter == .zero else { return }
+        let geometry = AlignmentMagnifierGeometry(displaySize: size)
+        magnifierCenter = geometry.initialCenter
+    }
+
+    private func clampMagnifierPosition(for size: CGSize) {
+        guard size.width > 0, size.height > 0 else { return }
+        let geometry = AlignmentMagnifierGeometry(displaySize: size)
+        magnifierCenter = magnifierCenter == .zero
+            ? geometry.initialCenter
+            : geometry.clampedCenter(magnifierCenter)
+    }
+
     private func deleteOpenedTimelapse() {
         guard let openedSession else { return }
 
@@ -1197,6 +1244,161 @@ private enum ReferenceBlinkOpacity: CaseIterable {
 private enum RepeatableCapturePhase {
     case setup
     case align
+}
+
+enum AlignmentMagnifierZoom: CGFloat, CaseIterable, Equatable {
+    case two = 2
+    case four = 4
+    case six = 6
+
+    var next: AlignmentMagnifierZoom {
+        switch self {
+        case .two: return .four
+        case .four: return .six
+        case .six: return .two
+        }
+    }
+
+    var label: String {
+        "\(Int(rawValue))×"
+    }
+}
+
+struct AlignmentMagnifierGeometry: Equatable {
+    let displaySize: CGSize
+    let lensSize: CGFloat
+    let margin: CGFloat
+
+    init(displaySize: CGSize, lensSize: CGFloat = 140, margin: CGFloat = 8) {
+        self.displaySize = displaySize
+        self.lensSize = lensSize
+        self.margin = margin
+    }
+
+    var initialCenter: CGPoint {
+        clampedCenter(CGPoint(
+            x: displaySize.width - lensSize / 2 - 16,
+            y: lensSize / 2 + 76
+        ))
+    }
+
+    func clampedCenter(_ point: CGPoint) -> CGPoint {
+        let inset = lensSize / 2 + margin
+        let maximumX = max(inset, displaySize.width - inset)
+        let maximumY = max(inset, displaySize.height - inset)
+        return CGPoint(
+            x: min(max(point.x, inset), maximumX),
+            y: min(max(point.y, inset), maximumY)
+        )
+    }
+
+    func contentOffset(samplePoint: CGPoint, zoom: CGFloat) -> CGSize {
+        CGSize(
+            width: lensSize / 2 - samplePoint.x * zoom,
+            height: lensSize / 2 - samplePoint.y * zoom
+        )
+    }
+}
+
+private struct AlignmentMagnifierHUD: View {
+    let session: AVCaptureSession
+    let referenceImage: UIImage?
+    let referenceOrientation: CaptureDisplayOrientation?
+    let displayOrientation: CaptureDisplayOrientation
+    let referenceOpacity: Double
+    let displaySize: CGSize
+    @Binding var center: CGPoint
+    @Binding var zoom: AlignmentMagnifierZoom
+
+    private let lensSize: CGFloat = 140
+    @GestureState private var dragTranslation = CGSize.zero
+
+    var body: some View {
+        let geometry = AlignmentMagnifierGeometry(displaySize: displaySize, lensSize: lensSize)
+        let renderedCenter = geometry.clampedCenter(CGPoint(
+            x: center.x + dragTranslation.width,
+            y: center.y + dragTranslation.height
+        ))
+
+        ZStack(alignment: .topLeading) {
+            magnifiedComposite(samplePoint: renderedCenter, geometry: geometry)
+                .allowsHitTesting(false)
+
+            Rectangle()
+                .stroke(.white.opacity(0.92), lineWidth: 2)
+
+            Path { path in
+                let middle = lensSize / 2
+                path.move(to: CGPoint(x: middle - 10, y: middle))
+                path.addLine(to: CGPoint(x: middle + 10, y: middle))
+                path.move(to: CGPoint(x: middle, y: middle - 10))
+                path.addLine(to: CGPoint(x: middle, y: middle + 10))
+            }
+            .stroke(.white.opacity(0.9), lineWidth: 1)
+
+            Text(zoom.label)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 4)
+                .background(.black.opacity(0.58), in: Capsule())
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .padding(7)
+        }
+        .frame(width: lensSize, height: lensSize)
+        .background(.black)
+        .clipShape(Rectangle())
+        .shadow(color: .black.opacity(0.5), radius: 12, y: 5)
+        .position(renderedCenter)
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($dragTranslation) { value, state, _ in
+                    state = value.translation
+                }
+                .onEnded { value in
+                    center = geometry.clampedCenter(CGPoint(
+                        x: center.x + value.translation.width,
+                        y: center.y + value.translation.height
+                    ))
+                }
+        )
+        .simultaneousGesture(
+            TapGesture(count: 2)
+                .onEnded {
+                    zoom = zoom.next
+                }
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Lupa de alinhamento")
+        .accessibilityValue("Zoom \(zoom.label)")
+        .accessibilityHint("Arraste para mover e toque duas vezes para alterar o zoom")
+    }
+
+    private func magnifiedComposite(
+        samplePoint: CGPoint,
+        geometry: AlignmentMagnifierGeometry
+    ) -> some View {
+        let scale = zoom.rawValue
+        let offset = geometry.contentOffset(samplePoint: samplePoint, zoom: scale)
+
+        return ZStack {
+            CameraPreview(session: session)
+                .frame(width: displaySize.width, height: displaySize.height)
+
+            if let referenceImage {
+                ReferenceOverlayImage(
+                    image: referenceImage,
+                    referenceOrientation: referenceOrientation,
+                    displayOrientation: displayOrientation
+                )
+                .frame(width: displaySize.width, height: displaySize.height)
+                .opacity(referenceOpacity)
+            }
+        }
+        .frame(width: displaySize.width, height: displaySize.height, alignment: .topLeading)
+        .scaleEffect(scale, anchor: .topLeading)
+        .offset(offset)
+    }
 }
 
 private struct ReferenceOverlayImage: View {

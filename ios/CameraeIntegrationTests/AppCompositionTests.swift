@@ -43,6 +43,36 @@ struct AppCompositionTests {
         #expect(metadata.compilationDescription == "Vídeo pronto")
     }
 
+    @Test("magnifier stays fully visible while dragging")
+    func magnifierClampsToDisplayBounds() {
+        let geometry = AlignmentMagnifierGeometry(
+            displaySize: CGSize(width: 390, height: 844),
+            lensSize: 140,
+            margin: 8
+        )
+
+        #expect(geometry.clampedCenter(CGPoint(x: -40, y: 900)) == CGPoint(x: 78, y: 766))
+        #expect(geometry.clampedCenter(CGPoint(x: 220, y: 300)) == CGPoint(x: 220, y: 300))
+    }
+
+    @Test("magnifier aligns the sampled point with its local center")
+    func magnifierContentOffset() {
+        let geometry = AlignmentMagnifierGeometry(
+            displaySize: CGSize(width: 390, height: 844),
+            lensSize: 140,
+            margin: 8
+        )
+
+        #expect(geometry.contentOffset(samplePoint: CGPoint(x: 300, y: 200), zoom: 4) == CGSize(width: -1_130, height: -730))
+    }
+
+    @Test("magnifier zoom cycles through the supported levels")
+    func magnifierZoomCycle() {
+        #expect(AlignmentMagnifierZoom.two.next == .four)
+        #expect(AlignmentMagnifierZoom.four.next == .six)
+        #expect(AlignmentMagnifierZoom.six.next == .two)
+    }
+
     private func makeSummary(
         kind: RepeatableCaptureKind,
         frames: Int,
