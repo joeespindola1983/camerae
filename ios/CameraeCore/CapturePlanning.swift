@@ -632,3 +632,87 @@ public struct CapturePlanCodec: Sendable {
         }
     }
 }
+
+public struct CapturePreflightResult: Equatable, Sendable {
+    public let resolvedPlan: CapturePlan
+    public let formatFallbackReason: CaptureFormatFallbackReason?
+    public let estimate: CaptureEstimate
+    public let storageSnapshot: StorageCapacitySnapshot
+    public let storage: CaptureAdmissionResult
+    public let batterySnapshot: BatterySnapshot
+    public let energy: CaptureEnergyEstimate
+}
+
+public struct CapturePreflightService: Sendable {
+    private let storageProvider: any StorageCapacityProviding
+    private let batteryProvider: any BatterySnapshotProviding
+    private let estimator: CapturePlanEstimator
+    private let formatResolver: CaptureFormatResolver
+    private let admissionPolicy: CaptureAdmissionPolicy
+    private let energyEstimator: CaptureEnergyEstimator
+
+    public init(
+        storageProvider: any StorageCapacityProviding,
+        batteryProvider: any BatterySnapshotProviding,
+        estimator: CapturePlanEstimator = .init(),
+        formatResolver: CaptureFormatResolver = .init(),
+        admissionPolicy: CaptureAdmissionPolicy = .init(),
+        energyEstimator: CaptureEnergyEstimator = .init()
+    ) {
+        self.storageProvider = storageProvider
+        self.batteryProvider = batteryProvider
+        self.estimator = estimator
+        self.formatResolver = formatResolver
+        self.admissionPolicy = admissionPolicy
+        self.energyEstimator = energyEstimator
+    }
+
+    public func evaluate(
+        plan: CapturePlan,
+        sizeProfile: CaptureSizeProfile,
+        capabilityProfile: DeviceCapabilityProfile,
+        observedDrainPerHour: Double?
+    ) async throws -> CapturePreflightResult {
+        let format = try formatResolver.resolve(
+            preferred: plan.sourceFormat,
+            profile: capabilityProfile
+        )
+        let resolvedPlan = try plan.replacingSourceFormat(format.selectedFormat)
+        let estimate = try estimator.estimate(plan: resolvedPlan, sizeProfile: sizeProfile)
+        async let storageSnapshot = storageProvider.snapshot()
+        async let batterySnapshot = batteryProvider.snapshot()
+        let (storage, battery) = await (storageSnapshot, batterySnapshot)
+
+        return CapturePreflightResult(
+            resolvedPlan: resolvedPlan,
+            formatFallbackReason: format.fallbackReason,
+            estimate: estimate,
+            storageSnapshot: storage,
+            storage: admissionPolicy.evaluate(
+                estimate: estimate,
+                availableBytes: storage.availableForImportantUsage
+            ),
+            batterySnapshot: battery,
+            energy: energyEstimator.estimate(
+                plan: resolvedPlan,
+                snapshot: battery,
+                observedDrainPerHour: observedDrainPerHour
+            )
+        )
+    }
+}
+
+private extension CapturePlan {
+    func replacingSourceFormat(_ format: CaptureSourceFormat) throws -> CapturePlan {
+        try CapturePlan(
+            workflow: workflow,
+            plannedDuration: plannedDuration,
+            captureInterval: captureInterval,
+            sourceFormat: format,
+            captureFPS: captureFPS,
+            renderFPS: renderFPS,
+            resolution: resolution,
+            astroPipeline: astroPipeline
+        )
+    }
+}

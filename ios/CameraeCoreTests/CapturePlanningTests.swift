@@ -305,3 +305,74 @@ struct CapturePlanPersistenceTests {
         }
     }
 }
+
+@Suite("Capture preflight service")
+struct CapturePreflightServiceTests {
+    @Test("preflight resolves format and blocks a plan that cannot finish")
+    func blocksInsufficientStorage() async throws {
+        let now = Date(timeIntervalSince1970: 100)
+        let storage = FixedStorageCapacityProvider(
+            StorageCapacitySnapshot(
+                availableForImportantUsage: 1_000,
+                capturedAt: now,
+                source: .testFixture
+            )
+        )
+        let battery = FixedBatterySnapshotProvider(
+            BatterySnapshot(
+                level: 0.9,
+                state: .charging,
+                isLowPowerModeEnabled: false,
+                thermalState: .nominal,
+                capturedAt: now
+            )
+        )
+        let service = CapturePreflightService(
+            storageProvider: storage,
+            batteryProvider: battery,
+            admissionPolicy: CaptureAdmissionPolicy(
+                configuration: .init(
+                    minimumOperationalReserve: 500,
+                    planReserveFraction: 0,
+                    warningMarginFraction: 0
+                )
+            )
+        )
+        let plan = try CapturePlan.preset(
+            .repeatableTimelapse(.fiveMinutes),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullHD
+        )
+
+        let result = try await service.evaluate(
+            plan: plan,
+            sizeProfile: .init(bytesPerFrameUpperBound: 10),
+            capabilityProfile: .init(
+                supportedSourceFormats: [.jpeg],
+                supportedAstroPipelines: []
+            ),
+            observedDrainPerHour: 0.1
+        )
+
+        #expect(result.resolvedPlan.sourceFormat == .jpeg)
+        #expect(result.formatFallbackReason == .preferredFormatUnavailable)
+        #expect(result.estimate.expectedFrameCount == 60)
+        #expect(result.storage.decision == .blocked)
+        #expect(result.storage.shortfallBytes == 100)
+        #expect(result.energy.decision == .sufficient)
+    }
+}
+
+private struct FixedStorageCapacityProvider: StorageCapacityProviding {
+    let value: StorageCapacitySnapshot
+    init(_ value: StorageCapacitySnapshot) { self.value = value }
+    func snapshot() async -> StorageCapacitySnapshot { value }
+}
+
+private struct FixedBatterySnapshotProvider: BatterySnapshotProviding {
+    let value: BatterySnapshot
+    init(_ value: BatterySnapshot) { self.value = value }
+    func snapshot() async -> BatterySnapshot { value }
+}
