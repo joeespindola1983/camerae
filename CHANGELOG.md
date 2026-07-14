@@ -11,6 +11,7 @@
 - Added atomic validation and publication of rendered MP4 artifacts so a failed render cannot replace the last valid result.
 - Added Core, Media, and integration coverage for planning, compatibility, recovery, storage safety, and Repeatable video presentation.
 - Added a fail-closed local release gate for Git, signing, tests, builds, Firebase, and App Store Connect; automatic GitHub Actions triggers are disabled.
+- Updated the iOS app icon and refined Repeatable video with a clip-size label, recording countdown, explicit early-stop retention, and safe-area-aware capture controls.
 
 ## v4.0.0
 
