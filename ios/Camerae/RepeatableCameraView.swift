@@ -945,6 +945,9 @@ struct RepeatableCameraView: View {
                     switch selectedCaptureKind {
                     case .timelapse:
                         guard let plan = planning.result?.resolvedPlan else { return }
+                        if let preflight = planning.result {
+                            camera.configureCapturePreflight(preflight)
+                        }
                         camera.setCaptureSourceFormat(plan.sourceFormat)
                         await camera.toggleTimelapse(
                             interval: intervalSeconds,
@@ -952,6 +955,9 @@ struct RepeatableCameraView: View {
                         )
                     case .video:
                         guard let plan = planning.result?.resolvedPlan else { return }
+                        if let preflight = planning.result {
+                            camera.configureCapturePreflight(preflight)
+                        }
                         await camera.toggleVideoRecording(plan: plan)
                     case .photo:
                         await camera.captureSinglePhoto()
@@ -1035,6 +1041,9 @@ struct RepeatableCameraView: View {
         switch selectedCaptureKind {
         case .timelapse:
             guard let plan = planning.result?.resolvedPlan else { return }
+            if let preflight = planning.result {
+                camera.configureCapturePreflight(preflight)
+            }
             camera.setCaptureSourceFormat(plan.sourceFormat)
             await camera.toggleTimelapse(
                 interval: intervalSeconds,
@@ -1042,6 +1051,9 @@ struct RepeatableCameraView: View {
             )
         case .video:
             guard let plan = planning.result?.resolvedPlan else { return }
+            if let preflight = planning.result {
+                camera.configureCapturePreflight(preflight)
+            }
             await camera.toggleVideoRecording(plan: plan)
         case .photo:
             await camera.captureSinglePhoto()

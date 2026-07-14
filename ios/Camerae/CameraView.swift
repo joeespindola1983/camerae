@@ -248,6 +248,9 @@ struct CameraView: View {
             Button {
                 Task {
                     guard let plan = planning.result?.resolvedPlan else { return }
+                    if let preflight = planning.result {
+                        camera.configureCapturePreflight(preflight)
+                    }
                     camera.setCaptureSourceFormat(plan.sourceFormat)
                     await camera.toggleAstroBatchCapture(
                         timelapseInterval: timelapseIntervalSeconds,

@@ -289,6 +289,95 @@ public struct CaptureRunBudget: Equatable, Sendable {
     }
 }
 
+public enum CaptureStorageGuardDecision: String, Equatable, Sendable {
+    case healthy
+    case warning
+    case stop
+}
+
+public enum CaptureStorageGuardReason: String, Equatable, Sendable {
+    case sufficientMargin
+    case lowMargin
+    case completionReserveAtRisk
+    case capacityUnavailable
+    case arithmeticOverflow
+}
+
+public struct CaptureStorageGuardResult: Equatable, Sendable {
+    public let decision: CaptureStorageGuardDecision
+    public let reason: CaptureStorageGuardReason
+    public let availableBytes: UInt64?
+    public let stopThresholdBytes: UInt64?
+}
+
+public struct CaptureStorageGuard: Equatable, Sendable {
+    public let completionReserveBytes: UInt64
+    public let bytesPerFrameUpperBound: UInt64
+    public let warningFrameCount: UInt64
+
+    public init(
+        completionReserveBytes: UInt64,
+        bytesPerFrameUpperBound: UInt64,
+        warningFrameCount: UInt64 = 2
+    ) {
+        self.completionReserveBytes = completionReserveBytes
+        self.bytesPerFrameUpperBound = bytesPerFrameUpperBound
+        self.warningFrameCount = warningFrameCount
+    }
+
+    public func evaluate(availableBytes: UInt64?) -> CaptureStorageGuardResult {
+        guard let availableBytes else {
+            return .init(
+                decision: .warning,
+                reason: .capacityUnavailable,
+                availableBytes: nil,
+                stopThresholdBytes: nil
+            )
+        }
+        let stop = completionReserveBytes.addingReportingOverflow(bytesPerFrameUpperBound)
+        let warningFrames = bytesPerFrameUpperBound.multipliedReportingOverflow(by: warningFrameCount)
+        guard !stop.overflow, !warningFrames.overflow else {
+            return .init(
+                decision: .stop,
+                reason: .arithmeticOverflow,
+                availableBytes: availableBytes,
+                stopThresholdBytes: nil
+            )
+        }
+        let warning = stop.partialValue.addingReportingOverflow(warningFrames.partialValue)
+        guard !warning.overflow else {
+            return .init(
+                decision: .stop,
+                reason: .arithmeticOverflow,
+                availableBytes: availableBytes,
+                stopThresholdBytes: stop.partialValue
+            )
+        }
+        if availableBytes < stop.partialValue {
+            return .init(
+                decision: .stop,
+                reason: .completionReserveAtRisk,
+                availableBytes: availableBytes,
+                stopThresholdBytes: stop.partialValue
+            )
+        }
+        if availableBytes <= warning.partialValue {
+            return .init(
+                decision: .warning,
+                reason: .lowMargin,
+                availableBytes: availableBytes,
+                stopThresholdBytes: stop.partialValue
+            )
+        }
+        return .init(
+            decision: .healthy,
+            reason: .sufficientMargin,
+            availableBytes: availableBytes,
+            stopThresholdBytes: stop.partialValue
+        )
+    }
+}
+
 public enum CaptureAdmissionDecision: String, Equatable, Sendable {
     case allowed
     case warning

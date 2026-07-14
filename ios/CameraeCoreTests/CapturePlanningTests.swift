@@ -161,6 +161,20 @@ struct CapturePlanningTests {
         #expect(budget.remainingDuration(at: start.addingTimeInterval(120)) == 180)
         #expect(budget.remainingDuration(at: start.addingTimeInterval(400)) == 0)
     }
+
+    @Test("runtime storage guard warns early and stops before consuming finalization reserve")
+    func runtimeStorageGuard() {
+        let guardPolicy = CaptureStorageGuard(
+            completionReserveBytes: 500,
+            bytesPerFrameUpperBound: 100,
+            warningFrameCount: 2
+        )
+
+        #expect(guardPolicy.evaluate(availableBytes: 801).decision == .healthy)
+        #expect(guardPolicy.evaluate(availableBytes: 800).decision == .warning)
+        #expect(guardPolicy.evaluate(availableBytes: 599).decision == .stop)
+        #expect(guardPolicy.evaluate(availableBytes: nil).reason == .capacityUnavailable)
+    }
 }
 
 @Suite("Capture capability and energy planning")
