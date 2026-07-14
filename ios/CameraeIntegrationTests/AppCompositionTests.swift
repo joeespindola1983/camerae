@@ -7,6 +7,33 @@ import Testing
 @Suite("App component integration", .serialized)
 @MainActor
 struct AppCompositionTests {
+    @Test("Repeatable video countdown remains conservative and reaches zero")
+    func repeatableVideoCountdown() {
+        let startedAt = Date(timeIntervalSince1970: 1_000)
+
+        #expect(RepeatableRecordingCountdown.remainingSeconds(
+            startedAt: startedAt,
+            plannedDuration: 30,
+            now: startedAt
+        ) == 30)
+        #expect(RepeatableRecordingCountdown.remainingSeconds(
+            startedAt: startedAt,
+            plannedDuration: 30,
+            now: startedAt.addingTimeInterval(0.2)
+        ) == 30)
+        #expect(RepeatableRecordingCountdown.remainingSeconds(
+            startedAt: startedAt,
+            plannedDuration: 30,
+            now: startedAt.addingTimeInterval(29.2)
+        ) == 1)
+        #expect(RepeatableRecordingCountdown.remainingSeconds(
+            startedAt: startedAt,
+            plannedDuration: 30,
+            now: startedAt.addingTimeInterval(31)
+        ) == 0)
+        #expect(RepeatableRecordingCountdown.label(seconds: 65) == "01:05")
+    }
+
     @Test("ProjectStore composes with the real catalog and persists across instances")
     func projectStoreComposition() async throws {
         let root = FileManager.default.temporaryDirectory

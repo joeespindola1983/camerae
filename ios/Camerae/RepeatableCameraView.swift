@@ -178,7 +178,7 @@ struct RepeatableCameraView: View {
             }
 
             Section("Ajustes") {
-                Picker("Duração", selection: $durationOption) {
+                Picker("Tamanho do clipe", selection: $durationOption) {
                     ForEach(RepeatableDurationOption.options(for: selectedCaptureKind)) { option in
                         Text(option.title(for: selectedCaptureKind)).tag(option)
                     }
@@ -311,6 +311,7 @@ struct RepeatableCameraView: View {
 
     private var alignmentView: some View {
         GeometryReader { proxy in
+            let safeTop = proxy.safeAreaInsets.top
             ZStack {
                 Color.black
                     .ignoresSafeArea()
@@ -366,14 +367,14 @@ struct RepeatableCameraView: View {
                     let hudWidth = min(proxy.size.width * 0.44, 250)
                     VisualDistanceHUD(estimate: visualAlignment)
                         .frame(width: hudWidth, height: 74)
-                        .position(x: min(proxy.size.width * 0.25, 145), y: 154)
+                        .position(x: min(proxy.size.width * 0.25, 145), y: safeTop + 154)
                 }
 
                 if isPositionHUDVisible, let referenceGeoPose, let currentGeoPose = camera.currentGeoPose {
                     let hudSize = min(proxy.size.width * 0.34, 150)
                     GeoAlignmentHUD(reference: referenceGeoPose, current: currentGeoPose)
                         .frame(width: hudSize, height: hudSize)
-                        .position(x: proxy.size.width - hudSize / 2 - 12, y: hudSize / 2 + 74)
+                        .position(x: proxy.size.width - hudSize / 2 - 12, y: safeTop + hudSize / 2 + 74)
                 }
 
                 if isPositionHUDVisible, let currentHeading = camera.currentGeoPose?.heading {
@@ -383,7 +384,7 @@ struct RepeatableCameraView: View {
                         currentHeading: currentHeading
                     )
                     .frame(width: hudWidth, height: 54)
-                    .position(x: min(proxy.size.width * 0.25, 145), y: 82)
+                    .position(x: min(proxy.size.width * 0.25, 145), y: safeTop + 82)
                 }
 
                 if isMagnifierVisible {
@@ -413,7 +414,9 @@ struct RepeatableCameraView: View {
                     Spacer(minLength: 0)
                     alignmentBottomBar(for: proxy.size)
                 }
-                .padding(12)
+                .padding(.horizontal, 12)
+                .padding(.top, safeTop + 12)
+                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
                 .foregroundStyle(.white)
                 .shadow(radius: 12)
 
@@ -436,7 +439,6 @@ struct RepeatableCameraView: View {
                 updateAlignmentOrientation(for: size)
             }
         }
-        .ignoresSafeArea()
     }
 
     private var hudTogglePanel: some View {
@@ -739,7 +741,7 @@ struct RepeatableCameraView: View {
             }
 
             if let startedAt = camera.videoRecordingStartedAt {
-                recordingTimer(startedAt: startedAt)
+                recordingCountdown(startedAt: startedAt)
             }
 
             Spacer()
@@ -1011,29 +1013,32 @@ struct RepeatableCameraView: View {
         case .timelapse:
             return "Finalizar timelapse"
         case .video:
-            return "Finalizar video"
+            return "Encerrar e manter clipe"
         case .photo:
             return "Finalizar"
         }
     }
 
     @ViewBuilder
-    private func recordingTimer(startedAt: Date) -> some View {
+    private func recordingCountdown(startedAt: Date) -> some View {
         TimelineView(.periodic(from: startedAt, by: 1)) { context in
-            let elapsed = max(0, Int(context.date.timeIntervalSince(startedAt)))
-            Label(Self.formattedRecordingDuration(elapsed), systemImage: "record.circle.fill")
+            let remaining = RepeatableRecordingCountdown.remainingSeconds(
+                startedAt: startedAt,
+                plannedDuration: plannedDuration,
+                now: context.date
+            )
+            Label(
+                RepeatableRecordingCountdown.label(seconds: remaining),
+                systemImage: "timer"
+            )
                 .font(.system(.body, design: .monospaced, weight: .semibold))
                 .foregroundStyle(.red)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(.ultraThinMaterial, in: Capsule())
-                .accessibilityLabel("Tempo de gravacao")
-                .accessibilityValue(Self.formattedRecordingDuration(elapsed))
+                .accessibilityLabel("Tempo restante do clipe")
+                .accessibilityValue(RepeatableRecordingCountdown.label(seconds: remaining))
         }
-    }
-
-    private static func formattedRecordingDuration(_ seconds: Int) -> String {
-        String(format: "%02d:%02d", seconds / 60, seconds % 60)
     }
 
     private func performPrimaryCaptureAction() async {
@@ -2381,4 +2386,20 @@ private struct RepeatablePlanningInput: Hashable {
     let format: CaptureSourceFormat
     let fps: Int
     let supportedFormats: Set<CaptureSourceFormat>
+}
+
+struct RepeatableRecordingCountdown: Equatable, Sendable {
+    static func remainingSeconds(
+        startedAt: Date,
+        plannedDuration: TimeInterval,
+        now: Date
+    ) -> Int {
+        let remaining = plannedDuration - max(0, now.timeIntervalSince(startedAt))
+        return max(0, Int(ceil(remaining)))
+    }
+
+    static func label(seconds: Int) -> String {
+        let safeSeconds = max(0, seconds)
+        return String(format: "%02d:%02d", safeSeconds / 60, safeSeconds % 60)
+    }
 }
