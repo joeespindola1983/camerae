@@ -99,7 +99,14 @@ private struct ModuleSelectionView: View {
 
     @ViewBuilder
     private func moduleCards(isLandscape: Bool) -> some View {
-        HStack(alignment: .top, spacing: isLandscape ? 28 : 12) {
+        LazyVGrid(
+            columns: Array(
+                repeating: GridItem(.flexible(), spacing: isLandscape ? 28 : 12),
+                count: isLandscape ? 3 : 2
+            ),
+            alignment: .center,
+            spacing: isLandscape ? 28 : 12
+        ) {
             HomeModuleCard(
                 module: .repeatable,
                 accent: Color(red: 1, green: 0.55, blue: 0.2),
@@ -117,8 +124,17 @@ private struct ModuleSelectionView: View {
                 createAction: { startCreating(.astrophotography) },
                 projectsAction: { path.append(CameraModule.astrophotography) }
             )
+
+            HomeModuleCard(
+                module: .edit,
+                accent: Color(red: 0.35, green: 0.86, blue: 0.72),
+                projectCount: projectStore.projects(for: .edit).count,
+                isCompact: !isLandscape,
+                createAction: { startCreating(.edit) },
+                projectsAction: { path.append(CameraModule.edit) }
+            )
         }
-        .frame(maxWidth: isLandscape ? 700 : 380)
+        .frame(maxWidth: isLandscape ? 980 : 380)
     }
 
     private func lastProjectCard(_ project: CameraProject, isLandscape: Bool) -> some View {
@@ -201,7 +217,7 @@ private struct HomeModuleCard: View {
                 .foregroundStyle(accent)
                 .frame(height: 44)
 
-            Text(module == .astrophotography ? "ASTRO" : "REPEATABLE")
+            Text(homeTitle)
                 .font(.system(size: 18, weight: .medium))
                 .tracking(5)
                 .foregroundStyle(.white)
@@ -236,6 +252,14 @@ private struct HomeModuleCard: View {
         .padding(.horizontal, isCompact ? 10 : 28)
         .padding(.vertical, 24)
         .frame(maxWidth: .infinity)
+    }
+
+    private var homeTitle: String {
+        switch module {
+        case .astrophotography: return "ASTRO"
+        case .repeatable: return "REPEATABLE"
+        case .edit: return "EDIT"
+        }
     }
 }
 
@@ -447,6 +471,9 @@ private struct ProjectRowSummary {
 
     var detail: String? {
         guard let summary = project.summary else { return nil }
+        if project.module == .edit {
+            return "\(summary.mediaCount) clips"
+        }
         return "\(summary.sessionCount) capturas · \(summary.mediaCount) frames"
     }
 }
@@ -503,6 +530,8 @@ private struct ModuleRuntimeView: View {
                     try TimelapseSessionStore(project: project).deleteProject()
                     path.removeLast()
                 }
+            case .edit:
+                EditProjectRuntimeView(project: project)
             }
         }
         .onAppear {

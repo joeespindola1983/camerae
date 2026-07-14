@@ -4,6 +4,7 @@ import Foundation
 enum CameraModule: String, CaseIterable, Identifiable, Codable, Hashable {
     case astrophotography
     case repeatable
+    case edit
 
     var id: String { rawValue }
 
@@ -11,6 +12,7 @@ enum CameraModule: String, CaseIterable, Identifiable, Codable, Hashable {
         switch self {
         case .astrophotography: return "Astrophotography"
         case .repeatable: return "Repeatable"
+        case .edit: return "Edit"
         }
     }
 
@@ -18,6 +20,7 @@ enum CameraModule: String, CaseIterable, Identifiable, Codable, Hashable {
         switch self {
         case .astrophotography: return "Stack automatico para ceu noturno"
         case .repeatable: return "Referencia e enquadramento repetivel"
+        case .edit: return "Monte seu portfolio em video"
         }
     }
 
@@ -25,6 +28,7 @@ enum CameraModule: String, CaseIterable, Identifiable, Codable, Hashable {
         switch self {
         case .astrophotography: return "Astro"
         case .repeatable: return "Repeatable"
+        case .edit: return "Edit"
         }
     }
 
@@ -32,6 +36,7 @@ enum CameraModule: String, CaseIterable, Identifiable, Codable, Hashable {
         switch self {
         case .astrophotography: return "sparkles"
         case .repeatable: return "rectangle.on.rectangle.angled"
+        case .edit: return "movieclapper"
         }
     }
 
@@ -54,6 +59,13 @@ struct CameraProject: Identifiable, Equatable, Hashable {
     var referenceFrameURL: URL? {
         guard let key = summary?.referenceThumbnailKey else { return nil }
         return directoryURL.appendingPathComponent(key)
+    }
+
+    var libraryRootURL: URL {
+        directoryURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
     }
 
     init(record: ProjectRecord, summary: ProjectSummary?) {
@@ -141,6 +153,9 @@ final class ProjectStore: ObservableObject {
 
     func createProject(module: CameraModule, name: String) async throws -> CameraProject {
         let record = try await catalog.createProject(module: module.coreValue, name: name)
+        if module == .edit {
+            _ = try await EditProjectCatalog(project: record).loadOrCreate()
+        }
         let snapshot = try await catalog.load()
         apply(snapshot)
         return CameraProject(record: record, summary: snapshot.summary(for: record.id))
@@ -174,6 +189,32 @@ final class ProjectStore: ObservableObject {
             for record in candidates {
                 group.addTask {
                     do {
+                        if record.module == .edit {
+                            let document = try await EditProjectCatalog(project: record).loadOrCreate()
+                            let current = snapshot.summary(for: record.id)
+                            let summary = ProjectSummary(
+                                sessionCount: 0,
+                                mediaCount: document.items.count,
+                                referenceThumbnailKey: nil,
+                                latestSessionAt: nil,
+                                totalKnownBytes: nil,
+                                inventoryState: .clean,
+                                generation: current?.generation ?? 0
+                            )
+                            guard summary != current else { return (record.id, nil) }
+                            return (
+                                record.id,
+                                ProjectSummary(
+                                    sessionCount: 0,
+                                    mediaCount: document.items.count,
+                                    referenceThumbnailKey: nil,
+                                    latestSessionAt: nil,
+                                    totalKnownBytes: nil,
+                                    inventoryState: .clean,
+                                    generation: (current?.generation ?? 0) + 1
+                                )
+                            )
+                        }
                         let sessions = try await SessionCatalog(project: record).loadSummaries()
                         let firstReference = sessions
                             .sorted { $0.session.createdAt < $1.session.createdAt }

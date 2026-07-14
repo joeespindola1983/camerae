@@ -64,7 +64,7 @@ public actor ThumbnailPipeline {
 
     public init(
         cacheDirectory: URL,
-        decoder: any ThumbnailDecoding = ImageIOThumbnailDecoder(),
+        decoder: any ThumbnailDecoding = MediaThumbnailDecoder(),
         fileManager: FileManager = .default,
         memoryCostLimit: Int = 48 * 1024 * 1024,
         maximumConcurrentDecodes: Int = 4

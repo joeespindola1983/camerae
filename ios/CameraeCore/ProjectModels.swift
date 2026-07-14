@@ -3,6 +3,7 @@ import Foundation
 public enum ProjectModule: String, CaseIterable, Codable, Hashable, Sendable {
     case astrophotography
     case repeatable
+    case edit
 }
 
 public enum InventoryState: String, Codable, Hashable, Sendable {

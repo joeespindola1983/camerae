@@ -120,6 +120,22 @@ struct ProjectCatalogComponentTests {
         #expect(snapshot.projects.first?.name == "Recovery")
         #expect(snapshot.source == .rebuilt)
     }
+
+    @Test("a rebuild preserves both existing capture modules")
+    func rebuildPreservesExistingModules() async throws {
+        let library = try TemporaryLibrary()
+        defer { library.remove() }
+        let catalog = ProjectCatalog(rootDirectory: library.url)
+        let repeatable = try await catalog.createProject(module: .repeatable, name: "Facade")
+        let astro = try await catalog.createProject(module: .astrophotography, name: "Orion")
+        try Data("invalid-index".utf8).write(to: catalog.indexURL, options: .atomic)
+
+        let rebuilt = try await ProjectCatalog(rootDirectory: library.url).load()
+
+        #expect(Set(rebuilt.projects.map(\.id)) == Set([repeatable.id, astro.id]))
+        #expect(Set(rebuilt.projects.map(\.module)) == Set([.repeatable, .astrophotography]))
+        #expect(rebuilt.source == .rebuilt)
+    }
 }
 
 private final class TemporaryLibrary: @unchecked Sendable {

@@ -55,6 +55,44 @@ struct ThumbnailPipelineTests {
 
         #expect(await decoder.calls == 1)
     }
+
+    @Test("media decoder routes movies to AV thumbnails and keeps images on ImageIO")
+    func mediaDecoderRoutesByType() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeThumbnailRouting-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let movieURL = root.appendingPathComponent("clip.mp4")
+        let imageURL = root.appendingPathComponent("frame.jpg")
+        try Data([1]).write(to: movieURL)
+        try Data([2]).write(to: imageURL)
+        let imageDecoder = RoutingThumbnailDecoder(color: .orange)
+        let videoDecoder = RoutingThumbnailDecoder(color: .blue)
+        let decoder = MediaThumbnailDecoder(imageDecoder: imageDecoder, videoDecoder: videoDecoder)
+
+        _ = await decoder.decode(url: imageURL, maxPixelSize: 100)
+        _ = await decoder.decode(url: movieURL, maxPixelSize: 100)
+
+        #expect(await imageDecoder.calls == 1)
+        #expect(await videoDecoder.calls == 1)
+    }
+}
+
+private actor RoutingThumbnailDecoder: ThumbnailDecoding {
+    private(set) var calls = 0
+    private let color: UIColor
+
+    init(color: UIColor) {
+        self.color = color
+    }
+
+    func decode(url: URL, maxPixelSize: Int) async -> UIImage? {
+        calls += 1
+        return UIGraphicsImageRenderer(size: CGSize(width: 4, height: 4)).image { context in
+            color.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 4, height: 4))
+        }
+    }
 }
 
 private actor CountingThumbnailDecoder: ThumbnailDecoding {

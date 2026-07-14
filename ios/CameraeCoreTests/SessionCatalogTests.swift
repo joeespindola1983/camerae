@@ -105,6 +105,29 @@ struct SessionCatalogComponentTests {
         #expect(summaries[0].frameSummary.nextFrameIndex == 4)
         #expect(summaries[0].inventoryState == .clean)
     }
+
+    @Test("repair characterizes every existing rendered video output")
+    func repairFindsExistingVideoOutputs() async throws {
+        let library = try SessionTemporaryLibrary()
+        defer { library.remove() }
+        let catalog = SessionCatalog(project: library.project)
+        let session = try await catalog.createSession(captureKind: .timelapse)
+        try await catalog.beginCapture(sessionID: session.id)
+
+        try Data([1]).write(to: session.directoryURL.appendingPathComponent("timelapse.mp4"))
+        try Data([2]).write(to: session.directoryURL.appendingPathComponent("video.mov"))
+        let render = session.directoryURL
+            .appendingPathComponent("Astro Renders", isDirectory: true)
+            .appendingPathComponent("render_001", isDirectory: true)
+        try FileManager.default.createDirectory(at: render, withIntermediateDirectories: true)
+        try Data([3]).write(to: render.appendingPathComponent("astro.mp4"))
+
+        let summary = try await SessionCatalog(project: library.project).loadSummaries().first
+
+        #expect(summary?.videoSummary?.videoFileName == "timelapse.mp4")
+        #expect(summary?.videoSummary?.clipFileName == "video.mov")
+        #expect(summary?.astroSummary?.hasRenderedClip == true)
+    }
 }
 
 private final class SessionTemporaryLibrary: @unchecked Sendable {

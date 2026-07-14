@@ -240,7 +240,15 @@ public actor ProjectCatalog {
     private func normalizedName(_ requested: String, module: ProjectModule, date: Date) -> String {
         let trimmed = requested.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.isEmpty else { return trimmed }
-        let prefix = module == .astrophotography ? "Astro" : "Repeatable"
+        let prefix: String
+        switch module {
+        case .astrophotography:
+            prefix = "Astro"
+        case .repeatable:
+            prefix = "Repeatable"
+        case .edit:
+            prefix = "Edit"
+        }
         return "\(prefix) \(Self.displayFormatter.string(from: date))"
     }
 

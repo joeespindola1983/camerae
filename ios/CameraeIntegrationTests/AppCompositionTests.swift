@@ -1,3 +1,5 @@
+import CameraeCore
+import CameraeMedia
 import Foundation
 import Testing
 @testable import Camerae
@@ -20,6 +22,107 @@ struct AppCompositionTests {
         #expect(created.name == "Integrated")
         #expect(secondStore.projects.map(\.id) == [created.id])
         #expect(secondStore.projects.first?.summary == .empty)
+    }
+
+    @Test("ProjectStore creates and reloads an initialized Edit project")
+    func editProjectComposition() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeEditIntegrationTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let firstStore = ProjectStore(rootDirectory: root)
+        let created = try await firstStore.createProject(module: .edit, name: "Portfolio")
+        let editURL = created.directoryURL.appendingPathComponent("edit.json")
+        let secondStore = ProjectStore(rootDirectory: root)
+        await secondStore.reloadNow()
+
+        #expect(created.module == .edit)
+        #expect(FileManager.default.fileExists(atPath: editURL.path))
+        #expect(secondStore.projects.first?.module == .edit)
+        #expect(secondStore.projects.first?.summary?.mediaCount == 0)
+        #expect(secondStore.defaultProjectName(for: .edit, date: Date(timeIntervalSince1970: 0)).hasPrefix("Edit "))
+    }
+
+    @Test("Edit view model filters, repeats, reorders, removes, and reloads clips")
+    func editViewModelTimelineWorkflow() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeEditViewModelTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ProjectStore(rootDirectory: root)
+        let project = try await store.createProject(module: .edit, name: "Portfolio")
+        let first = Self.mediaDescriptor(index: 1, kind: .repeatableTimelapse, module: .repeatable)
+        let second = Self.mediaDescriptor(index: 2, kind: .astroTimelapse, module: .astrophotography)
+        let media = EditMediaLibraryStub(assets: [first, second])
+        let model = EditProjectViewModel(project: project, mediaLibrary: media)
+
+        await model.load()
+        model.filter = MediaLibraryFilter(origin: .module(.repeatable), kind: .timelapse)
+        #expect(model.filteredAssets.map { $0.reference.id } == [first.reference.id])
+        model.toggleSelection(first.reference.id)
+        await model.addSelection()
+        model.toggleSelection(first.reference.id)
+        await model.addSelection()
+        #expect(model.document?.items.count == 2)
+        let originalIDs = try #require(model.document?.items.map(\.id))
+        await model.moveItem(from: 1, to: 0)
+        #expect(model.document?.items.map(\.id) == [originalIDs[1], originalIDs[0]])
+        await model.removeItem(at: 1)
+
+        let reloaded = EditProjectViewModel(project: project, mediaLibrary: media)
+        await reloaded.load()
+        #expect(reloaded.document?.items.map(\.id) == [originalIDs[1]])
+    }
+
+    @Test("Edit playback state follows prepare, play, pause, advance, finish, and replay")
+    func editPlaybackStateMachine() {
+        let engine = EditPlaybackEngineStub()
+        let coordinator = EditPlaybackCoordinator(engine: engine)
+        let firstID = UUID(uuidString: "80000000-0000-0000-0000-000000000001")!
+        let secondID = UUID(uuidString: "80000000-0000-0000-0000-000000000002")!
+        let items = [
+            EditPlaybackItem(id: firstID, url: URL(fileURLWithPath: "/tmp/first.mp4")),
+            EditPlaybackItem(id: secondID, url: URL(fileURLWithPath: "/tmp/second.mp4"))
+        ]
+
+        coordinator.prepare(items: items)
+        #expect(coordinator.state == .ready(currentItemID: firstID))
+        coordinator.play()
+        #expect(coordinator.state == .playing(currentItemID: firstID))
+        coordinator.pause()
+        #expect(coordinator.state == .paused(currentItemID: firstID))
+        coordinator.play()
+        engine.advance(to: secondID)
+        #expect(coordinator.state == .playing(currentItemID: secondID))
+        engine.finish()
+        #expect(coordinator.state == .finished)
+        coordinator.restart()
+        #expect(coordinator.state == .playing(currentItemID: firstID))
+        #expect(engine.restartCount == 1)
+    }
+
+    @Test("Edit export view model publishes progress and persists the exported path")
+    func editExportWorkflow() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeEditExportTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ProjectStore(rootDirectory: root)
+        let project = try await store.createProject(module: .edit, name: "My Portfolio")
+        let reference = Self.mediaDescriptor(index: 9, kind: .repeatableTimelapse, module: .repeatable).reference
+        let document = try await EditProjectCatalog(project: project.coreRecord).append([reference])
+        let descriptor = Self.mediaDescriptor(index: 9, kind: .repeatableTimelapse, module: .repeatable)
+        let resolved = ResolvedMediaAsset(descriptor: descriptor, url: root.appendingPathComponent("source.mp4"))
+        let composer = EditVideoComposerStub()
+        let model = EditExportViewModel(project: project, composer: composer)
+
+        await model.export(document: document, assets: [reference.id: resolved])
+
+        #expect(model.progress == 1)
+        #expect(model.outputURL?.lastPathComponent == "My Portfolio.mp4")
+        #expect(model.errorMessage == nil)
+        let reloaded = try await EditProjectCatalog(project: project.coreRecord).loadOrCreate()
+        #expect(reloaded.lastExportRelativePath == "Exports/My Portfolio.mp4")
     }
 
     @Test("session cards describe image sequences and compilation state")
@@ -103,5 +206,91 @@ struct AppCompositionTests {
             isAstroProcessed: false,
             hasRenderedOutput: hasVideo
         )
+    }
+
+    private static func mediaDescriptor(
+        index: Int,
+        kind: MediaSourceKind,
+        module: ProjectModule
+    ) -> MediaAssetDescriptor {
+        let projectID = UUID(uuidString: String(format: "60000000-0000-0000-0000-%012d", index))!
+        let sessionID = UUID(uuidString: String(format: "70000000-0000-0000-0000-%012d", index))!
+        return MediaAssetDescriptor(
+            reference: MediaAssetReference(
+                projectID: projectID,
+                sessionID: sessionID,
+                kind: kind,
+                relativePath: "Sessions/session_\(index)/clip.mp4"
+            ),
+            sourceModule: module,
+            projectName: "Project \(index)",
+            sessionName: "Session \(index)",
+            sourceCreatedAt: Date(timeIntervalSince1970: TimeInterval(index)),
+            duration: 2,
+            pixelWidth: 1920,
+            pixelHeight: 1080,
+            hasAudio: false,
+            fileSize: 10,
+            isAvailable: true
+        )
+    }
+}
+
+private actor EditVideoComposerStub: EditVideoComposing {
+    func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
+        try FileManager.default.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("mp4".utf8).write(to: outputURL)
+        await progress(0.5)
+        await progress(1)
+        return outputURL
+    }
+
+    func cancel() async {}
+}
+
+private actor EditMediaLibraryStub: MediaLibraryProviding {
+    private let snapshot: MediaLibrarySnapshot
+
+    init(assets: [MediaAssetDescriptor]) {
+        snapshot = MediaLibrarySnapshot(assets: assets)
+    }
+
+    func load() -> MediaLibrarySnapshot { snapshot }
+
+    func resolve(_ reference: MediaAssetReference) -> ResolvedMediaAsset? { nil }
+
+    func invalidate() {}
+}
+
+@MainActor
+private final class EditPlaybackEngineStub: EditPlaybackQueueing {
+    var onCurrentItemChanged: ((UUID?) -> Void)?
+    private(set) var items: [EditPlaybackItem] = []
+    private(set) var restartCount = 0
+
+    func replace(with items: [EditPlaybackItem]) {
+        self.items = items
+    }
+
+    func play() {}
+    func pause() {}
+    func removeAll() { items = [] }
+
+    func restart() {
+        restartCount += 1
+        onCurrentItemChanged?(items.first?.id)
+    }
+
+    func advance(to id: UUID) {
+        onCurrentItemChanged?(id)
+    }
+
+    func finish() {
+        onCurrentItemChanged?(nil)
     }
 }

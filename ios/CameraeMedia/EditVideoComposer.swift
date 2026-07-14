@@ -1,0 +1,232 @@
+import AVFoundation
+import CameraeCore
+import CoreGraphics
+import Foundation
+
+public protocol EditVideoComposing: Sendable {
+    func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL
+
+    func cancel() async
+}
+
+public actor EditVideoComposer: EditVideoComposing {
+    private let planner: EditCompositionPlanner
+    private let fileManager: FileManager
+    private var exportSession: AVAssetExportSession?
+
+    public init(
+        planner: EditCompositionPlanner = EditCompositionPlanner(),
+        fileManager: FileManager = .default
+    ) {
+        self.planner = planner
+        self.fileManager = fileManager
+    }
+
+    public func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
+        guard exportSession == nil else { throw EditVideoComposerError.exportAlreadyRunning }
+        let plan = try planner.makePlan(document: project, assets: assets)
+        let built = try await buildComposition(plan: plan, assets: assets)
+        try fileManager.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        let temporaryURL = outputURL.deletingLastPathComponent()
+            .appendingPathComponent(".\(UUID().uuidString).tmp.mp4")
+        try? fileManager.removeItem(at: temporaryURL)
+        var shouldRemoveTemporary = true
+        defer {
+            exportSession = nil
+            if shouldRemoveTemporary {
+                try? fileManager.removeItem(at: temporaryURL)
+            }
+        }
+
+        guard let exporter = AVAssetExportSession(
+            asset: built.composition,
+            presetName: AVAssetExportPreset1920x1080
+        ) else {
+            throw EditVideoComposerError.exporterUnavailable
+        }
+        guard exporter.supportedFileTypes.contains(.mp4) else {
+            throw EditVideoComposerError.mp4Unsupported
+        }
+        exporter.outputURL = temporaryURL
+        exporter.outputFileType = .mp4
+        exporter.videoComposition = built.videoComposition
+        exporter.shouldOptimizeForNetworkUse = true
+        exportSession = exporter
+
+        await progress(0)
+        let progressTask = Task {
+            while !Task.isCancelled {
+                await progress(Double(exporter.progress))
+                try? await Task.sleep(nanoseconds: 100_000_000)
+            }
+        }
+        await withCheckedContinuation { continuation in
+            exporter.exportAsynchronously {
+                continuation.resume()
+            }
+        }
+        progressTask.cancel()
+
+        switch exporter.status {
+        case .completed:
+            break
+        case .cancelled:
+            throw EditVideoComposerError.cancelled
+        case .failed:
+            throw exporter.error ?? EditVideoComposerError.exportFailed
+        default:
+            throw EditVideoComposerError.exportFailed
+        }
+
+        try await validateExport(at: temporaryURL)
+        if fileManager.fileExists(atPath: outputURL.path) {
+            try fileManager.removeItem(at: outputURL)
+        }
+        try fileManager.moveItem(at: temporaryURL, to: outputURL)
+        shouldRemoveTemporary = false
+        await progress(1)
+        return outputURL
+    }
+
+    public func cancel() {
+        exportSession?.cancelExport()
+    }
+
+    private func buildComposition(
+        plan: EditCompositionPlan,
+        assets: [MediaAssetID: ResolvedMediaAsset]
+    ) async throws -> (composition: AVMutableComposition, videoComposition: AVMutableVideoComposition) {
+        let composition = AVMutableComposition()
+        guard let compositionVideoTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw EditVideoComposerError.compositionTrackUnavailable
+        }
+        let compositionAudioTrack = composition.addMutableTrack(
+            withMediaType: .audio,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        )
+        var instructions: [AVMutableVideoCompositionInstruction] = []
+        var compositionCursor = CMTime.zero
+
+        for segment in plan.segments {
+            try Task.checkCancellation()
+            guard let resolved = assets[segment.assetID] else {
+                throw EditCompositionError.missingMedia(segment.assetID)
+            }
+            let sourceAsset = AVURLAsset(url: resolved.url)
+            guard let sourceVideoTrack = try await sourceAsset.loadTracks(withMediaType: .video).first else {
+                throw EditVideoComposerError.missingVideoTrack(segment.assetID)
+            }
+            let sourceDuration = try await sourceAsset.load(.duration)
+            let plannedDuration = CMTime(seconds: segment.duration, preferredTimescale: 600)
+            let duration = CMTimeMinimum(sourceDuration, plannedDuration)
+            guard duration.isNumeric, duration > .zero else {
+                throw EditCompositionError.invalidDuration(segment.assetID)
+            }
+            // Use the media track's exact duration as the composition cursor. Probe
+            // metadata is expressed as Double and can otherwise introduce tiny gaps
+            // that AVAssetExportSession rejects between adjacent instructions.
+            let start = compositionCursor
+            let range = CMTimeRange(start: .zero, duration: duration)
+            try compositionVideoTrack.insertTimeRange(range, of: sourceVideoTrack, at: start)
+
+            if let sourceAudioTrack = try await sourceAsset.loadTracks(withMediaType: .audio).first,
+               let compositionAudioTrack {
+                try compositionAudioTrack.insertTimeRange(range, of: sourceAudioTrack, at: start)
+            }
+
+            let naturalSize = try await sourceVideoTrack.load(.naturalSize)
+            let preferredTransform = try await sourceVideoTrack.load(.preferredTransform)
+            let instruction = AVMutableVideoCompositionInstruction()
+            instruction.timeRange = CMTimeRange(start: start, duration: duration)
+            let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
+            layer.setTransform(
+                aspectFitTransform(
+                    naturalSize: naturalSize,
+                    preferredTransform: preferredTransform,
+                    renderSize: CGSize(width: plan.renderWidth, height: plan.renderHeight)
+                ),
+                at: start
+            )
+            instruction.layerInstructions = [layer]
+            instructions.append(instruction)
+            compositionCursor = CMTimeAdd(compositionCursor, duration)
+        }
+
+        let videoComposition = AVMutableVideoComposition()
+        videoComposition.renderSize = CGSize(width: plan.renderWidth, height: plan.renderHeight)
+        videoComposition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(plan.frameRate))
+        videoComposition.instructions = instructions
+        return (composition, videoComposition)
+    }
+
+    private func aspectFitTransform(
+        naturalSize: CGSize,
+        preferredTransform: CGAffineTransform,
+        renderSize: CGSize
+    ) -> CGAffineTransform {
+        let sourceRect = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+        let orientedWidth = abs(sourceRect.width)
+        let orientedHeight = abs(sourceRect.height)
+        guard orientedWidth > 0, orientedHeight > 0 else { return preferredTransform }
+        let scale = min(renderSize.width / orientedWidth, renderSize.height / orientedHeight)
+        let x = (renderSize.width - orientedWidth * scale) / 2
+        let y = (renderSize.height - orientedHeight * scale) / 2
+
+        var transform = preferredTransform
+        transform = transform.concatenating(CGAffineTransform(
+            translationX: -sourceRect.minX,
+            y: -sourceRect.minY
+        ))
+        transform = transform.concatenating(CGAffineTransform(scaleX: scale, y: scale))
+        transform = transform.concatenating(CGAffineTransform(translationX: x, y: y))
+        return transform
+    }
+
+    private func validateExport(at url: URL) async throws {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        guard (values.fileSize ?? 0) > 0 else { throw EditVideoComposerError.emptyOutput }
+        let asset = AVURLAsset(url: url)
+        guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
+            throw EditVideoComposerError.emptyOutput
+        }
+        let duration = CMTimeGetSeconds(try await asset.load(.duration))
+        guard duration.isFinite, duration > 0 else { throw EditVideoComposerError.emptyOutput }
+    }
+}
+
+public enum EditVideoComposerError: LocalizedError, Equatable {
+    case exportAlreadyRunning
+    case exporterUnavailable
+    case mp4Unsupported
+    case compositionTrackUnavailable
+    case missingVideoTrack(MediaAssetID)
+    case exportFailed
+    case cancelled
+    case emptyOutput
+
+    public var errorDescription: String? {
+        switch self {
+        case .exportAlreadyRunning: return "uma exportação já está em andamento"
+        case .exporterUnavailable: return "não foi possível criar o exportador de vídeo"
+        case .mp4Unsupported: return "este dispositivo não suporta a exportação MP4 solicitada"
+        case .compositionTrackUnavailable: return "não foi possível criar a faixa de vídeo final"
+        case .missingVideoTrack: return "uma das mídias não possui uma faixa de vídeo válida"
+        case .exportFailed: return "não foi possível concluir a exportação"
+        case .cancelled: return "exportação cancelada"
+        case .emptyOutput: return "o MP4 exportado está vazio ou inválido"
+        }
+    }
+}

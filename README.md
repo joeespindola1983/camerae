@@ -1,6 +1,10 @@
 # Camerae
 
-Camerae is a camera app experiment focused on repeatable framing and astrophotography workflows.
+Camerae is a camera app focused on repeatable framing, astrophotography, and assembling the resulting videos into a portfolio.
+
+## Camerae 4
+
+Version 4.0.0 introduces the Edit module. It discovers rendered Repeatable and Astro videos across the local library, filters them by source and type, lets the user build and preview an ordered sequence, and exports the result as a shareable 1080p MP4. Edit projects store references to source media instead of duplicating the original files.
 
 ## Repository Layout
 

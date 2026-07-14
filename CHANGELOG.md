@@ -1,5 +1,14 @@
 # Changelog
 
+## v4.0.0
+
+- Added Edit as a third project module for assembling a video portfolio from Camerae output.
+- Added a global media catalog with Repeatable/Astro, video/timelapse, and project filters.
+- Added thumbnails, ordered timelines, repeated clips, removal, reordering, and missing-media handling.
+- Added sequential preview in horizontal and vertical canvases.
+- Added cancellable 1080p/30 fps MP4 export with progress, validation, persistence, and sharing.
+- Added Core, Media, integration, performance, and UI coverage following the project TDD workflow.
+
 ## v2.2.1-qa.1
 
 - Fixed iOS archives to use the configured marketing version and build number in Firebase App Distribution.
