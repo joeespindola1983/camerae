@@ -189,6 +189,9 @@ final class ProjectStore: ObservableObject {
             for record in candidates {
                 group.addTask {
                     do {
+                        let storage = try ProjectStorageScanner().scan(
+                            projectDirectory: record.directoryURL
+                        )
                         if record.module == .edit {
                             let document = try await EditProjectCatalog(project: record).loadOrCreate()
                             let current = snapshot.summary(for: record.id)
@@ -197,7 +200,7 @@ final class ProjectStore: ObservableObject {
                                 mediaCount: document.items.count,
                                 referenceThumbnailKey: nil,
                                 latestSessionAt: nil,
-                                totalKnownBytes: nil,
+                                totalKnownBytes: storage.totalBytes,
                                 inventoryState: .clean,
                                 generation: current?.generation ?? 0
                             )
@@ -209,7 +212,7 @@ final class ProjectStore: ObservableObject {
                                     mediaCount: document.items.count,
                                     referenceThumbnailKey: nil,
                                     latestSessionAt: nil,
-                                    totalKnownBytes: nil,
+                                    totalKnownBytes: storage.totalBytes,
                                     inventoryState: .clean,
                                     generation: (current?.generation ?? 0) + 1
                                 )
@@ -229,7 +232,7 @@ final class ProjectStore: ObservableObject {
                             mediaCount: sessions.reduce(0) { $0 + $1.frameSummary.count },
                             referenceThumbnailKey: firstReference,
                             latestSessionAt: sessions.map(\.session.createdAt).max(),
-                            totalKnownBytes: sessions.reduce(UInt64(0)) { $0 + $1.frameSummary.knownBytes },
+                            totalKnownBytes: storage.totalBytes,
                             inventoryState: .clean,
                             generation: current?.generation ?? 0
                         )

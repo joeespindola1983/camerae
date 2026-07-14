@@ -109,8 +109,13 @@ final class TimelapseSessionStore {
         return session
     }
 
-    func saveFrame(_ data: Data, in session: TimelapseSession, index: Int) throws -> URL {
-        let fileName = String(format: "frame_%06d.jpg", index)
+    func saveFrame(
+        _ data: Data,
+        in session: TimelapseSession,
+        index: Int,
+        format: CaptureSourceFormat = .jpeg
+    ) throws -> URL {
+        let fileName = String(format: "frame_%06d.%@", index, format.fileExtension)
         let fileURL = session.directoryURL.appendingPathComponent(fileName)
         try data.write(to: fileURL, options: [.atomic])
         return fileURL
@@ -156,6 +161,20 @@ final class TimelapseSessionStore {
         ]
         let data = try JSONSerialization.data(withJSONObject: metadata, options: [.prettyPrinted, .sortedKeys])
         try data.write(to: astroCaptureMetadataURL(for: session), options: [.atomic])
+    }
+
+    func saveCapturePlan(_ plan: CapturePlan, in session: TimelapseSession) throws {
+        let data = try CapturePlanCodec().encode(plan)
+        try data.write(
+            to: session.directoryURL.appendingPathComponent("capture_plan.json"),
+            options: .atomic
+        )
+    }
+
+    func capturePlan(in session: TimelapseSession) throws -> CapturePlan? {
+        let url = session.directoryURL.appendingPathComponent("capture_plan.json")
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return try CapturePlanCodec().decode(Data(contentsOf: url)).plan
     }
 
     func astroStackingStartFrame(in session: TimelapseSession) -> Int? {
@@ -409,7 +428,7 @@ final class TimelapseSessionStore {
 
         return files.filter { url in
             url.lastPathComponent.hasPrefix("frame_") &&
-            url.pathExtension.lowercased() == "jpg" &&
+            Self.originalFrameExtensions.contains(url.pathExtension.lowercased()) &&
             ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
         }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -701,7 +720,7 @@ final class TimelapseSessionStore {
 
         return files.filter { url in
             url.lastPathComponent.hasPrefix("frame_") &&
-            url.pathExtension.lowercased() == "jpg" &&
+            originalFrameExtensions.contains(url.pathExtension.lowercased()) &&
             ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
         }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -758,6 +777,8 @@ final class TimelapseSessionStore {
             throw TimelapseStoreError.notEnoughStorageForExport
         }
     }
+
+    private static let originalFrameExtensions: Set<String> = ["jpg", "jpeg", "heic", "dng"]
 
     func deleteSession(_ session: TimelapseSession) throws {
         guard session.projectID == project.id else {

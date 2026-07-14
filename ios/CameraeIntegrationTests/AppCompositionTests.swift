@@ -21,7 +21,26 @@ struct AppCompositionTests {
 
         #expect(created.name == "Integrated")
         #expect(secondStore.projects.map(\.id) == [created.id])
-        #expect(secondStore.projects.first?.summary == .empty)
+        #expect(secondStore.projects.first?.summary?.sessionCount == 0)
+        #expect(secondStore.projects.first?.summary?.mediaCount == 0)
+        #expect((secondStore.projects.first?.summary?.totalKnownBytes ?? 0) > 0)
+        #expect(secondStore.projects.first?.summary?.inventoryState == .clean)
+    }
+
+    @Test("ProjectStore publishes complete project bytes without blocking the view")
+    func projectStoreStorageInventory() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeProjectStorageIntegration-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ProjectStore(rootDirectory: root)
+        let project = try await store.createProject(module: .repeatable, name: "Storage")
+        try Data(repeating: 1, count: 7).write(
+            to: project.directoryURL.appendingPathComponent("extra.dat")
+        )
+
+        await store.reloadNow()
+
+        #expect((store.projects.first?.summary?.totalKnownBytes ?? 0) >= 7)
     }
 
     @Test("ProjectStore creates and reloads an initialized Edit project")
@@ -146,6 +165,165 @@ struct AppCompositionTests {
         #expect(metadata.compilationDescription == "Vídeo pronto")
     }
 
+    @Test("timelapse store discovers and exports HEIC originals")
+    func timelapseStoreSupportsHEIC() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeHEICIntegrationTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectStore = ProjectStore(rootDirectory: root)
+        let project = try await projectStore.createProject(module: .repeatable, name: "HEIC")
+        let store = TimelapseSessionStore(project: project)
+        let session = try store.createSession(captureKind: .timelapse)
+        let plan = try CapturePlan.preset(
+            .repeatableTimelapse(.fiveMinutes),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullHD
+        )
+
+        let frame = try store.saveFrame(Data([1, 2, 3]), in: session, index: 1, format: .heic)
+        try store.saveCapturePlan(plan, in: session)
+
+        #expect(frame.pathExtension == "heic")
+        #expect(store.frameURLs(in: session) == [frame])
+        let summaries = try await store.sessionSummariesFromCatalog()
+        #expect(summaries.first?.frameCount == 1)
+        #expect(summaries.first?.referenceFrameURL?.pathExtension == "heic")
+        #expect(try store.capturePlan(in: session) == plan)
+    }
+
+    @Test("capture planning view model publishes a blocked preflight")
+    func capturePlanningViewModelBlocks() async throws {
+        let now = Date(timeIntervalSince1970: 300)
+        let service = CapturePreflightService(
+            storageProvider: AppFixedStorageProvider(.init(
+                availableForImportantUsage: 1_000,
+                capturedAt: now,
+                source: .testFixture
+            )),
+            batteryProvider: AppFixedBatteryProvider(.init(
+                level: 0.8,
+                state: .charging,
+                isLowPowerModeEnabled: false,
+                thermalState: .nominal,
+                capturedAt: now
+            )),
+            admissionPolicy: .init(configuration: .init(
+                minimumOperationalReserve: 500,
+                planReserveFraction: 0,
+                warningMarginFraction: 0
+            ))
+        )
+        let model = CapturePlanningViewModel(service: service)
+        let plan = try CapturePlan.preset(
+            .repeatableTimelapse(.fiveMinutes),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullHD
+        )
+
+        await model.evaluate(
+            plan: plan,
+            sizeProfile: .init(bytesPerFrameUpperBound: 10),
+            capabilityProfile: .init(
+                supportedSourceFormats: [.heic, .jpeg],
+                supportedAstroPipelines: []
+            ),
+            observedDrainPerHour: 0.1
+        )
+
+        #expect(model.result?.storage.decision == .blocked)
+        #expect(model.result?.storage.shortfallBytes == 100)
+        #expect(model.errorMessage == nil)
+        #expect(!model.isLoading)
+    }
+
+    @Test("preflight presentation never enables a blocked capture")
+    func blockedPreflightPresentation() {
+        let storage = CaptureAdmissionResult(
+            decision: .blocked,
+            reason: .insufficientStorage,
+            requiredBytes: 2_000,
+            availableBytes: 1_000,
+            shortfallBytes: 1_000
+        )
+
+        let presentation = CapturePreflightPresentation(storage: storage)
+
+        #expect(!presentation.canStart)
+        #expect(presentation.title == "Espaço insuficiente")
+        #expect(presentation.detail.contains("1 KB"))
+    }
+
+    @Test("video metrics never describe encoded video as HEIC image frames")
+    func videoPreflightMetrics() throws {
+        let plan = try CapturePlan(
+            workflow: .repeatableVideo,
+            plannedDuration: 120,
+            captureInterval: nil,
+            sourceFormat: .heic,
+            captureFPS: 30,
+            renderFPS: nil,
+            resolution: .ultraHD,
+            astroPipeline: nil
+        )
+        let estimate = CaptureEstimate(
+            expectedFrameCount: 3_600,
+            captureBytes: 300_000_000,
+            processingBytes: 0,
+            publicationBytes: 30_000_000,
+            renderedDuration: 120
+        )
+
+        let metrics = CapturePreflightMetricsPresentation(plan: plan, estimate: estimate)
+
+        #expect(metrics.primary == "Vídeo 02:00")
+        #expect(metrics.secondary.contains("4K"))
+        #expect(metrics.secondary.contains("30 FPS"))
+        #expect(!metrics.secondary.contains("HEIC"))
+        #expect(!metrics.secondary.contains("frames"))
+    }
+
+    @Test("a cancelled preflight cannot publish stale mode information")
+    func cancelledPreflightDoesNotPublish() async throws {
+        let now = Date(timeIntervalSince1970: 400)
+        let service = CapturePreflightService(
+            storageProvider: DelayedStorageProvider(snapshotValue: .init(
+                availableForImportantUsage: 10_000_000_000,
+                capturedAt: now,
+                source: .testFixture
+            )),
+            batteryProvider: AppFixedBatteryProvider(.unknown(at: now))
+        )
+        let model = CapturePlanningViewModel(service: service)
+        let plan = try CapturePlan.preset(
+            .repeatableTimelapse(.fiveMinutes),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullSensor
+        )
+
+        let task = Task {
+            await model.evaluate(
+                plan: plan,
+                sizeProfile: .init(bytesPerFrameUpperBound: 1_000),
+                capabilityProfile: .init(
+                    supportedSourceFormats: [.heic, .jpeg],
+                    supportedAstroPipelines: []
+                ),
+                observedDrainPerHour: nil
+            )
+        }
+        try await Task.sleep(nanoseconds: 10_000_000)
+        task.cancel()
+        await task.value
+
+        #expect(model.result == nil)
+    }
+
     @Test("magnifier stays fully visible while dragging")
     func magnifierClampsToDisplayBounds() {
         let geometry = AlignmentMagnifierGeometry(
@@ -233,6 +411,26 @@ struct AppCompositionTests {
             fileSize: 10,
             isAvailable: true
         )
+    }
+}
+
+private struct AppFixedStorageProvider: StorageCapacityProviding {
+    let value: StorageCapacitySnapshot
+    init(_ value: StorageCapacitySnapshot) { self.value = value }
+    func snapshot() async -> StorageCapacitySnapshot { value }
+}
+
+private struct AppFixedBatteryProvider: BatterySnapshotProviding {
+    let value: BatterySnapshot
+    init(_ value: BatterySnapshot) { self.value = value }
+    func snapshot() async -> BatterySnapshot { value }
+}
+
+private struct DelayedStorageProvider: StorageCapacityProviding {
+    let snapshotValue: StorageCapacitySnapshot
+    func snapshot() async -> StorageCapacitySnapshot {
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        return snapshotValue
     }
 }
 

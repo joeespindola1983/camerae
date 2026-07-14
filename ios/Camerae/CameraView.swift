@@ -1,8 +1,10 @@
+import CameraeCore
 import SwiftUI
 import UIKit
 
 struct CameraView: View {
     @StateObject private var camera: CameraController
+    @StateObject private var planning: CapturePlanningViewModel
     private let project: CameraProject
     private let onDeleteProject: () throws -> Void
     private let onClose: (() -> Void)?
@@ -18,6 +20,9 @@ struct CameraView: View {
     @State private var exportedArchiveURLs: [URL] = []
     @State private var exportTask: Task<Void, Never>?
     @State private var processingSession: TimelapseSession?
+    @State private var durationOption = AstroDurationOption.thirtyMinutes
+    @State private var customDurationMinutes = 60
+    @State private var sourceFormat = CaptureSourceFormat.heic
 
     init(
         project: CameraProject,
@@ -30,6 +35,9 @@ struct CameraView: View {
         self.onClose = onClose
         self.onCompletedSession = onCompletedSession
         _camera = StateObject(wrappedValue: CameraController(project: project))
+        _planning = StateObject(wrappedValue: CapturePlanningViewModel(
+            projectDirectoryURL: project.directoryURL
+        ))
     }
 
     var body: some View {
@@ -64,6 +72,9 @@ struct CameraView: View {
         .navigationBarTitleDisplayMode(.inline)
         .task {
             await camera.start()
+        }
+        .task(id: planningInput) {
+            await refreshPreflight()
         }
         .sheet(isPresented: $isShowingExportedArchives) {
             if !exportedArchiveURLs.isEmpty {
@@ -167,6 +178,32 @@ struct CameraView: View {
 
                     AstroBatchPreview(url: camera.astroPreviewURL)
 
+                    Picker("Duração", selection: $durationOption) {
+                        ForEach(AstroDurationOption.allCases) { option in
+                            Text(option.title).tag(option)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(camera.isTimelapseRunning)
+
+                    if durationOption == .custom {
+                        Stepper(
+                            "Duração: \(customDurationMinutes) min",
+                            value: $customDurationMinutes,
+                            in: 5...720,
+                            step: 5
+                        )
+                        .font(.system(size: 12, weight: .semibold))
+                        .disabled(camera.isTimelapseRunning)
+                    }
+
+                    Picker("Formato", selection: $sourceFormat) {
+                        Text("HEIC").tag(CaptureSourceFormat.heic)
+                        Text("JPEG").tag(CaptureSourceFormat.jpeg)
+                    }
+                    .pickerStyle(.segmented)
+                    .disabled(camera.isTimelapseRunning)
+
                     Toggle(isOn: $usesAutomaticAstroExposure) {
                         Label("Auto -> Astro", systemImage: "camera.aperture")
                     }
@@ -204,15 +241,23 @@ struct CameraView: View {
                 }
                 .padding(.bottom, 2)
             }
-            .frame(maxHeight: 260)
+            .frame(maxHeight: 410)
+
+            CapturePreflightCard(model: planning)
 
             Button {
                 Task {
+                    guard let plan = planning.result?.resolvedPlan else { return }
+                    if let preflight = planning.result {
+                        camera.configureCapturePreflight(preflight)
+                    }
+                    camera.setCaptureSourceFormat(plan.sourceFormat)
                     await camera.toggleAstroBatchCapture(
                         timelapseInterval: timelapseIntervalSeconds,
                         astroInterval: astroIntervalSeconds,
                         batchSize: Int(astroBatchSize),
-                        usesAutomaticExposure: usesAutomaticAstroExposure
+                        usesAutomaticExposure: usesAutomaticAstroExposure,
+                        plan: plan
                     )
                 }
             } label: {
@@ -224,12 +269,112 @@ struct CameraView: View {
             }
             .buttonStyle(.borderedProminent)
             .tint(camera.isTimelapseRunning ? .red : .blue)
+            .disabled(!camera.isTimelapseRunning && !canStartCapture)
         }
         .foregroundStyle(.white)
         .padding(10)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.top, 8)
     }
+
+    private var plannedDuration: TimeInterval {
+        durationOption.duration ?? TimeInterval(customDurationMinutes * 60)
+    }
+
+    private var planningInput: AstroPlanningInput {
+        AstroPlanningInput(
+            duration: plannedDuration,
+            interval: astroIntervalSeconds,
+            format: sourceFormat,
+            batchSize: Int(astroBatchSize),
+            supportedFormats: camera.supportedSourceFormats
+        )
+    }
+
+    private var canStartCapture: Bool {
+        guard let result = planning.result else { return false }
+        return CapturePreflightPresentation(storage: result.storage).canStart
+    }
+
+    private func refreshPreflight() async {
+        do {
+            let plan = try CapturePlan(
+                workflow: .astro,
+                plannedDuration: plannedDuration,
+                captureInterval: astroIntervalSeconds,
+                sourceFormat: sourceFormat,
+                captureFPS: nil,
+                renderFPS: 30,
+                resolution: .fullSensor,
+                astroPipeline: resolvedAstroPipeline
+            )
+            let bytesPerFrame: UInt64 = sourceFormat == .heic ? 4_000_000 : 8_000_000
+            await planning.evaluate(
+                plan: plan,
+                sizeProfile: .init(
+                    bytesPerFrameUpperBound: bytesPerFrame,
+                    processingOverheadFraction: 0.5,
+                    publicationOverheadFraction: 0.25
+                ),
+                capabilityProfile: .init(
+                    supportedSourceFormats: camera.supportedSourceFormats,
+                    supportedAstroPipelines: [resolvedAstroPipeline]
+                ),
+                observedDrainPerHour: 0.20
+            )
+        } catch {
+            // CapturePlanningViewModel publishes runtime errors; invalid UI input stays blocked.
+        }
+    }
+
+    private var resolvedAstroPipeline: AstroPipelineProfile {
+        let thermal: CaptureThermalState
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = .nominal
+        case .fair: thermal = .fair
+        case .serious: thermal = .serious
+        case .critical: thermal = .critical
+        @unknown default: thermal = .unknown
+        }
+        return AstroPipelineResolver().resolve(.init(
+            physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
+            thermalState: thermal,
+            isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
+        ))
+    }
+}
+
+private enum AstroDurationOption: String, CaseIterable, Identifiable {
+    case thirtyMinutes
+    case oneHour
+    case threeHours
+    case custom
+
+    var id: String { rawValue }
+    var duration: TimeInterval? {
+        switch self {
+        case .thirtyMinutes: 30 * 60
+        case .oneHour: 60 * 60
+        case .threeHours: 3 * 60 * 60
+        case .custom: nil
+        }
+    }
+    var title: String {
+        switch self {
+        case .thirtyMinutes: "30m"
+        case .oneHour: "1h"
+        case .threeHours: "3h"
+        case .custom: "Custom"
+        }
+    }
+}
+
+private struct AstroPlanningInput: Hashable {
+    let duration: TimeInterval
+    let interval: TimeInterval
+    let format: CaptureSourceFormat
+    let batchSize: Int
+    let supportedFormats: Set<CaptureSourceFormat>
 }
 
 private struct AstroBatchPreview: View {

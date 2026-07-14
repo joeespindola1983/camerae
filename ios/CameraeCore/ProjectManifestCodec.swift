@@ -9,6 +9,10 @@ public struct ProjectManifestCodec: Sendable {
     ) throws -> ProjectManifestDocument {
         let decoder = Self.decoder()
         let payload = try decoder.decode(Payload.self, from: data)
+        let schemaVersion = payload.schemaVersion ?? CameraeSchema.legacyUnversioned
+        guard (CameraeSchema.legacyUnversioned...CameraeSchema.current).contains(schemaVersion) else {
+            throw ManifestCompatibilityError.unsupportedProjectSchema(schemaVersion)
+        }
         let project = ProjectRecord(
             id: payload.id,
             module: payload.module,
@@ -22,14 +26,14 @@ public struct ProjectManifestCodec: Sendable {
         return ProjectManifestDocument(
             project: project,
             summary: payload.summary,
-            schemaVersion: payload.schemaVersion ?? 2
+            schemaVersion: schemaVersion
         )
     }
 
     public func encode(_ document: ProjectManifestDocument) throws -> Data {
         let project = document.project
         let payload = Payload(
-            schemaVersion: max(document.schemaVersion, 3),
+            schemaVersion: CameraeSchema.current,
             id: project.id,
             module: project.module,
             name: project.name,
