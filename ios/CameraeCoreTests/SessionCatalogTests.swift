@@ -128,6 +128,33 @@ struct SessionCatalogComponentTests {
         #expect(summary?.videoSummary?.clipFileName == "video.mov")
         #expect(summary?.astroSummary?.hasRenderedClip == true)
     }
+
+    @Test("HEIC frames keep their format and survive inventory repair")
+    func heicFramesRepair() async throws {
+        let library = try SessionTemporaryLibrary()
+        defer { library.remove() }
+        let catalog = SessionCatalog(project: library.project)
+        let session = try await catalog.createSession(captureKind: .timelapse)
+        try await catalog.beginCapture(sessionID: session.id)
+
+        let first = try await catalog.saveFrame(
+            Data([1, 2]),
+            sessionID: session.id,
+            index: 1,
+            format: .heic
+        )
+        try await catalog.checkpoint(sessionID: session.id)
+        try Data([3, 4, 5]).write(
+            to: session.directoryURL.appendingPathComponent("frame_000002.heic")
+        )
+
+        let summary = try await SessionCatalog(project: library.project).loadSummaries().first
+
+        #expect(first.pathExtension == "heic")
+        #expect(summary?.frameSummary.count == 2)
+        #expect(summary?.frameSummary.knownBytes == 5)
+        #expect(summary?.frameSummary.nextFrameIndex == 3)
+    }
 }
 
 private final class SessionTemporaryLibrary: @unchecked Sendable {

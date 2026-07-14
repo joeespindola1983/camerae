@@ -59,10 +59,15 @@ public actor SessionCatalog {
     }
 
     @discardableResult
-    public func saveFrame(_ data: Data, sessionID: UUID, index: Int) throws -> URL {
+    public func saveFrame(
+        _ data: Data,
+        sessionID: UUID,
+        index: Int,
+        format: CaptureSourceFormat = .jpeg
+    ) throws -> URL {
         var document = try captures[sessionID] ?? document(for: sessionID)
         guard document.inventoryState == .dirty else { throw SessionCatalogError.captureNotStarted }
-        let fileName = String(format: "frame_%06d.jpg", index)
+        let fileName = String(format: "frame_%06d.%@", index, format.fileExtension)
         let url = document.session.directoryURL.appendingPathComponent(fileName)
         try data.write(to: url, options: .atomic)
 
@@ -135,7 +140,7 @@ public actor SessionCatalog {
         )
         let frames = urls.filter { url in
             url.lastPathComponent.hasPrefix("frame_") &&
-            url.pathExtension.lowercased() == "jpg" &&
+            Self.originalFrameExtensions.contains(url.pathExtension.lowercased()) &&
             ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
         }.sorted { $0.lastPathComponent < $1.lastPathComponent }
         let bytes = frames.reduce(into: UInt64(0)) { result, url in
@@ -230,7 +235,8 @@ public actor SessionCatalog {
     }
 
     private func frameIndex(fileName: String) -> Int? {
-        Int(fileName.dropFirst("frame_".count).dropLast(".jpg".count))
+        let stem = URL(fileURLWithPath: fileName).deletingPathExtension().lastPathComponent
+        return Int(stem.dropFirst("frame_".count))
     }
 
     private func uniqueDirectory(baseName: String) -> URL {
@@ -250,6 +256,8 @@ public actor SessionCatalog {
         formatter.dateFormat = "yyyy-MM-dd_HH-mm-ss"
         return formatter
     }()
+
+    private static let originalFrameExtensions: Set<String> = ["jpg", "jpeg", "heic", "dng"]
 }
 
 public enum SessionCatalogError: Error, Equatable {

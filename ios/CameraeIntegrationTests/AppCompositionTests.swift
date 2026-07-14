@@ -146,6 +146,25 @@ struct AppCompositionTests {
         #expect(metadata.compilationDescription == "Vídeo pronto")
     }
 
+    @Test("timelapse store discovers and exports HEIC originals")
+    func timelapseStoreSupportsHEIC() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeHEICIntegrationTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectStore = ProjectStore(rootDirectory: root)
+        let project = try await projectStore.createProject(module: .repeatable, name: "HEIC")
+        let store = TimelapseSessionStore(project: project)
+        let session = try store.createSession(captureKind: .timelapse)
+
+        let frame = try store.saveFrame(Data([1, 2, 3]), in: session, index: 1, format: .heic)
+
+        #expect(frame.pathExtension == "heic")
+        #expect(store.frameURLs(in: session) == [frame])
+        let summaries = try await store.sessionSummariesFromCatalog()
+        #expect(summaries.first?.frameCount == 1)
+        #expect(summaries.first?.referenceFrameURL?.pathExtension == "heic")
+    }
+
     @Test("magnifier stays fully visible while dragging")
     func magnifierClampsToDisplayBounds() {
         let geometry = AlignmentMagnifierGeometry(

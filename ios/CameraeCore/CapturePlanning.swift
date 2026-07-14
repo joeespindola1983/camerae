@@ -10,6 +10,14 @@ public enum CaptureSourceFormat: String, Codable, CaseIterable, Hashable, Sendab
     case heic
     case jpeg
     case dng
+
+    public var fileExtension: String {
+        switch self {
+        case .heic: "heic"
+        case .jpeg: "jpg"
+        case .dng: "dng"
+        }
+    }
 }
 
 public enum CaptureResolution: String, Codable, CaseIterable, Hashable, Sendable {

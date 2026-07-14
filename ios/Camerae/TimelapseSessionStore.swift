@@ -109,8 +109,13 @@ final class TimelapseSessionStore {
         return session
     }
 
-    func saveFrame(_ data: Data, in session: TimelapseSession, index: Int) throws -> URL {
-        let fileName = String(format: "frame_%06d.jpg", index)
+    func saveFrame(
+        _ data: Data,
+        in session: TimelapseSession,
+        index: Int,
+        format: CaptureSourceFormat = .jpeg
+    ) throws -> URL {
+        let fileName = String(format: "frame_%06d.%@", index, format.fileExtension)
         let fileURL = session.directoryURL.appendingPathComponent(fileName)
         try data.write(to: fileURL, options: [.atomic])
         return fileURL
@@ -409,7 +414,7 @@ final class TimelapseSessionStore {
 
         return files.filter { url in
             url.lastPathComponent.hasPrefix("frame_") &&
-            url.pathExtension.lowercased() == "jpg" &&
+            Self.originalFrameExtensions.contains(url.pathExtension.lowercased()) &&
             ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
         }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -701,7 +706,7 @@ final class TimelapseSessionStore {
 
         return files.filter { url in
             url.lastPathComponent.hasPrefix("frame_") &&
-            url.pathExtension.lowercased() == "jpg" &&
+            originalFrameExtensions.contains(url.pathExtension.lowercased()) &&
             ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
         }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
@@ -758,6 +763,8 @@ final class TimelapseSessionStore {
             throw TimelapseStoreError.notEnoughStorageForExport
         }
     }
+
+    private static let originalFrameExtensions: Set<String> = ["jpg", "jpeg", "heic", "dng"]
 
     func deleteSession(_ session: TimelapseSession) throws {
         guard session.projectID == project.id else {

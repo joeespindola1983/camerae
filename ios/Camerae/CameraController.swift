@@ -1,4 +1,5 @@
 import AVFoundation
+import CameraeCore
 import CoreLocation
 import CoreMotion
 import ImageIO
@@ -59,6 +60,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var isSequenceFocusLocked = false
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
+    nonisolated(unsafe) private var selectedSourceFormat = CaptureSourceFormat.heic
 
     init(
         project: CameraProject,
@@ -173,6 +175,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     func setPendingReferenceOrientation(_ orientation: CaptureDisplayOrientation) {
         pendingReferenceOrientation = orientation
+    }
+
+    func setCaptureSourceFormat(_ format: CaptureSourceFormat) {
+        selectedSourceFormat = format
     }
 
     func setExposureBias(_ bias: Double) async {
@@ -984,7 +990,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         applyOutputRotation(for: currentSession.referenceOrientation)
         let photo = try await captureOriginalPhoto()
         let frameIndex = frameCount + 1
-        let savedURL = try store.saveFrame(photo.data, in: currentSession, index: frameIndex)
+        let savedURL = try store.saveFrame(
+            photo.data,
+            in: currentSession,
+            index: frameIndex,
+            format: photo.format
+        )
 
         if frameCount == 0 {
             self.currentSession = try saveReferencePoseIfAvailable(for: currentSession)
@@ -1180,7 +1191,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     nonisolated private func captureManualPhoto() throws -> CapturedPhoto {
-        try captureQueue.syncSafeCapture(photoOutput: photoOutput)
+        try captureQueue.syncSafeCapture(
+            photoOutput: photoOutput,
+            preferredFormat: selectedSourceFormat
+        )
     }
 
     nonisolated private func prepareCapture(device: AVCaptureDevice) throws -> Double {
@@ -1560,6 +1574,7 @@ enum VisualDistanceHint {
 
 private struct CapturedPhoto {
     let data: Data
+    let format: CaptureSourceFormat
     let exposureLabel: String
     let exposureSeconds: Double
 }
@@ -1618,8 +1633,10 @@ private final class MovieRecordingDelegateRetainer {
 
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     private let completion: (Result<CapturedPhoto, Error>) -> Void
+    private let format: CaptureSourceFormat
 
-    init(completion: @escaping (Result<CapturedPhoto, Error>) -> Void) {
+    init(format: CaptureSourceFormat, completion: @escaping (Result<CapturedPhoto, Error>) -> Void) {
+        self.format = format
         self.completion = completion
     }
 
@@ -1639,6 +1656,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
         let exposureSeconds = Self.exposureSeconds(from: photo.metadata)
         completion(.success(CapturedPhoto(
             data: data,
+            format: format,
             exposureLabel: Self.exposureLabel(from: exposureSeconds),
             exposureSeconds: exposureSeconds
         )))
@@ -1683,15 +1701,21 @@ private final class PhotoCaptureDelegateRetainer {
 }
 
 private extension DispatchQueue {
-    func syncSafeCapture(photoOutput: AVCapturePhotoOutput) throws -> CapturedPhoto {
+    func syncSafeCapture(
+        photoOutput: AVCapturePhotoOutput,
+        preferredFormat: CaptureSourceFormat
+    ) throws -> CapturedPhoto {
         let semaphore = DispatchSemaphore(value: 0)
         var capturedResult: Result<CapturedPhoto, Error>?
 
-        let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+        let supportsHEIC = photoOutput.availablePhotoCodecTypes.contains(.hevc)
+        let selectedFormat: CaptureSourceFormat = preferredFormat == .heic && supportsHEIC ? .heic : .jpeg
+        let codec: AVVideoCodecType = selectedFormat == .heic ? .hevc : .jpeg
+        let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
         settings.photoQualityPrioritization = .speed
         settings.flashMode = .off
 
-        let delegate = PhotoCaptureDelegate { result in
+        let delegate = PhotoCaptureDelegate(format: selectedFormat) { result in
             capturedResult = result
             semaphore.signal()
         }
