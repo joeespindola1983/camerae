@@ -3,6 +3,8 @@ import CameraeMedia
 import ImageIO
 import SwiftUI
 
+private let astroOriginalImageExtensions: Set<String> = ["jpg", "jpeg", "heic", "dng"]
+
 private enum AstroProcessTab: String, CaseIterable, Identifiable {
     case capture
     case create
@@ -1363,7 +1365,10 @@ private enum AstroInventoryLoader {
 
     private static func imageFiles(in directory: URL, prefix: String, fileManager: FileManager) -> [URL] {
         regularFiles(in: directory, fileManager: fileManager)
-            .filter { $0.lastPathComponent.hasPrefix(prefix) && $0.pathExtension.lowercased() == "jpg" }
+            .filter {
+                $0.lastPathComponent.hasPrefix(prefix) &&
+                    astroOriginalImageExtensions.contains($0.pathExtension.lowercased())
+            }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
     }
 
@@ -1376,6 +1381,7 @@ private enum AstroInventoryLoader {
             (try? $0.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true
         }
     }
+
 
     private static func directoryURLs(in directory: URL, fileManager: FileManager) -> [URL] {
         ((try? fileManager.contentsOfDirectory(
@@ -1862,7 +1868,7 @@ final class AstroProcessingController: ObservableObject {
         return files
             .filter { url in
                 url.lastPathComponent.hasPrefix("frame_") &&
-                url.pathExtension.lowercased() == "jpg" &&
+                astroOriginalImageExtensions.contains(url.pathExtension.lowercased()) &&
                 ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
             }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }

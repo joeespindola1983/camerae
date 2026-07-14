@@ -17,7 +17,7 @@ struct ProjectManifestCompatibilityTests {
         #expect(document.summary == nil)
     }
 
-    @Test("v3 manifest round-trips its summary")
+    @Test("v3 manifest upgrades to v5 while preserving its summary")
     func v3RoundTrip() throws {
         let project = ProjectRecord(
             id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
@@ -43,9 +43,23 @@ struct ProjectManifestCompatibilityTests {
         let data = try codec.encode(ProjectManifestDocument(project: project, summary: summary))
         let decoded = try codec.decode(data, directoryURL: project.directoryURL)
 
-        #expect(decoded.schemaVersion == 3)
+        #expect(decoded.schemaVersion == 5)
         #expect(decoded.project == project)
         #expect(decoded.summary == summary)
+    }
+
+    @Test("future project schemas are rejected without reinterpretation")
+    func rejectsFutureProjectSchema() {
+        let json = Self.legacyJSON.replacingOccurrences(
+            of: "{",
+            with: "{ \"schemaVersion\": 99,",
+            options: [],
+            range: Self.legacyJSON.range(of: "{")
+        )
+
+        #expect(throws: ManifestCompatibilityError.unsupportedProjectSchema(99)) {
+            try ProjectManifestCodec().decode(Data(json.utf8))
+        }
     }
 
     private static let legacyJSON = #"""
@@ -136,6 +150,84 @@ struct ProjectCatalogComponentTests {
         #expect(Set(rebuilt.projects.map(\.module)) == Set([.repeatable, .astrophotography]))
         #expect(rebuilt.source == .rebuilt)
     }
+}
+
+@Suite("Project storage inventory")
+struct ProjectStorageInventoryTests {
+    @Test("scanner classifies originals, processed files, final artifacts, cache and exports")
+    func classifiesProjectStorage() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeStorageTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let session = root.appendingPathComponent("Sessions/session_1", isDirectory: true)
+        let astro = session.appendingPathComponent("Astro Frames", isDirectory: true)
+        let preview = session.appendingPathComponent("Preview Frames", isDirectory: true)
+        let exports = root.appendingPathComponent("Exports", isDirectory: true)
+        for directory in [session, astro, preview, exports] {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        try Data(repeating: 1, count: 3).write(to: session.appendingPathComponent("frame_000001.heic"))
+        try Data(repeating: 1, count: 2).write(to: session.appendingPathComponent("timelapse.mp4"))
+        try Data(repeating: 1, count: 4).write(to: astro.appendingPathComponent("astro_frame_000001.jpg"))
+        try Data(repeating: 1, count: 5).write(to: preview.appendingPathComponent("preview.jpg"))
+        try Data(repeating: 1, count: 6).write(to: exports.appendingPathComponent("originals.zip"))
+
+        let result = try ProjectStorageScanner().scan(projectDirectory: root)
+
+        #expect(result.originalBytes == 3)
+        #expect(result.processedBytes == 4)
+        #expect(result.finalArtifactBytes == 2)
+        #expect(result.cacheBytes == 5)
+        #expect(result.exportBytes == 6)
+        #expect(result.totalBytes == 20)
+    }
+}
+
+@Suite("Atomic artifact publication")
+struct AtomicArtifactPublicationTests {
+    @Test("failed validation preserves the previous final artifact")
+    func failedValidationPreservesFinal() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeArtifactTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let final = root.appendingPathComponent("final.mp4")
+        let temporary = root.appendingPathComponent("temporary.mp4")
+        try Data("previous".utf8).write(to: final)
+        try Data("invalid".utf8).write(to: temporary)
+
+        #expect(throws: ArtifactFixtureError.invalid) {
+            try AtomicArtifactPublisher().publish(temporaryURL: temporary, destinationURL: final) { _ in
+                throw ArtifactFixtureError.invalid
+            }
+        }
+
+        #expect(try Data(contentsOf: final) == Data("previous".utf8))
+        #expect(!FileManager.default.fileExists(atPath: temporary.path))
+    }
+
+    @Test("validated artifact atomically replaces the previous final")
+    func validArtifactReplacesFinal() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeArtifactSuccess-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let final = root.appendingPathComponent("final.mp4")
+        let temporary = root.appendingPathComponent("temporary.mp4")
+        try Data("previous".utf8).write(to: final)
+        try Data("validated".utf8).write(to: temporary)
+
+        try AtomicArtifactPublisher().publish(temporaryURL: temporary, destinationURL: final) { url in
+            #expect((try? Data(contentsOf: url)) == Data("validated".utf8))
+        }
+
+        #expect(try Data(contentsOf: final) == Data("validated".utf8))
+        #expect(!FileManager.default.fileExists(atPath: temporary.path))
+    }
+}
+
+private enum ArtifactFixtureError: Error {
+    case invalid
 }
 
 private final class TemporaryLibrary: @unchecked Sendable {
