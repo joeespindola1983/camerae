@@ -183,6 +183,53 @@ struct ProjectStorageInventoryTests {
     }
 }
 
+@Suite("Atomic artifact publication")
+struct AtomicArtifactPublicationTests {
+    @Test("failed validation preserves the previous final artifact")
+    func failedValidationPreservesFinal() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeArtifactTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let final = root.appendingPathComponent("final.mp4")
+        let temporary = root.appendingPathComponent("temporary.mp4")
+        try Data("previous".utf8).write(to: final)
+        try Data("invalid".utf8).write(to: temporary)
+
+        #expect(throws: ArtifactFixtureError.invalid) {
+            try AtomicArtifactPublisher().publish(temporaryURL: temporary, destinationURL: final) { _ in
+                throw ArtifactFixtureError.invalid
+            }
+        }
+
+        #expect(try Data(contentsOf: final) == Data("previous".utf8))
+        #expect(!FileManager.default.fileExists(atPath: temporary.path))
+    }
+
+    @Test("validated artifact atomically replaces the previous final")
+    func validArtifactReplacesFinal() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeArtifactSuccess-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let final = root.appendingPathComponent("final.mp4")
+        let temporary = root.appendingPathComponent("temporary.mp4")
+        try Data("previous".utf8).write(to: final)
+        try Data("validated".utf8).write(to: temporary)
+
+        try AtomicArtifactPublisher().publish(temporaryURL: temporary, destinationURL: final) { url in
+            #expect((try? Data(contentsOf: url)) == Data("validated".utf8))
+        }
+
+        #expect(try Data(contentsOf: final) == Data("validated".utf8))
+        #expect(!FileManager.default.fileExists(atPath: temporary.path))
+    }
+}
+
+private enum ArtifactFixtureError: Error {
+    case invalid
+}
+
 private final class TemporaryLibrary: @unchecked Sendable {
     let url: URL
 

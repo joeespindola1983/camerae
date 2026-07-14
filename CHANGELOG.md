@@ -1,5 +1,16 @@
 # Changelog
 
+## v5.0.0
+
+- Added duration presets and Custom planning for Repeatable video, Repeatable timelapse, and Astro captures.
+- Added preflight estimates for completion time, frame count, final video duration, storage, energy, and effective Astro processing capability.
+- Made HEIC the default still-image format with an explicit JPEG fallback based on runtime camera capabilities.
+- Added conservative storage admission and active-capture guards that preserve finalization space and stop safely when capacity becomes critical.
+- Added planned automatic completion, versioned capture plans, schema 5 migration, session repair, and project storage inventories.
+- Added runtime Astro pipeline degradation for constrained memory, Low Power Mode, and thermal pressure.
+- Added atomic validation and publication of rendered MP4 artifacts so a failed render cannot replace the last valid result.
+- Added Core, Media, and integration coverage for planning, compatibility, recovery, storage safety, and Repeatable video presentation.
+
 ## v4.0.0
 
 - Added Edit as a third project module for assembling a video portfolio from Camerae output.

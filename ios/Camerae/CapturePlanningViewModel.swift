@@ -164,6 +164,10 @@ struct CapturePreflightCard: View {
                         Text("Alimentação externa recomendada")
                             .font(.caption2.weight(.semibold))
                     }
+                    if let pipeline = result.resolvedPlan.astroPipeline {
+                        Text("Pipeline Astro: \(Self.pipelineTitle(pipeline))")
+                            .font(.caption2.weight(.semibold))
+                    }
                     if result.formatFallbackReason != nil {
                         Text("Formato ajustado antes da captura por compatibilidade")
                             .font(.caption2)
@@ -177,6 +181,14 @@ struct CapturePreflightCard: View {
         }
         .padding(8)
         .background(.thinMaterial, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private static func pipelineTitle(_ pipeline: AstroPipelineProfile) -> String {
+        switch pipeline {
+        case .full: "completo"
+        case .reduced: "reduzido"
+        case .starsTimelapse: "timelapse de estrelas"
+        }
     }
 
 }

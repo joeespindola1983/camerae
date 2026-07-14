@@ -286,7 +286,8 @@ struct CameraView: View {
             duration: plannedDuration,
             interval: astroIntervalSeconds,
             format: sourceFormat,
-            batchSize: Int(astroBatchSize)
+            batchSize: Int(astroBatchSize),
+            supportedFormats: camera.supportedSourceFormats
         )
     }
 
@@ -305,7 +306,7 @@ struct CameraView: View {
                 captureFPS: nil,
                 renderFPS: 30,
                 resolution: .fullSensor,
-                astroPipeline: .full
+                astroPipeline: resolvedAstroPipeline
             )
             let bytesPerFrame: UInt64 = sourceFormat == .heic ? 4_000_000 : 8_000_000
             await planning.evaluate(
@@ -316,14 +317,30 @@ struct CameraView: View {
                     publicationOverheadFraction: 0.25
                 ),
                 capabilityProfile: .init(
-                    supportedSourceFormats: [.heic, .jpeg],
-                    supportedAstroPipelines: [.full, .reduced, .starsTimelapse]
+                    supportedSourceFormats: camera.supportedSourceFormats,
+                    supportedAstroPipelines: [resolvedAstroPipeline]
                 ),
                 observedDrainPerHour: 0.20
             )
         } catch {
             // CapturePlanningViewModel publishes runtime errors; invalid UI input stays blocked.
         }
+    }
+
+    private var resolvedAstroPipeline: AstroPipelineProfile {
+        let thermal: CaptureThermalState
+        switch ProcessInfo.processInfo.thermalState {
+        case .nominal: thermal = .nominal
+        case .fair: thermal = .fair
+        case .serious: thermal = .serious
+        case .critical: thermal = .critical
+        @unknown default: thermal = .unknown
+        }
+        return AstroPipelineResolver().resolve(.init(
+            physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
+            thermalState: thermal,
+            isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
+        ))
     }
 }
 
@@ -357,6 +374,7 @@ private struct AstroPlanningInput: Hashable {
     let interval: TimeInterval
     let format: CaptureSourceFormat
     let batchSize: Int
+    let supportedFormats: Set<CaptureSourceFormat>
 }
 
 private struct AstroBatchPreview: View {

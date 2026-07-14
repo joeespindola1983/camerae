@@ -1079,7 +1079,8 @@ struct RepeatableCameraView: View {
             duration: plannedDuration,
             interval: intervalSeconds,
             format: sourceFormat,
-            fps: videoSettings.fps
+            fps: videoSettings.fps,
+            supportedFormats: camera.supportedSourceFormats
         )
     }
 
@@ -1118,7 +1119,7 @@ struct RepeatableCameraView: View {
                 plan: plan,
                 sizeProfile: profile,
                 capabilityProfile: .init(
-                    supportedSourceFormats: [.heic, .jpeg],
+                    supportedSourceFormats: camera.supportedSourceFormats,
                     supportedAstroPipelines: []
                 ),
                 observedDrainPerHour: selectedCaptureKind == .video ? 0.12 : 0.10
@@ -2379,4 +2380,5 @@ private struct RepeatablePlanningInput: Hashable {
     let interval: TimeInterval
     let format: CaptureSourceFormat
     let fps: Int
+    let supportedFormats: Set<CaptureSourceFormat>
 }

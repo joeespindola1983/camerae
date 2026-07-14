@@ -598,6 +598,43 @@ public struct DeviceCapabilityProfile: Equatable, Sendable {
     }
 }
 
+public struct DeviceResourceBudget: Equatable, Sendable {
+    public let physicalMemoryBytes: UInt64
+    public let thermalState: CaptureThermalState
+    public let isLowPowerModeEnabled: Bool
+
+    public init(
+        physicalMemoryBytes: UInt64,
+        thermalState: CaptureThermalState,
+        isLowPowerModeEnabled: Bool
+    ) {
+        self.physicalMemoryBytes = physicalMemoryBytes
+        self.thermalState = thermalState
+        self.isLowPowerModeEnabled = isLowPowerModeEnabled
+    }
+}
+
+public struct AstroPipelineResolver: Sendable {
+    public init() {}
+
+    public func resolve(_ budget: DeviceResourceBudget) -> AstroPipelineProfile {
+        let fourGiB = UInt64(4) * 1_024 * 1_024 * 1_024
+        let threeGiB = UInt64(3) * 1_024 * 1_024 * 1_024
+        let thermallyHealthy = budget.thermalState == .nominal || budget.thermalState == .fair
+
+        if budget.physicalMemoryBytes >= fourGiB,
+           thermallyHealthy,
+           !budget.isLowPowerModeEnabled {
+            return .full
+        }
+        if budget.physicalMemoryBytes >= threeGiB,
+           budget.thermalState != .critical {
+            return .reduced
+        }
+        return .starsTimelapse
+    }
+}
+
 public enum CaptureFormatFallbackReason: String, Equatable, Sendable {
     case preferredFormatUnavailable
 }

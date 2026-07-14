@@ -266,6 +266,27 @@ struct CaptureCapabilityPlanningTests {
         #expect(result.decision == .unknown)
         #expect(result.confidence == .low)
     }
+
+    @Test("Astro pipeline degrades deterministically with device pressure")
+    func resolvesAstroPipelineBudget() {
+        let resolver = AstroPipelineResolver()
+
+        #expect(resolver.resolve(.init(
+            physicalMemoryBytes: 6 * 1_024 * 1_024 * 1_024,
+            thermalState: .nominal,
+            isLowPowerModeEnabled: false
+        )) == .full)
+        #expect(resolver.resolve(.init(
+            physicalMemoryBytes: 3 * 1_024 * 1_024 * 1_024,
+            thermalState: .fair,
+            isLowPowerModeEnabled: true
+        )) == .reduced)
+        #expect(resolver.resolve(.init(
+            physicalMemoryBytes: 2 * 1_024 * 1_024 * 1_024,
+            thermalState: .critical,
+            isLowPowerModeEnabled: false
+        )) == .starsTimelapse)
+    }
 }
 
 @Suite("Capture plan persistence")

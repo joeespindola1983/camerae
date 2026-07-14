@@ -35,6 +35,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var originalFrameExportProgress: OriginalFrameExportProgress?
     @Published private(set) var availableRepeatableLenses = RepeatableCameraLens.availableBackLenses()
     @Published private(set) var selectedRepeatableLens = RepeatableCameraLens.wide
+    @Published private(set) var supportedSourceFormats: Set<CaptureSourceFormat> = [.jpeg]
 
     private let captureMode: CameraCaptureMode
     private let captureQueue = DispatchQueue(label: "camerae.capture.queue")
@@ -99,6 +100,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         do {
             try await configureIfNeeded()
+            supportedSourceFormats = photoOutput.availablePhotoCodecTypes.contains(.hevc)
+                ? [.heic, .jpeg]
+                : [.jpeg]
             startMotionUpdates()
             startLocationUpdates()
             status = "Camera principal pronta"

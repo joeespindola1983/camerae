@@ -1,4 +1,5 @@
 import AVFoundation
+import CameraeCore
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -28,13 +29,14 @@ private func renderVideo(
     }
 
     let fileManager = FileManager.default
-    if fileManager.fileExists(atPath: outputURL.path) {
-        try fileManager.removeItem(at: outputURL)
-    }
+    let temporaryURL = outputURL.deletingLastPathComponent()
+        .appendingPathComponent(".\(UUID().uuidString).rendering.mp4")
+    try? fileManager.removeItem(at: temporaryURL)
+    defer { try? fileManager.removeItem(at: temporaryURL) }
 
     let renderSize = try renderSize(for: firstFrame, resolution: settings.resolution)
     let fps = max(settings.fps, 1)
-    let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+    let writer = try AVAssetWriter(outputURL: temporaryURL, fileType: .mp4)
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
         AVVideoCodecKey: AVVideoCodecType.h264,
         AVVideoWidthKey: Int(renderSize.width),
@@ -122,9 +124,22 @@ private func renderVideo(
         throw VideoRenderError.writerConfigurationFailed
     }
 
-    let outputValues = try outputURL.resourceValues(forKeys: [.fileSizeKey])
+    let outputValues = try temporaryURL.resourceValues(forKeys: [.fileSizeKey])
     guard (outputValues.fileSize ?? 0) > 0 else {
         throw VideoRenderError.emptyOutput
+    }
+    let asset = AVURLAsset(url: temporaryURL)
+    let duration = CMTimeGetSeconds(try await asset.load(.duration))
+    let tracks = try await asset.loadTracks(withMediaType: .video)
+    guard duration.isFinite, duration > 0, !tracks.isEmpty else {
+        throw VideoRenderError.invalidOutput
+    }
+    try AtomicArtifactPublisher().publish(
+        temporaryURL: temporaryURL,
+        destinationURL: outputURL
+    ) { candidate in
+        let size = try candidate.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
+        guard size > 0 else { throw VideoRenderError.emptyOutput }
     }
 }
 
@@ -224,6 +239,7 @@ enum VideoRenderError: LocalizedError {
     case frameAppendFailed
     case renderCancelled
     case emptyOutput
+    case invalidOutput
 
     var errorDescription: String? {
         switch self {
@@ -237,6 +253,8 @@ enum VideoRenderError: LocalizedError {
             return "a geracao do video foi cancelada"
         case .emptyOutput:
             return "o MP4 foi gerado vazio"
+        case .invalidOutput:
+            return "o MP4 gerado nao possui duracao ou faixa de video valida"
         }
     }
 }
