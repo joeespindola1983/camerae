@@ -1,9 +1,6 @@
 name: iOS Firebase Distribution
 
 on:
-  push:
-    branches:
-      - qa
   workflow_dispatch:
 
 jobs:

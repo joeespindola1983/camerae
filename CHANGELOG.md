@@ -10,6 +10,7 @@
 - Added runtime Astro pipeline degradation for constrained memory, Low Power Mode, and thermal pressure.
 - Added atomic validation and publication of rendered MP4 artifacts so a failed render cannot replace the last valid result.
 - Added Core, Media, and integration coverage for planning, compatibility, recovery, storage safety, and Repeatable video presentation.
+- Added a fail-closed local release gate for Git, signing, tests, builds, Firebase, and App Store Connect; automatic GitHub Actions triggers are disabled.
 
 ## v4.0.0
 
