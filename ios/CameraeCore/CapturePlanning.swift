@@ -354,3 +354,281 @@ public struct CaptureAdmissionPolicy: Sendable {
         return total
     }
 }
+
+public enum StorageCapacitySource: String, Codable, Equatable, Sendable {
+    case importantUsage
+    case testFixture
+}
+
+public struct StorageCapacitySnapshot: Equatable, Sendable {
+    public let availableForImportantUsage: UInt64?
+    public let capturedAt: Date
+    public let source: StorageCapacitySource
+
+    public init(
+        availableForImportantUsage: UInt64?,
+        capturedAt: Date,
+        source: StorageCapacitySource
+    ) {
+        self.availableForImportantUsage = availableForImportantUsage
+        self.capturedAt = capturedAt
+        self.source = source
+    }
+}
+
+public protocol StorageCapacityProviding: Sendable {
+    func snapshot() async -> StorageCapacitySnapshot
+}
+
+public enum BatteryState: String, Codable, Equatable, Sendable {
+    case unknown
+    case unplugged
+    case charging
+    case full
+}
+
+public enum CaptureThermalState: String, Codable, Equatable, Sendable {
+    case nominal
+    case fair
+    case serious
+    case critical
+    case unknown
+}
+
+public struct BatterySnapshot: Equatable, Sendable {
+    public let level: Double?
+    public let state: BatteryState
+    public let isLowPowerModeEnabled: Bool
+    public let thermalState: CaptureThermalState
+    public let capturedAt: Date
+
+    public init(
+        level: Double?,
+        state: BatteryState,
+        isLowPowerModeEnabled: Bool,
+        thermalState: CaptureThermalState,
+        capturedAt: Date
+    ) {
+        self.level = level.map { min(max($0, 0), 1) }
+        self.state = state
+        self.isLowPowerModeEnabled = isLowPowerModeEnabled
+        self.thermalState = thermalState
+        self.capturedAt = capturedAt
+    }
+
+    public static func unknown(at date: Date) -> BatterySnapshot {
+        BatterySnapshot(
+            level: nil,
+            state: .unknown,
+            isLowPowerModeEnabled: false,
+            thermalState: .unknown,
+            capturedAt: date
+        )
+    }
+}
+
+public protocol BatterySnapshotProviding: Sendable {
+    func snapshot() async -> BatterySnapshot
+}
+
+public struct DeviceCapabilityProfile: Equatable, Sendable {
+    public let supportedSourceFormats: Set<CaptureSourceFormat>
+    public let supportedAstroPipelines: Set<AstroPipelineProfile>
+
+    public init(
+        supportedSourceFormats: Set<CaptureSourceFormat>,
+        supportedAstroPipelines: Set<AstroPipelineProfile>
+    ) {
+        self.supportedSourceFormats = supportedSourceFormats
+        self.supportedAstroPipelines = supportedAstroPipelines
+    }
+}
+
+public enum CaptureFormatFallbackReason: String, Equatable, Sendable {
+    case preferredFormatUnavailable
+}
+
+public struct CaptureFormatResolution: Equatable, Sendable {
+    public let selectedFormat: CaptureSourceFormat
+    public let fallbackReason: CaptureFormatFallbackReason?
+}
+
+public enum CaptureFormatResolutionError: Error, Equatable, Sendable {
+    case noSupportedProcessedFormat
+}
+
+public struct CaptureFormatResolver: Sendable {
+    public init() {}
+
+    public func resolve(
+        preferred: CaptureSourceFormat,
+        profile: DeviceCapabilityProfile
+    ) throws -> CaptureFormatResolution {
+        if profile.supportedSourceFormats.contains(preferred) {
+            return CaptureFormatResolution(selectedFormat: preferred, fallbackReason: nil)
+        }
+        if profile.supportedSourceFormats.contains(.jpeg) {
+            return CaptureFormatResolution(
+                selectedFormat: .jpeg,
+                fallbackReason: .preferredFormatUnavailable
+            )
+        }
+        if profile.supportedSourceFormats.contains(.heic) {
+            return CaptureFormatResolution(
+                selectedFormat: .heic,
+                fallbackReason: .preferredFormatUnavailable
+            )
+        }
+        throw CaptureFormatResolutionError.noSupportedProcessedFormat
+    }
+}
+
+public enum CaptureEnergyDecision: String, Equatable, Sendable {
+    case sufficient
+    case warning
+    case critical
+    case unknown
+}
+
+public enum EstimateConfidence: String, Equatable, Sendable {
+    case low
+    case medium
+    case high
+}
+
+public struct CaptureEnergyEstimate: Equatable, Sendable {
+    public let decision: CaptureEnergyDecision
+    public let estimatedEndLevel: ClosedRange<Double>
+    public let externalPowerRecommended: Bool
+    public let confidence: EstimateConfidence
+}
+
+public struct CaptureEnergyEstimator: Sendable {
+    public init() {}
+
+    public func estimate(
+        plan: CapturePlan,
+        snapshot: BatterySnapshot,
+        observedDrainPerHour: Double?,
+        uncertaintyFraction: Double = 0.25
+    ) -> CaptureEnergyEstimate {
+        guard
+            let level = snapshot.level,
+            let drainPerHour = observedDrainPerHour,
+            drainPerHour.isFinite,
+            drainPerHour >= 0
+        else {
+            return CaptureEnergyEstimate(
+                decision: .unknown,
+                estimatedEndLevel: 0...1,
+                externalPowerRecommended: plan.workflow == .astro,
+                confidence: .low
+            )
+        }
+
+        let durationHours = plan.plannedDuration / 3_600
+        let expectedDrain = drainPerHour * durationHours
+        let uncertainty = expectedDrain * max(uncertaintyFraction, 0)
+        let center = level - expectedDrain
+        let range = min(max(center - uncertainty, 0), 1)...min(max(center + uncertainty, 0), 1)
+        let isExternallyPowered = snapshot.state == .charging || snapshot.state == .full
+        let externalPowerRecommended = plan.workflow == .astro &&
+            plan.plannedDuration >= 30 * 60 &&
+            !isExternallyPowered
+
+        let decision: CaptureEnergyDecision
+        if snapshot.thermalState == .critical || range.lowerBound <= 0.05 {
+            decision = .critical
+        } else if snapshot.thermalState == .serious ||
+                    snapshot.isLowPowerModeEnabled ||
+                    range.lowerBound <= 0.20 ||
+                    externalPowerRecommended {
+            decision = .warning
+        } else {
+            decision = .sufficient
+        }
+
+        return CaptureEnergyEstimate(
+            decision: decision,
+            estimatedEndLevel: range,
+            externalPowerRecommended: externalPowerRecommended,
+            confidence: .medium
+        )
+    }
+}
+
+public struct CapturePlanDocument: Equatable, Sendable {
+    public let schemaVersion: Int
+    public let plan: CapturePlan
+
+    public init(schemaVersion: Int = 1, plan: CapturePlan) {
+        self.schemaVersion = schemaVersion
+        self.plan = plan
+    }
+}
+
+public enum CapturePlanCodecError: Error, Equatable, Sendable {
+    case unsupportedSchema(Int)
+}
+
+public struct CapturePlanCodec: Sendable {
+    public static let currentSchemaVersion = 1
+
+    public init() {}
+
+    public func encode(_ plan: CapturePlan) throws -> Data {
+        let envelope = Envelope(
+            schemaVersion: Self.currentSchemaVersion,
+            plan: Payload(plan: plan)
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(envelope)
+    }
+
+    public func decode(_ data: Data) throws -> CapturePlanDocument {
+        let envelope = try JSONDecoder().decode(Envelope.self, from: data)
+        guard envelope.schemaVersion == Self.currentSchemaVersion else {
+            throw CapturePlanCodecError.unsupportedSchema(envelope.schemaVersion)
+        }
+        let payload = envelope.plan
+        let plan = try CapturePlan(
+            workflow: payload.workflow,
+            plannedDuration: payload.plannedDuration,
+            captureInterval: payload.captureInterval,
+            sourceFormat: payload.sourceFormat,
+            captureFPS: payload.captureFPS,
+            renderFPS: payload.renderFPS,
+            resolution: payload.resolution,
+            astroPipeline: payload.astroPipeline
+        )
+        return CapturePlanDocument(schemaVersion: envelope.schemaVersion, plan: plan)
+    }
+
+    private struct Envelope: Codable {
+        let schemaVersion: Int
+        let plan: Payload
+    }
+
+    private struct Payload: Codable {
+        let workflow: CaptureWorkflow
+        let plannedDuration: TimeInterval
+        let captureInterval: TimeInterval?
+        let sourceFormat: CaptureSourceFormat
+        let captureFPS: Int?
+        let renderFPS: Int?
+        let resolution: CaptureResolution
+        let astroPipeline: AstroPipelineProfile?
+
+        init(plan: CapturePlan) {
+            workflow = plan.workflow
+            plannedDuration = plan.plannedDuration
+            captureInterval = plan.captureInterval
+            sourceFormat = plan.sourceFormat
+            captureFPS = plan.captureFPS
+            renderFPS = plan.renderFPS
+            resolution = plan.resolution
+            astroPipeline = plan.astroPipeline
+        }
+    }
+}

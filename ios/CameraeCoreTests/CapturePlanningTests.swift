@@ -151,3 +151,157 @@ struct CapturePlanningTests {
         }
     }
 }
+
+@Suite("Capture capability and energy planning")
+struct CaptureCapabilityPlanningTests {
+    @Test("HEIC remains selected when the complete pipeline supports it")
+    func keepsHEIC() throws {
+        let profile = DeviceCapabilityProfile(
+            supportedSourceFormats: [.heic, .jpeg],
+            supportedAstroPipelines: [.starsTimelapse]
+        )
+
+        let result = try CaptureFormatResolver().resolve(preferred: .heic, profile: profile)
+
+        #expect(result.selectedFormat == .heic)
+        #expect(result.fallbackReason == nil)
+    }
+
+    @Test("unsupported HEIC falls back to JPEG explicitly before capture")
+    func fallsBackToJPEG() throws {
+        let profile = DeviceCapabilityProfile(
+            supportedSourceFormats: [.jpeg],
+            supportedAstroPipelines: [.starsTimelapse]
+        )
+
+        let result = try CaptureFormatResolver().resolve(preferred: .heic, profile: profile)
+
+        #expect(result.selectedFormat == .jpeg)
+        #expect(result.fallbackReason == .preferredFormatUnavailable)
+    }
+
+    @Test("a device without a processed format cannot start silently")
+    func rejectsMissingFormats() {
+        let profile = DeviceCapabilityProfile(
+            supportedSourceFormats: [],
+            supportedAstroPipelines: []
+        )
+
+        #expect(throws: CaptureFormatResolutionError.noSupportedProcessedFormat) {
+            try CaptureFormatResolver().resolve(preferred: .heic, profile: profile)
+        }
+    }
+
+    @Test("energy estimates expose a range and recommend power for long Astro")
+    func estimatesEnergyRange() throws {
+        let plan = try CapturePlan.preset(
+            .astro(.threeHours),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullSensor,
+            astroPipeline: .full
+        )
+        let snapshot = BatterySnapshot(
+            level: 0.80,
+            state: .unplugged,
+            isLowPowerModeEnabled: false,
+            thermalState: .nominal,
+            capturedAt: Date(timeIntervalSince1970: 1)
+        )
+
+        let result = CaptureEnergyEstimator().estimate(
+            plan: plan,
+            snapshot: snapshot,
+            observedDrainPerHour: 0.15,
+            uncertaintyFraction: 0.20
+        )
+
+        #expect(result.decision == .warning)
+        #expect(abs(result.estimatedEndLevel.lowerBound - 0.26) < 0.000_001)
+        #expect(abs(result.estimatedEndLevel.upperBound - 0.44) < 0.000_001)
+        #expect(result.externalPowerRecommended)
+    }
+
+    @Test("unknown battery data remains unknown")
+    func unknownEnergy() throws {
+        let plan = try CapturePlan.preset(
+            .repeatableTimelapse(.fiveMinutes),
+            sourceFormat: .jpeg,
+            captureInterval: 5,
+            renderFPS: 30,
+            resolution: .fullHD
+        )
+        let result = CaptureEnergyEstimator().estimate(
+            plan: plan,
+            snapshot: .unknown(at: Date(timeIntervalSince1970: 1)),
+            observedDrainPerHour: nil
+        )
+
+        #expect(result.decision == .unknown)
+        #expect(result.confidence == .low)
+    }
+}
+
+@Suite("Capture plan persistence")
+struct CapturePlanPersistenceTests {
+    @Test("a resolved plan round-trips through its versioned document")
+    func roundTrip() throws {
+        let plan = try CapturePlan.preset(
+            .astro(.oneHour),
+            sourceFormat: .heic,
+            captureInterval: 5,
+            renderFPS: 24,
+            resolution: .fullSensor,
+            astroPipeline: .reduced
+        )
+        let codec = CapturePlanCodec()
+
+        let decoded = try codec.decode(codec.encode(plan))
+
+        #expect(decoded.schemaVersion == 1)
+        #expect(decoded.plan == plan)
+    }
+
+    @Test("future schemas are rejected explicitly")
+    func rejectsFutureSchema() {
+        let json = #"""
+        {
+          "schemaVersion": 99,
+          "plan": {
+            "workflow": "repeatableTimelapse",
+            "plannedDuration": 300,
+            "captureInterval": 5,
+            "sourceFormat": "jpeg",
+            "renderFPS": 30,
+            "resolution": "fullHD"
+          }
+        }
+        """#
+
+        #expect(throws: CapturePlanCodecError.unsupportedSchema(99)) {
+            try CapturePlanCodec().decode(Data(json.utf8))
+        }
+    }
+
+    @Test("decoded plans are validated instead of trusting JSON")
+    func rejectsInvalidValues() {
+        let json = #"""
+        {
+          "schemaVersion": 1,
+          "plan": {
+            "workflow": "repeatableTimelapse",
+            "plannedDuration": -1,
+            "captureInterval": 5,
+            "sourceFormat": "jpeg",
+            "renderFPS": 30,
+            "resolution": "fullHD"
+          }
+        }
+        """#
+
+        #expect(throws: CapturePlanError.invalidDuration) {
+            try CapturePlanCodec().decode(Data(json.utf8))
+        }
+    }
+}
