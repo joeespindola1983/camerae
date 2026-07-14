@@ -6,6 +6,7 @@ struct RepeatableCameraView: View {
 
     private let project: CameraProject
     private let store: TimelapseSessionStore
+    private let onClose: () -> Void
     private let onCompletedTimelapse: () -> Void
     private let onDeletedOpenedTimelapse: () -> Void
     private let explicitReferenceURL: URL?
@@ -49,12 +50,14 @@ struct RepeatableCameraView: View {
         referenceURL: URL? = nil,
         openedSession: TimelapseSession? = nil,
         videoSettings: Binding<WorkflowVideoSettings>,
+        onClose: @escaping () -> Void = {},
         onCompletedTimelapse: @escaping () -> Void = {},
         onDeletedOpenedTimelapse: @escaping () -> Void = {}
     ) {
         self.project = project
         let sessionStore = TimelapseSessionStore(project: project)
         self.store = sessionStore
+        self.onClose = onClose
         self.onCompletedTimelapse = onCompletedTimelapse
         self.onDeletedOpenedTimelapse = onDeletedOpenedTimelapse
         self.explicitReferenceURL = referenceURL
@@ -80,6 +83,17 @@ struct RepeatableCameraView: View {
         }
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            if capturePhase == .setup {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onClose) {
+                        Label("Timelapses", systemImage: "chevron.left")
+                    }
+                    .accessibilityLabel("Voltar para timelapses")
+                }
+            }
+        }
         .toolbar(capturePhase == .align ? .hidden : .visible, for: .navigationBar)
         .task {
             await camera.start()

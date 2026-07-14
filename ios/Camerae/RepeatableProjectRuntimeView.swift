@@ -15,13 +15,8 @@ struct RepeatableProjectRuntimeView: View {
     @State private var isConfirmingSessionDelete = false
     @State private var pendingSessionDelete: TimelapseSession?
     @State private var renderingSessionID: UUID?
-    @State private var exportingOriginalFramesSessionID: UUID?
     @State private var shareURL: URL?
     @State private var isShowingShareSheet = false
-    @State private var exportedArchiveURLs: [URL] = []
-    @State private var isShowingExportedArchives = false
-    @State private var exportProgress: OriginalFrameExportProgress?
-    @State private var exportTask: Task<Void, Never>?
     @State private var videoSettings = WorkflowVideoSettings.repeatableDefault
     @State private var errorMessage: String?
     @State private var importedReferenceItem: PhotosPickerItem?
@@ -54,6 +49,10 @@ struct RepeatableProjectRuntimeView: View {
                     referenceURL: referenceURL,
                     openedSession: sourceSession,
                     videoSettings: $videoSettings,
+                    onClose: {
+                        reloadSessions()
+                        mode = .list
+                    },
                     onCompletedTimelapse: {
                         reloadSessions()
                         mode = .list
@@ -67,19 +66,6 @@ struct RepeatableProjectRuntimeView: View {
         }
         .onAppear {
             reloadSessions()
-        }
-        .overlay {
-            if exportingOriginalFramesSessionID != nil {
-                BlockingProgressOverlay(
-                    title: "Exportando ZIP",
-                    message: "Gerando pacote com os frames originais",
-                    detail: exportProgress?.detailText ?? "Preparando",
-                    cancelTitle: "Parar",
-                    cancelAction: {
-                        exportTask?.cancel()
-                    }
-                )
-            }
         }
         .alert("Excluir este projeto?", isPresented: $isConfirmingProjectDelete) {
             Button("Excluir projeto", role: .destructive) {
@@ -108,11 +94,6 @@ struct RepeatableProjectRuntimeView: View {
         .sheet(isPresented: $isShowingShareSheet) {
             if let shareURL {
                 ShareSheet(items: [shareURL])
-            }
-        }
-        .sheet(isPresented: $isShowingExportedArchives) {
-            if !exportedArchiveURLs.isEmpty {
-                ExportedArchivesView(urls: exportedArchiveURLs)
             }
         }
     }
@@ -160,8 +141,7 @@ struct RepeatableProjectRuntimeView: View {
                         RepeatableSessionRow(
                                 summary: summary,
                                 isRendering: renderingSessionID == summary.id,
-                                isExportingOriginalFrames: exportingOriginalFramesSessionID == summary.id,
-                                isBusy: renderingSessionID != nil || exportingOriginalFramesSessionID != nil,
+                                isBusy: renderingSessionID != nil,
                                 renderAction: {
                                     Task {
                                         await renderVideo(for: summary.session)
@@ -169,9 +149,6 @@ struct RepeatableProjectRuntimeView: View {
                                 },
                                 shareAction: {
                                     shareMedia(for: summary)
-                                },
-                                exportOriginalFramesAction: {
-                                    startExportOriginalFrames(for: summary.session)
                                 }
                             )
                         .onTapGesture {
@@ -365,35 +342,6 @@ struct RepeatableProjectRuntimeView: View {
         isShowingShareSheet = true
     }
 
-    private func exportOriginalFrames(for session: TimelapseSession) async {
-        guard exportingOriginalFramesSessionID == nil, renderingSessionID == nil else { return }
-        exportingOriginalFramesSessionID = session.id
-        exportProgress = nil
-
-        do {
-            exportedArchiveURLs = try await store.exportOriginalFramesArchivesInBackground(for: session) { progress in
-                await MainActor.run {
-                    exportProgress = progress
-                }
-            }
-            isShowingExportedArchives = true
-        } catch is CancellationError {
-            exportedArchiveURLs = TimelapseSessionStore.existingOriginalFrameArchives(for: session)
-            isShowingExportedArchives = !exportedArchiveURLs.isEmpty
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-
-        exportingOriginalFramesSessionID = nil
-        exportProgress = nil
-        exportTask = nil
-    }
-
-    private func startExportOriginalFrames(for session: TimelapseSession) {
-        exportTask = Task {
-            await exportOriginalFrames(for: session)
-        }
-    }
 }
 
 private struct ImportedReferenceMedia: Transferable {
@@ -491,12 +439,10 @@ struct SessionCardMetadata: Equatable {
 struct RepeatableSessionRow: View {
     let summary: TimelapseSessionSummary
     let isRendering: Bool
-    let isExportingOriginalFrames: Bool
     let isBusy: Bool
     var showsActions = true
     let renderAction: () -> Void
     let shareAction: () -> Void
-    let exportOriginalFramesAction: () -> Void
     @State private var videoDuration: TimeInterval?
 
     var body: some View {
@@ -561,30 +507,17 @@ struct RepeatableSessionRow: View {
 
     private var actionButtons: some View {
         HStack(spacing: 10) {
-            Button {
-                exportOriginalFramesAction()
-            } label: {
-                if isExportingOriginalFrames {
-                    ProgressView()
-                        .frame(maxWidth: .infinity)
-                } else {
-                    Label("Originais", systemImage: "photo.stack")
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .buttonStyle(.bordered)
-            .disabled(isBusy || summary.frameCount == 0)
-
             if (summary.captureKind == .timelapse && summary.videoURL != nil) ||
                 (summary.captureKind == .video && summary.videoClipURL != nil) {
                 Button {
                     shareAction()
                 } label: {
-                    Label("Exportar", systemImage: "square.and.arrow.up")
-                        .frame(maxWidth: .infinity)
+                    Image(systemName: "square.and.arrow.up")
+                        .frame(width: 44, height: 36)
                 }
                 .buttonStyle(.bordered)
                 .disabled(isBusy)
+                .accessibilityLabel("Exportar vídeo")
             }
 
             if summary.captureKind == .timelapse {

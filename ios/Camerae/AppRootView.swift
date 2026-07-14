@@ -584,15 +584,13 @@ private struct AstroProjectRuntimeView: View {
                         .foregroundStyle(.secondary)
                 } else {
                     ForEach(sessions) { summary in
-                        RepeatableSessionRow(
+                            RepeatableSessionRow(
                                 summary: summary,
                                 isRendering: false,
-                                isExportingOriginalFrames: false,
                                 isBusy: false,
                                 showsActions: false,
                                 renderAction: {},
-                                shareAction: {},
-                                exportOriginalFramesAction: {}
+                                shareAction: {}
                             )
                         .onTapGesture {
                             mode = .processing(summary.session)
