@@ -5,6 +5,10 @@ public struct SessionManifestCodec: Sendable {
 
     public func decode(_ data: Data, directoryURL: URL) throws -> SessionManifestDocument {
         let payload = try Self.decoder().decode(Payload.self, from: data)
+        let schemaVersion = payload.schemaVersion ?? CameraeSchema.legacyUnversioned
+        guard (CameraeSchema.legacyUnversioned...CameraeSchema.current).contains(schemaVersion) else {
+            throw ManifestCompatibilityError.unsupportedSessionSchema(schemaVersion)
+        }
         let session = SessionRecord(
             id: payload.id,
             projectID: payload.projectId,
@@ -19,7 +23,7 @@ public struct SessionManifestCodec: Sendable {
             cameraLens: payload.cameraLens
         )
         return SessionManifestDocument(
-            schemaVersion: payload.schemaVersion ?? 2,
+            schemaVersion: schemaVersion,
             session: session,
             frameSummary: payload.frameSummary,
             astroSummary: payload.astroSummary,
@@ -33,7 +37,7 @@ public struct SessionManifestCodec: Sendable {
     public func encode(_ document: SessionManifestDocument) throws -> Data {
         let session = document.session
         let payload = Payload(
-            schemaVersion: max(document.schemaVersion, 3),
+            schemaVersion: CameraeSchema.current,
             id: session.id,
             projectId: session.projectID,
             module: session.module,

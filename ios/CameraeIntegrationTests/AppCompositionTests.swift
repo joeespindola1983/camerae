@@ -21,7 +21,26 @@ struct AppCompositionTests {
 
         #expect(created.name == "Integrated")
         #expect(secondStore.projects.map(\.id) == [created.id])
-        #expect(secondStore.projects.first?.summary == .empty)
+        #expect(secondStore.projects.first?.summary?.sessionCount == 0)
+        #expect(secondStore.projects.first?.summary?.mediaCount == 0)
+        #expect((secondStore.projects.first?.summary?.totalKnownBytes ?? 0) > 0)
+        #expect(secondStore.projects.first?.summary?.inventoryState == .clean)
+    }
+
+    @Test("ProjectStore publishes complete project bytes without blocking the view")
+    func projectStoreStorageInventory() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeProjectStorageIntegration-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ProjectStore(rootDirectory: root)
+        let project = try await store.createProject(module: .repeatable, name: "Storage")
+        try Data(repeating: 1, count: 7).write(
+            to: project.directoryURL.appendingPathComponent("extra.dat")
+        )
+
+        await store.reloadNow()
+
+        #expect((store.projects.first?.summary?.totalKnownBytes ?? 0) >= 7)
     }
 
     @Test("ProjectStore creates and reloads an initialized Edit project")

@@ -472,9 +472,18 @@ private struct ProjectRowSummary {
     var detail: String? {
         guard let summary = project.summary else { return nil }
         if project.module == .edit {
-            return "\(summary.mediaCount) clips"
+            return "\(summary.mediaCount) clips" + storageSuffix(summary.totalKnownBytes)
         }
-        return "\(summary.sessionCount) capturas · \(summary.mediaCount) frames"
+        return "\(summary.sessionCount) capturas · \(summary.mediaCount) frames" + storageSuffix(summary.totalKnownBytes)
+    }
+
+    private func storageSuffix(_ bytes: UInt64?) -> String {
+        guard let bytes else { return "" }
+        let formatted = ByteCountFormatter.string(
+            fromByteCount: Int64(clamping: bytes),
+            countStyle: .file
+        )
+        return " · \(formatted)"
     }
 }
 

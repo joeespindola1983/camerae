@@ -29,6 +29,34 @@ struct SessionManifestCompatibilityTests {
         #expect(migrated.session.cameraLens == document.session.cameraLens)
     }
 
+    @Test("legacy session writes upgrade to v5")
+    func upgradesLegacySessionToV5() throws {
+        let directory = URL(fileURLWithPath: "/tmp/session", isDirectory: true)
+        let codec = SessionManifestCodec()
+        let legacy = try codec.decode(Data(Self.legacyJSON.utf8), directoryURL: directory)
+
+        let upgraded = try codec.decode(codec.encode(legacy), directoryURL: directory)
+
+        #expect(upgraded.schemaVersion == 5)
+    }
+
+    @Test("future session schemas are rejected without reinterpretation")
+    func rejectsFutureSessionSchema() {
+        let json = Self.legacyJSON.replacingOccurrences(
+            of: "{",
+            with: "{ \"schemaVersion\": 99,",
+            options: [],
+            range: Self.legacyJSON.range(of: "{")
+        )
+
+        #expect(throws: ManifestCompatibilityError.unsupportedSessionSchema(99)) {
+            try SessionManifestCodec().decode(
+                Data(json.utf8),
+                directoryURL: URL(fileURLWithPath: "/tmp/session", isDirectory: true)
+            )
+        }
+    }
+
     private static let legacyJSON = #"""
     {
       "id": "44444444-4444-4444-4444-444444444444",
