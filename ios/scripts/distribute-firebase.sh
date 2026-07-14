@@ -173,20 +173,28 @@ if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
     build_settings+=(DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic)
   fi
 
-  xcodebuild archive \
+  archive_command=(xcodebuild archive \
     -workspace "$WORKSPACE" \
     -scheme "$SCHEME" \
     -configuration "$CONFIGURATION" \
     -destination "generic/platform=iOS" \
-    -archivePath "$ARCHIVE_PATH" \
-    "${provisioning_args[@]}" \
-    "${build_settings[@]}"
+    -archivePath "$ARCHIVE_PATH")
+  if [[ ${#provisioning_args[@]} -gt 0 ]]; then
+    archive_command+=("${provisioning_args[@]}")
+  fi
+  if [[ ${#build_settings[@]} -gt 0 ]]; then
+    archive_command+=("${build_settings[@]}")
+  fi
+  "${archive_command[@]}"
 
-  xcodebuild -exportArchive \
+  export_command=(xcodebuild -exportArchive \
     -archivePath "$ARCHIVE_PATH" \
     -exportPath "$EXPORT_DIR" \
-    -exportOptionsPlist "$EXPORT_OPTIONS" \
-    "${provisioning_args[@]}"
+    -exportOptionsPlist "$EXPORT_OPTIONS")
+  if [[ ${#provisioning_args[@]} -gt 0 ]]; then
+    export_command+=("${provisioning_args[@]}")
+  fi
+  "${export_command[@]}"
 fi
 
 if [[ ! -f "$IPA_PATH" ]]; then
