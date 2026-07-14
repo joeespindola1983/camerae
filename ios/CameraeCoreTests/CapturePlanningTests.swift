@@ -150,6 +150,17 @@ struct CapturePlanningTests {
             )
         }
     }
+
+    @Test("capture run budget stops at the exact planned deadline")
+    func captureRunBudgetDeadline() {
+        let start = Date(timeIntervalSince1970: 1_000)
+        let budget = CaptureRunBudget(startedAt: start, plannedDuration: 300)
+
+        #expect(!budget.hasReachedLimit(at: start.addingTimeInterval(299.999)))
+        #expect(budget.hasReachedLimit(at: start.addingTimeInterval(300)))
+        #expect(budget.remainingDuration(at: start.addingTimeInterval(120)) == 180)
+        #expect(budget.remainingDuration(at: start.addingTimeInterval(400)) == 0)
+    }
 }
 
 @Suite("Capture capability and energy planning")
@@ -362,6 +373,25 @@ struct CapturePreflightServiceTests {
         #expect(result.storage.decision == .blocked)
         #expect(result.storage.shortfallBytes == 100)
         #expect(result.energy.decision == .sufficient)
+    }
+
+    @Test("volume provider reads important-usage capacity from the project volume")
+    func readsVolumeCapacity() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeCapacityTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let date = Date(timeIntervalSince1970: 200)
+
+        let snapshot = await VolumeStorageCapacityProvider(
+            rootURL: root,
+            dateProvider: FixedDateProvider(date)
+        ).snapshot()
+
+        #expect(snapshot.availableForImportantUsage != nil)
+        #expect((snapshot.availableForImportantUsage ?? 0) > 0)
+        #expect(snapshot.capturedAt == date)
+        #expect(snapshot.source == .importantUsage)
     }
 }
 

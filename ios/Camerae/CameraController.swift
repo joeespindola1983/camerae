@@ -49,6 +49,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var exposureBias: Float = 0
     nonisolated(unsafe) private var astroExposureStrategy = AstroExposureStrategy.automatic(maxDuration: 1.0)
     private var timelapseTask: Task<Void, Never>?
+    private var videoStopTask: Task<Void, Never>?
     private var latestLocation: CLLocation?
     private var latestHeading: CLHeading?
     private var bestFineGeoPose: GeoPose?
@@ -102,11 +103,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    func toggleTimelapse(interval: Double) async {
+    func toggleTimelapse(interval: Double, plan: CapturePlan) async {
         if isTimelapseRunning {
             stopTimelapse()
         } else {
-            await startTimelapse(interval: interval)
+            await startTimelapse(interval: interval, plan: plan)
         }
     }
 
@@ -114,7 +115,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseInterval: Double,
         astroInterval: Double,
         batchSize: Int,
-        usesAutomaticExposure: Bool
+        usesAutomaticExposure: Bool,
+        plan: CapturePlan
     ) async {
         if isTimelapseRunning {
             stopTimelapse()
@@ -123,7 +125,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 timelapseInterval: timelapseInterval,
                 astroInterval: astroInterval,
                 batchSize: batchSize,
-                usesAutomaticExposure: usesAutomaticExposure
+                usesAutomaticExposure: usesAutomaticExposure,
+                plan: plan
             )
         }
     }
@@ -165,11 +168,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    func toggleVideoRecording() async {
+    func toggleVideoRecording(plan: CapturePlan) async {
         if isVideoRecording {
             stopVideoRecording()
         } else {
-            await startVideoRecording()
+            await startVideoRecording(plan: plan)
         }
     }
 
@@ -328,12 +331,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         status = progress.detailText
     }
 
-    private func startTimelapse(interval: Double) async {
+    private func startTimelapse(interval: Double, plan: CapturePlan) async {
         do {
             currentSession = try store.createSession(
                 captureKind: .timelapse,
                 cameraLens: captureMode == .repeatable ? selectedRepeatableLens : nil
             )
+            if let currentSession {
+                try store.saveCapturePlan(plan, in: currentSession)
+            }
             completedSession = nil
             frameCount = 0
             astroCompositeFrameCount = 0
@@ -348,7 +354,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
             timelapseTask = Task { [weak self] in
                 guard let self else { return }
-                await self.runTimelapseWithCountdown(interval: interval)
+                await self.runTimelapseWithCountdown(
+                    interval: interval,
+                    plannedDuration: plan.plannedDuration
+                )
             }
         } catch {
             status = "Falha ao criar sessao: \(error.localizedDescription)"
@@ -359,16 +368,20 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseInterval: Double,
         astroInterval: Double,
         batchSize: Int,
-        usesAutomaticExposure: Bool
+        usesAutomaticExposure: Bool,
+        plan: CapturePlan
     ) async {
         guard case .astro = captureMode else {
-            await startTimelapse(interval: timelapseInterval)
+            await startTimelapse(interval: timelapseInterval, plan: plan)
             return
         }
 
         do {
             astroExposureStrategy = usesAutomaticExposure ? .automatic(maxDuration: 1.0) : .fixed(duration: 1.0)
             currentSession = try store.createSession(captureKind: .timelapse)
+            if let currentSession {
+                try store.saveCapturePlan(plan, in: currentSession)
+            }
             completedSession = nil
             frameCount = 0
             astroCompositeFrameCount = 0
@@ -387,7 +400,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     timelapseInterval: timelapseInterval,
                     astroInterval: astroInterval,
                     batchSize: batchSize,
-                    waitsForAstroExposure: usesAutomaticExposure
+                    waitsForAstroExposure: usesAutomaticExposure,
+                    plannedDuration: plan.plannedDuration
                 )
             }
         } catch {
@@ -770,7 +784,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    private func runTimelapseWithCountdown(interval: Double) async {
+    private func runTimelapseWithCountdown(
+        interval: Double,
+        plannedDuration: TimeInterval
+    ) async {
         for second in stride(from: 3, through: 1, by: -1) {
             guard !Task.isCancelled else { return }
             countdownLabel = "\(second)s"
@@ -783,14 +800,18 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         await lockFocusForCaptureSequence()
         guard !Task.isCancelled else { return }
         status = "Capturando timelapse"
-        await runTimelapse(interval: interval)
+        await runTimelapse(interval: interval, plannedDuration: plannedDuration)
+        if !Task.isCancelled {
+            finishPlannedTimelapse()
+        }
     }
 
     private func runAstroBatchCaptureWithCountdown(
         timelapseInterval: Double,
         astroInterval: Double,
         batchSize: Int,
-        waitsForAstroExposure: Bool
+        waitsForAstroExposure: Bool,
+        plannedDuration: TimeInterval
     ) async {
         for second in stride(from: 3, through: 1, by: -1) {
             guard !Task.isCancelled else { return }
@@ -808,15 +829,24 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             timelapseInterval: timelapseInterval,
             astroInterval: astroInterval,
             batchSize: batchSize,
-            waitsForAstroExposure: waitsForAstroExposure
+            waitsForAstroExposure: waitsForAstroExposure,
+            plannedDuration: plannedDuration
         )
+        if !Task.isCancelled {
+            finishPlannedTimelapse()
+        }
     }
 
-    private func runTimelapse(interval: Double) async {
+    private func runTimelapse(interval: Double, plannedDuration: TimeInterval) async {
         let clampedInterval = min(max(interval, 2), 10)
         let intervalNanos = UInt64(clampedInterval * 1_000_000_000)
 
-        while !Task.isCancelled {
+        let runBudget = CaptureRunBudget(
+            startedAt: Date(),
+            plannedDuration: max(plannedDuration, 1)
+        )
+
+        while !Task.isCancelled && !runBudget.hasReachedLimit(at: Date()) {
             do {
                 try await captureAndSaveFrame()
             } catch {
@@ -834,7 +864,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseInterval: Double,
         astroInterval: Double,
         batchSize: Int,
-        waitsForAstroExposure: Bool
+        waitsForAstroExposure: Bool,
+        plannedDuration: TimeInterval
     ) async {
         let clampedTimelapseInterval = min(max(timelapseInterval, 2), 120)
         let clampedAstroInterval = min(max(astroInterval, 1), 10)
@@ -842,8 +873,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         var currentBatch: [URL] = []
         currentBatch.reserveCapacity(size)
         var isStackingActive = !waitsForAstroExposure
+        let runBudget = CaptureRunBudget(
+            startedAt: Date(),
+            plannedDuration: max(plannedDuration, 1)
+        )
 
-        while !Task.isCancelled {
+        while !Task.isCancelled && !runBudget.hasReachedLimit(at: Date()) {
             let captureStartedAt = Date()
             do {
                 let savedFrame = try await captureAndSaveFrame()
@@ -907,7 +942,22 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    private func startVideoRecording() async {
+    private func finishPlannedTimelapse() {
+        timelapseTask = nil
+        isTimelapseRunning = false
+        unlockFocusAfterCaptureSequence()
+        countdownLabel = "-"
+        astroBatchProgressLabel = "-"
+        astroExposurePhaseLabel = "-"
+        if frameCount > 0 || astroCompositeFrameCount > 0 {
+            completedSession = currentSession
+            status = "Plano de captura concluído"
+        } else {
+            status = "Plano encerrado sem frames"
+        }
+    }
+
+    private func startVideoRecording(plan: CapturePlan) async {
         guard !isTimelapseRunning, !isSinglePhotoCaptureRunning, !isVideoRecording else { return }
 
         do {
@@ -918,6 +968,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 captureKind: .video,
                 cameraLens: selectedRepeatableLens
             )
+            try store.saveCapturePlan(plan, in: videoSession)
             let sessionWithMotion = try saveReferencePoseIfAvailable(for: videoSession)
             let outputURL = store.videoClipURL(for: videoSession)
             if FileManager.default.fileExists(atPath: outputURL.path) {
@@ -941,6 +992,13 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             }
             MovieRecordingDelegateRetainer.shared.retain(delegate)
             movieOutput.startRecording(to: outputURL, recordingDelegate: delegate)
+            videoStopTask?.cancel()
+            videoStopTask = Task { [weak self] in
+                let nanoseconds = UInt64(max(plan.plannedDuration, 1) * 1_000_000_000)
+                try? await Task.sleep(nanoseconds: nanoseconds)
+                guard !Task.isCancelled else { return }
+                self?.stopVideoRecording()
+            }
         } catch {
             isVideoRecording = false
             status = "Video falhou: \(error.localizedDescription)"
@@ -949,11 +1007,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     private func stopVideoRecording() {
         guard isVideoRecording else { return }
+        videoStopTask?.cancel()
+        videoStopTask = nil
         status = "Finalizando video"
         movieOutput.stopRecording()
     }
 
     private func finishVideoRecording(result: Result<URL, Error>) async {
+        videoStopTask?.cancel()
+        videoStopTask = nil
         isVideoRecording = false
         videoRecordingStartedAt = nil
 

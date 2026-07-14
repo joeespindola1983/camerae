@@ -163,6 +163,20 @@ final class TimelapseSessionStore {
         try data.write(to: astroCaptureMetadataURL(for: session), options: [.atomic])
     }
 
+    func saveCapturePlan(_ plan: CapturePlan, in session: TimelapseSession) throws {
+        let data = try CapturePlanCodec().encode(plan)
+        try data.write(
+            to: session.directoryURL.appendingPathComponent("capture_plan.json"),
+            options: .atomic
+        )
+    }
+
+    func capturePlan(in session: TimelapseSession) throws -> CapturePlan? {
+        let url = session.directoryURL.appendingPathComponent("capture_plan.json")
+        guard fileManager.fileExists(atPath: url.path) else { return nil }
+        return try CapturePlanCodec().decode(Data(contentsOf: url)).plan
+    }
+
     func astroStackingStartFrame(in session: TimelapseSession) -> Int? {
         guard
             let data = try? Data(contentsOf: astroCaptureMetadataURL(for: session)),

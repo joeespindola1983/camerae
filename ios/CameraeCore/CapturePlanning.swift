@@ -271,6 +271,24 @@ public struct CapturePlanEstimator: Sendable {
     }
 }
 
+public struct CaptureRunBudget: Equatable, Sendable {
+    public let startedAt: Date
+    public let plannedDuration: TimeInterval
+
+    public init(startedAt: Date, plannedDuration: TimeInterval) {
+        self.startedAt = startedAt
+        self.plannedDuration = max(plannedDuration, 0)
+    }
+
+    public func hasReachedLimit(at date: Date) -> Bool {
+        date.timeIntervalSince(startedAt) >= plannedDuration
+    }
+
+    public func remainingDuration(at date: Date) -> TimeInterval {
+        max(0, plannedDuration - date.timeIntervalSince(startedAt))
+    }
+}
+
 public enum CaptureAdmissionDecision: String, Equatable, Sendable {
     case allowed
     case warning
@@ -292,6 +310,20 @@ public struct CaptureAdmissionResult: Equatable, Sendable {
     public let requiredBytes: UInt64?
     public let availableBytes: UInt64?
     public let shortfallBytes: UInt64
+
+    public init(
+        decision: CaptureAdmissionDecision,
+        reason: CaptureAdmissionReason,
+        requiredBytes: UInt64?,
+        availableBytes: UInt64?,
+        shortfallBytes: UInt64
+    ) {
+        self.decision = decision
+        self.reason = reason
+        self.requiredBytes = requiredBytes
+        self.availableBytes = availableBytes
+        self.shortfallBytes = shortfallBytes
+    }
 }
 
 public struct CaptureAdmissionConfiguration: Equatable, Sendable {
@@ -386,6 +418,31 @@ public struct StorageCapacitySnapshot: Equatable, Sendable {
 
 public protocol StorageCapacityProviding: Sendable {
     func snapshot() async -> StorageCapacitySnapshot
+}
+
+public struct VolumeStorageCapacityProvider: StorageCapacityProviding {
+    private let rootURL: URL
+    private let dateProvider: any DateProviding
+
+    public init(
+        rootURL: URL,
+        dateProvider: any DateProviding = SystemDateProvider()
+    ) {
+        self.rootURL = rootURL
+        self.dateProvider = dateProvider
+    }
+
+    public func snapshot() async -> StorageCapacitySnapshot {
+        let values = try? rootURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        let available = values?.volumeAvailableCapacityForImportantUsage.flatMap { value in
+            value >= 0 ? UInt64(value) : nil
+        }
+        return StorageCapacitySnapshot(
+            availableForImportantUsage: available,
+            capturedAt: dateProvider.now(),
+            source: .importantUsage
+        )
+    }
 }
 
 public enum BatteryState: String, Codable, Equatable, Sendable {
