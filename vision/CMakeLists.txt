@@ -12,6 +12,7 @@ find_package(OpenCV REQUIRED COMPONENTS calib3d core features2d imgcodecs imgpro
 
 add_library(camerae_vision
     src/opencv/alignment.cpp
+    src/opencv/alignment_quality.cpp
 )
 
 target_include_directories(camerae_vision
@@ -45,4 +46,15 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME camerae_vision_tests COMMAND camerae_vision_tests)
+
+    add_executable(camerae_alignment_quality_tests
+        tests/alignment_quality_tests.cpp
+    )
+
+    target_link_libraries(camerae_alignment_quality_tests
+        PRIVATE
+            camerae_vision
+    )
+
+    add_test(NAME camerae_alignment_quality_tests COMMAND camerae_alignment_quality_tests)
 endif()
