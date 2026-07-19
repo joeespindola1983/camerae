@@ -4,7 +4,6 @@ import CoreLocation
 import CoreMotion
 import ImageIO
 import UIKit
-import Vision
 
 @MainActor
 final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, CLLocationManagerDelegate {
@@ -40,6 +39,13 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private let captureMode: CameraCaptureMode
     private let captureQueue = DispatchQueue(label: "camerae.capture.queue")
     private let visualAlignmentQueue = DispatchQueue(label: "camerae.visual-alignment.queue")
+    nonisolated(unsafe) private let visualAlignmentEvaluator: any VisualAlignmentEvaluating = AppleVisionAlignmentEvaluator()
+    private let cameraeVisionCoordinator = CameraeVisionCaptureCoordinator(
+        configuration: CameraeVisionFeatureConfiguration.current(),
+        backendFactory: { reference, orientation in
+            try CameraeVisionOpenCVBackend(reference: reference, orientation: orientation)
+        }
+    )
     private let motionManager = CMMotionManager()
     private let locationManager = CLLocationManager()
     nonisolated(unsafe) private let photoOutput = AVCapturePhotoOutput()
@@ -89,6 +95,75 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         locationManager.distanceFilter = kCLDistanceFilterNone
         locationManager.headingFilter = 1
         locationManager.pausesLocationUpdatesAutomatically = false
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCameraeVisionThermalStateChange),
+            name: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCameraeVisionPowerStateChange),
+            name: Notification.Name.NSProcessInfoPowerStateDidChange,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCameraeVisionDidEnterBackground),
+            name: UIApplication.didEnterBackgroundNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCameraeVisionDidBecomeActive),
+            name: UIApplication.didBecomeActiveNotification,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCameraeVisionMemoryWarning),
+            name: UIApplication.didReceiveMemoryWarningNotification,
+            object: nil
+        )
+    }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    @objc nonisolated private func handleCameraeVisionThermalStateChange(_ notification: Notification) {
+        switch ProcessInfo.processInfo.thermalState {
+        case .serious, .critical:
+            cameraeVisionCoordinator.pause(.thermal)
+        case .fair:
+            cameraeVisionCoordinator.updateCadence(.conservative)
+            cameraeVisionCoordinator.resume(.thermal)
+        case .nominal:
+            cameraeVisionCoordinator.updateCadence(
+                ProcessInfo.processInfo.isLowPowerModeEnabled ? .conservative : .balanced
+            )
+            cameraeVisionCoordinator.resume(.thermal)
+        @unknown default:
+            cameraeVisionCoordinator.pause(.thermal)
+        }
+    }
+
+    @objc nonisolated private func handleCameraeVisionPowerStateChange(_ notification: Notification) {
+        cameraeVisionCoordinator.updateCadence(
+            ProcessInfo.processInfo.isLowPowerModeEnabled ? .conservative : .balanced
+        )
+    }
+
+    @objc nonisolated private func handleCameraeVisionDidEnterBackground(_ notification: Notification) {
+        cameraeVisionCoordinator.pause(.lifecycle)
+    }
+
+    @objc nonisolated private func handleCameraeVisionDidBecomeActive(_ notification: Notification) {
+        cameraeVisionCoordinator.resume(.lifecycle)
+    }
+
+    @objc nonisolated private func handleCameraeVisionMemoryWarning(_ notification: Notification) {
+        cameraeVisionCoordinator.pause(.memoryPressure)
     }
 
     func start() async {
@@ -241,6 +316,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
               lens != selectedRepeatableLens else {
             return
         }
+        cameraeVisionCoordinator.pause(.lensChange)
+        cameraeVisionCoordinator.invalidateResults()
+        defer { cameraeVisionCoordinator.resume(.lensChange) }
 
         do {
             try await configureIfNeeded()
@@ -298,6 +376,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                       let image = UIImage(contentsOfFile: url.path),
                       let cgImage = image.normalizedReferenceCGImage() else {
                     self.referenceCGImage = nil
+                    self.cameraeVisionCoordinator.updateReference(nil, orientation: .up)
                     Task { @MainActor in
                         self.visualAlignment = nil
                     }
@@ -306,6 +385,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 }
 
                 self.referenceCGImage = cgImage
+                if self.cameraeVisionCoordinator.isEnabled,
+                   let referenceBuffer = try? CameraeVisionPixelBufferFactory.makeBGRA(from: cgImage) {
+                    self.cameraeVisionCoordinator.updateReference(referenceBuffer, orientation: .up)
+                } else if self.cameraeVisionCoordinator.isEnabled {
+                    self.cameraeVisionCoordinator.updateReference(nil, orientation: .up)
+                }
                 self.lastVisualAlignmentAnalysis = .distantPast
                 Task { @MainActor in
                     self.visualAlignment = nil
@@ -511,6 +596,14 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     nonisolated private func analyzeVisualAlignmentIfNeeded(sampleBuffer: CMSampleBuffer) {
+        if cameraeVisionCoordinator.isEnabled,
+           let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            cameraeVisionCoordinator.submit(
+                pixelBuffer,
+                orientation: .right,
+                at: ProcessInfo.processInfo.systemUptime
+            )
+        }
         guard let referenceCGImage,
               !isAnalyzingVisualAlignment,
               Date().timeIntervalSince(lastVisualAlignmentAnalysis) >= visualAlignmentAnalysisInterval else {
@@ -521,22 +614,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         isAnalyzingVisualAlignment = true
 
         do {
-            let request = VNHomographicImageRegistrationRequest(
-                targetedCMSampleBuffer: sampleBuffer,
-                orientation: .right,
-                options: [:]
+            let estimate = try visualAlignmentEvaluator.evaluate(
+                sampleBuffer: sampleBuffer,
+                referenceImage: referenceCGImage,
+                orientation: .right
             )
-            let handler = VNImageRequestHandler(cgImage: referenceCGImage, orientation: .up, options: [:])
-            try handler.perform([request])
-            let referenceSize = CGSize(width: referenceCGImage.width, height: referenceCGImage.height)
-            let targetSize = Self.orientedTargetImageSize(from: sampleBuffer)
-            let estimate = request.results?.first.map {
-                Self.visualAlignmentEstimate(
-                    from: $0,
-                    referenceSize: referenceSize,
-                    targetSize: targetSize
-                )
-            }
             isVisualFineAdjustmentActive = estimate?.isFineAdjustment == true
             Task { @MainActor in
                 self.visualAlignment = estimate
@@ -556,193 +638,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         isAnalyzingVisualAlignment = false
     }
 
-    nonisolated private static func orientedTargetImageSize(from sampleBuffer: CMSampleBuffer) -> CGSize {
-        guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
-            return CGSize(width: 1, height: 1)
-        }
-
-        return CGSize(
-            width: CVPixelBufferGetHeight(pixelBuffer),
-            height: CVPixelBufferGetWidth(pixelBuffer)
-        )
-    }
-
     nonisolated private var visualAlignmentAnalysisInterval: TimeInterval {
         isVisualFineAdjustmentActive ? 0.16 : 0.28
-    }
-
-    nonisolated private static func visualAlignmentEstimate(
-        from observation: VNImageHomographicAlignmentObservation,
-        referenceSize: CGSize,
-        targetSize: CGSize
-    ) -> VisualAlignmentEstimate {
-        let transform = observation.warpTransform
-        let a = Double(transform.columns.0.x)
-        let b = Double(transform.columns.0.y)
-        let c = Double(transform.columns.1.x)
-        let d = Double(transform.columns.1.y)
-        let determinant = a * d - b * c
-        let scale = sqrt(abs(determinant))
-
-        let matchAnalysis = visualMatchAnalysis(
-            from: transform,
-            confidence: Double(observation.confidence),
-            referenceSize: referenceSize,
-            targetSize: targetSize
-        )
-
-        return VisualAlignmentEstimate(
-            scale: scale.isFinite ? scale : 1,
-            confidence: Double(observation.confidence),
-            horizontalOffset: Double(transform.columns.2.x),
-            verticalOffset: Double(transform.columns.2.y),
-            matchGuides: matchAnalysis.guides,
-            visualRotationDegrees: matchAnalysis.rotationDegrees
-        )
-    }
-
-    nonisolated private static func visualMatchAnalysis(
-        from transform: simd_float3x3,
-        confidence: Double,
-        referenceSize: CGSize,
-        targetSize: CGSize
-    ) -> (guides: [VisualMatchGuide], rotationDegrees: Double?) {
-        guard confidence > 0.02,
-              referenceSize.width > 0,
-              referenceSize.height > 0,
-              targetSize.width > 0,
-              targetSize.height > 0 else {
-            return ([], nil)
-        }
-
-        let anchors = [
-            CGPoint(x: 1.0 / 3.0, y: 1.0 / 3.0),
-            CGPoint(x: 2.0 / 3.0, y: 1.0 / 3.0),
-            CGPoint(x: 0.5, y: 0.5),
-            CGPoint(x: 1.0 / 3.0, y: 2.0 / 3.0),
-            CGPoint(x: 2.0 / 3.0, y: 2.0 / 3.0)
-        ]
-
-        var candidates = [
-            (
-                transform: transform,
-                guides: guides(from: transform, anchors: anchors, referenceSize: referenceSize, targetSize: targetSize)
-            )
-        ]
-
-        if let invertedTransform = inverted(transform) {
-            candidates.append((
-                transform: invertedTransform,
-                guides: guides(from: invertedTransform, anchors: anchors, referenceSize: referenceSize, targetSize: targetSize)
-            ))
-        }
-
-        guard let selected = candidates.filter({ $0.guides.count >= 3 }).max(by: { first, second in
-            if first.guides.count == second.guides.count {
-                return averageGuideLength(first.guides) > averageGuideLength(second.guides)
-            }
-
-            return first.guides.count < second.guides.count
-        }) else {
-            return ([], nil)
-        }
-
-        guard averageGuideLength(selected.guides) <= 0.62 else {
-            return ([], nil)
-        }
-
-        return (selected.guides, visualRotationDegrees(from: selected.transform))
-    }
-
-    nonisolated private static func guides(
-        from transform: simd_float3x3,
-        anchors: [CGPoint],
-        referenceSize: CGSize,
-        targetSize: CGSize
-    ) -> [VisualMatchGuide] {
-        anchors.enumerated().compactMap { index, point in
-            let referencePixelPoint = CGPoint(
-                x: point.x * referenceSize.width,
-                y: point.y * referenceSize.height
-            )
-
-            guard let projected = projectedPoint(referencePixelPoint, using: transform) else {
-                return nil
-            }
-
-            let normalizedProjected = CGPoint(
-                x: projected.x / targetSize.width,
-                y: projected.y / targetSize.height
-            )
-            let lenientBounds = -0.35...1.35
-            guard lenientBounds.contains(normalizedProjected.x),
-                  lenientBounds.contains(normalizedProjected.y) else {
-                return nil
-            }
-
-            return VisualMatchGuide(
-                id: index,
-                reference: point,
-                current: CGPoint(
-                    x: min(max(normalizedProjected.x, 0), 1),
-                    y: min(max(normalizedProjected.y, 0), 1)
-                )
-            )
-        }
-    }
-
-    nonisolated private static func averageGuideLength(_ guides: [VisualMatchGuide]) -> CGFloat {
-        guard !guides.isEmpty else { return .greatestFiniteMagnitude }
-
-        let total = guides.reduce(CGFloat(0)) { result, guide in
-            let dx = guide.current.x - guide.reference.x
-            let dy = guide.current.y - guide.reference.y
-            return result + sqrt(dx * dx + dy * dy)
-        }
-
-        return total / CGFloat(guides.count)
-    }
-
-    nonisolated private static func visualRotationDegrees(from transform: simd_float3x3) -> Double? {
-        let radians = atan2(Double(transform.columns.0.y), Double(transform.columns.0.x))
-        guard radians.isFinite else { return nil }
-
-        var degrees = radians * 180 / .pi
-        while degrees > 180 { degrees -= 360 }
-        while degrees < -180 { degrees += 360 }
-        return degrees
-    }
-
-    nonisolated private static func inverted(_ transform: simd_float3x3) -> simd_float3x3? {
-        let determinant = simd_determinant(transform)
-        guard determinant.isFinite, abs(determinant) > 0.0001 else {
-            return nil
-        }
-
-        let invertedTransform = simd_inverse(transform)
-        guard invertedTransform.columns.0.x.isFinite,
-              invertedTransform.columns.1.y.isFinite,
-              invertedTransform.columns.2.z.isFinite else {
-            return nil
-        }
-
-        return invertedTransform
-    }
-
-    nonisolated private static func projectedPoint(
-        _ point: CGPoint,
-        using transform: simd_float3x3
-    ) -> CGPoint? {
-        let x = Float(point.x)
-        let y = Float(point.y)
-        let denominator = transform.columns.0.z * x + transform.columns.1.z * y + transform.columns.2.z
-        guard denominator.isFinite, abs(denominator) > 0.0001 else { return nil }
-
-        let projectedX = (transform.columns.0.x * x + transform.columns.1.x * y + transform.columns.2.x) / denominator
-        let projectedY = (transform.columns.0.y * x + transform.columns.1.y * y + transform.columns.2.y) / denominator
-        guard projectedX.isFinite, projectedY.isFinite else { return nil }
-
-        return CGPoint(x: CGFloat(projectedX), y: CGFloat(projectedY))
     }
 
     private func publishCurrentGeoPose() {
@@ -1031,6 +928,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             lastExportURL = nil
             lastExportURLs = []
             isVideoRecording = true
+            cameraeVisionCoordinator.pause(.videoRecording)
             videoRecordingStartedAt = Date()
             status = "Gravando video"
 
@@ -1062,6 +960,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             }
         } catch {
             isVideoRecording = false
+            cameraeVisionCoordinator.resume(.videoRecording)
             status = "Video falhou: \(error.localizedDescription)"
         }
     }
@@ -1078,6 +977,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         videoStopTask?.cancel()
         videoStopTask = nil
         isVideoRecording = false
+        cameraeVisionCoordinator.resume(.videoRecording)
         videoRecordingStartedAt = nil
 
         do {
@@ -1316,7 +1216,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     nonisolated private func captureManualPhoto() throws -> CapturedPhoto {
-        try captureQueue.syncSafeCapture(
+        cameraeVisionCoordinator.pause(.photoCapture)
+        defer { cameraeVisionCoordinator.resume(.photoCapture) }
+        return try captureQueue.syncSafeCapture(
             photoOutput: photoOutput,
             preferredFormat: selectedSourceFormat
         )
@@ -1637,64 +1539,6 @@ enum RepeatableCameraLens: String, CaseIterable, Codable, Hashable, Identifiable
 private enum AstroExposureStrategy {
     case automatic(maxDuration: Double)
     case fixed(duration: Double)
-}
-
-struct VisualAlignmentEstimate: Equatable {
-    let scale: Double
-    let confidence: Double
-    let horizontalOffset: Double
-    let verticalOffset: Double
-    let matchGuides: [VisualMatchGuide]
-    let visualRotationDegrees: Double?
-
-    init(
-        scale: Double,
-        confidence: Double,
-        horizontalOffset: Double,
-        verticalOffset: Double,
-        matchGuides: [VisualMatchGuide] = [],
-        visualRotationDegrees: Double? = nil
-    ) {
-        self.scale = scale
-        self.confidence = confidence
-        self.horizontalOffset = horizontalOffset
-        self.verticalOffset = verticalOffset
-        self.matchGuides = matchGuides
-        self.visualRotationDegrees = visualRotationDegrees
-    }
-
-    var isFineAdjustment: Bool {
-        confidence > 0.05 && abs(scale - 1) <= 0.06
-    }
-
-    var distanceHint: VisualDistanceHint {
-        guard confidence > 0.05 else {
-            return .searching
-        }
-
-        if scale < 0.96 {
-            return .moveBack
-        }
-
-        if scale > 1.04 {
-            return .moveForward
-        }
-
-        return .matched
-    }
-}
-
-struct VisualMatchGuide: Equatable, Identifiable {
-    let id: Int
-    let reference: CGPoint
-    let current: CGPoint
-}
-
-enum VisualDistanceHint {
-    case searching
-    case moveForward
-    case moveBack
-    case matched
 }
 
 private struct CapturedPhoto {

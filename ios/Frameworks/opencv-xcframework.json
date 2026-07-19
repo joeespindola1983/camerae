@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "opencvVersion": "4.13.0",
+  "opencvCommit": "fe38fc608f6acb8b68953438a62305d8318f4fcd",
+  "minimumIOSVersion": "17.0",
+  "architectures": {
+    "iphoneos": ["arm64"],
+    "iphonesimulator": ["arm64"]
+  },
+  "modules": [
+    "calib3d",
+    "core",
+    "features2d",
+    "flann",
+    "imgcodecs",
+    "imgproc",
+    "photo",
+    "video"
+  ]
+}

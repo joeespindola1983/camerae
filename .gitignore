@@ -26,6 +26,7 @@ processing/tmp/
 ios/LocalModels/
 ios/Pods/
 ios/build/
+ios/Frameworks/opencv2.xcframework/
 
 # Local source/export experiments. Shippable assets live in platform catalogs
 # or in the tracked design source directory.

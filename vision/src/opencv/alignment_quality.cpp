@@ -314,6 +314,7 @@ CaptureAlignmentQuality AlignmentQualityEvaluator::evaluate(
 
     CaptureAlignmentQuality quality;
     quality.selectedModel = selected->model;
+    quality.transform = selected->transform.clone();
     quality.overlapRatio = overlap;
     quality.reprojectionRMSE = selected->reprojectionRMSE;
     quality.edgeAlignmentError = localEdgeError;

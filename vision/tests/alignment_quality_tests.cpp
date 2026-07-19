@@ -51,6 +51,8 @@ void testChoosesSimilarityWhenSufficient() {
 
     require(quality.selectedModel == AlignmentMotionModel::Similarity,
             "captureFast should prefer similarity when it explains the motion");
+    require(quality.transform.rows == 3 && quality.transform.cols == 3,
+            "captureFast should expose the selected 3x3 transform to platform bridges");
     require(quality.decision != AlignmentDecision::Reject,
             "small similarity motion should remain correctable");
     require(quality.estimatedLatencyMilliseconds > 0.0,

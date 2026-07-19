@@ -20,6 +20,7 @@ expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
 expect_contains "$check_plan" "tests: architecture, Swift, Camerae Processing, Camerae Vision"
+expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
 
 firebase_plan="$($SCRIPT firebase --plan --publish)"
 expect_contains "$firebase_plan" "mode: firebase"
@@ -57,6 +58,14 @@ if rg -n '^ +"\$\{(provisioning_args|build_settings)\[@\]\}" \\$' "$IOS_DIR/scri
 fi
 if rg -n '^  (push|pull_request):' "$ROOT_DIR/.github/workflows"/*.yml; then
   echo "Release workflows must not run automatically" >&2
+  exit 1
+fi
+if ! rg -q 'verify-opencv-xcframework\.sh' "$SCRIPT"; then
+  echo "Release gate must verify the pinned OpenCV XCFramework" >&2
+  exit 1
+fi
+if ! rg -q 'CameraeVisionTests' "$IOS_DIR/project.yml"; then
+  echo "Camerae scheme must include the CameraeVision bridge tests" >&2
   exit 1
 fi
 

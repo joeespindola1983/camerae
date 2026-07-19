@@ -15,6 +15,22 @@ jobs:
       - name: Select Xcode
         run: sudo xcode-select -s /Applications/Xcode.app
 
+      - name: Cache pinned OpenCV XCFramework
+        id: opencv-cache
+        uses: actions/cache@v4
+        with:
+          path: ios/Frameworks/opencv2.xcframework
+          key: opencv-ios-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('ios/Frameworks/opencv-xcframework.json', 'ios/scripts/build-opencv-xcframework.sh') }}
+
+      - name: Build pinned OpenCV XCFramework
+        if: steps.opencv-cache.outputs.cache-hit != 'true'
+        working-directory: ios
+        run: ./scripts/build-opencv-xcframework.sh
+
+      - name: Verify pinned OpenCV XCFramework
+        working-directory: ios
+        run: ./scripts/verify-opencv-xcframework.sh
+
       - name: Install CocoaPods dependencies
         working-directory: ios
         run: pod install

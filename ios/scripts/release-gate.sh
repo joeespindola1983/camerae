@@ -80,6 +80,7 @@ print_plan() {
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
   echo "tests: architecture, Swift, Camerae Processing, Camerae Vision"
+  echo "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
   echo "build: unsigned device build before signed archive"
 }
 
@@ -156,6 +157,9 @@ fi
 
 step "Install locked CocoaPods dependencies"
 (cd "$IOS_DIR" && pod install --deployment)
+
+step "Verify pinned OpenCV XCFramework"
+(cd "$IOS_DIR" && ./scripts/verify-opencv-xcframework.sh)
 
 step "Check architecture boundaries"
 (cd "$IOS_DIR" && ./scripts/check-architecture.sh)

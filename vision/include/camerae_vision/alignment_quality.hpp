@@ -24,6 +24,7 @@ struct CaptureAlignmentQuality {
     double edgeAlignmentError = 0.0;
     double estimatedLatencyMilliseconds = 0.0;
     AlignmentMotionModel selectedModel = AlignmentMotionModel::Similarity;
+    cv::Mat transform;
     std::vector<std::string> reasons;
     std::vector<AlignmentReasonCode> reasonCodes;
 };

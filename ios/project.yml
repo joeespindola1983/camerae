@@ -6,8 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "7.0.0"
-    CURRENT_PROJECT_VERSION: "14"
+    MARKETING_VERSION: "8.0.0"
+    CURRENT_PROJECT_VERSION: "15"
 targets:
   CameraeCore:
     type: framework
@@ -33,6 +33,41 @@ targets:
         DEFINES_MODULE: YES
         GENERATE_INFOPLIST_FILE: YES
         SKIP_INSTALL: YES
+  CameraeVision:
+    type: framework
+    platform: iOS
+    sources:
+      - path: CameraeVision
+        excludes:
+          - include
+      - path: CameraeVision/include
+        headerVisibility: public
+      - path: ../vision/src
+      - path: ../vision/include
+        headerVisibility: project
+    dependencies:
+      - framework: Frameworks/opencv2.xcframework
+        embed: false
+      - sdk: CoreVideo.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.vision
+        DEFINES_MODULE: YES
+        GENERATE_INFOPLIST_FILE: YES
+        SKIP_INSTALL: YES
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
+        CLANG_WARN_DOCUMENTATION_COMMENTS: NO
+        CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER: NO
+        HEADER_SEARCH_PATHS:
+          - $(SRCROOT)/CameraeVision/include
+          - $(SRCROOT)/../vision/include
+        OTHER_LDFLAGS: >-
+          $(inherited) -lz
+          -framework Accelerate
+          -framework CoreGraphics
+          -framework CoreVideo
+          -framework QuartzCore
+          -framework UIKit
   Camerae:
     type: application
     platform: iOS
@@ -66,26 +101,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Camerae/Camerae-Bridging-Header.h
-        # OpenCV2 4.3 has no arm64 Simulator slice; OpenCVBridge uses a stub there.
-        "OTHER_LDFLAGS[sdk=iphonesimulator*]": >-
-          -ObjC -lc++ -lz
-          -framework AVFoundation
-          -framework Accelerate
-          -framework AssetsLibrary
-          -framework CoreGraphics
-          -framework CoreImage
-          -framework CoreMedia
-          -framework CoreVideo
-          -framework FirebaseCore
-          -framework FirebaseCoreInternal
-          -framework Foundation
-          -framework GoogleUtilities
-          -framework QuartzCore
-          -framework Security
-          -framework UIKit
     dependencies:
       - target: CameraeCore
       - target: CameraeMedia
+      - target: CameraeVision
   CameraeCoreTests:
     type: bundle.unit-test
     platform: iOS
@@ -108,6 +127,19 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.media-tests
         GENERATE_INFOPLIST_FILE: YES
+  CameraeVisionTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: CameraeVisionTests
+    dependencies:
+      - target: CameraeVision
+      - sdk: CoreVideo.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.vision-tests
+        GENERATE_INFOPLIST_FILE: YES
+        CLANG_CXX_LANGUAGE_STANDARD: c++17
   CameraeIntegrationTests:
     type: bundle.unit-test
     platform: iOS
@@ -154,6 +186,7 @@ schemes:
       targets:
         - CameraeCoreTests
         - CameraeMediaTests
+        - CameraeVisionTests
         - CameraeIntegrationTests
     profile:
       config: Release

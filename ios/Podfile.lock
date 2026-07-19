@@ -15,11 +15,9 @@ PODS:
   - "GoogleUtilities/NSData+zlib (8.1.0)":
     - GoogleUtilities/Privacy
   - GoogleUtilities/Privacy (8.1.0)
-  - OpenCV2 (4.3.0)
 
 DEPENDENCIES:
   - Firebase/CoreOnly
-  - OpenCV2
 
 SPEC REPOS:
   trunk:
@@ -27,15 +25,13 @@ SPEC REPOS:
     - FirebaseCore
     - FirebaseCoreInternal
     - GoogleUtilities
-    - OpenCV2
 
 SPEC CHECKSUMS:
   Firebase: aa154fee4e9b8eac17aa42344988865b3e857d33
   FirebaseCore: f28af0427998cd53f8d4826bce17260e33224053
   FirebaseCoreInternal: 7c12fc3011d889085e765e317d7b9fd1cef97af9
   GoogleUtilities: 00c88b9a86066ef77f0da2fab05f65d7768ed8e1
-  OpenCV2: ffe82e5cb5d16dc3fc01a5f4127b9a5b3cfc7d1b
 
-PODFILE CHECKSUM: 93dc84346da567f9a55dc5b2765caf9883d229d5
+PODFILE CHECKSUM: 029b226c5147a7dbce57952c4fc242de6b962740
 
 COCOAPODS: 1.16.2
