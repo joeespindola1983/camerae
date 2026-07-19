@@ -254,6 +254,10 @@ CaptureAlignmentQuality AlignmentQualityEvaluator::evaluate(
         referenceSignature_ = signature;
         hasReference_ = true;
         ++diagnostics_.referenceFeatureExtractions;
+        diagnostics_.estimatedReferenceCacheBytes =
+            referenceGray_.total() * referenceGray_.elemSize() +
+            referenceDescriptors_.total() * referenceDescriptors_.elemSize() +
+            referenceKeypoints_.size() * sizeof(cv::KeyPoint);
     }
 
     std::vector<cv::KeyPoint> movingKeypoints;
@@ -362,6 +366,7 @@ void AlignmentQualityEvaluator::resetReference() {
     referenceGray_.release();
     referenceKeypoints_.clear();
     referenceDescriptors_.release();
+    diagnostics_.estimatedReferenceCacheBytes = 0;
 }
 
 } // namespace camerae_vision

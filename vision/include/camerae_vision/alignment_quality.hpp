@@ -32,6 +32,7 @@ struct AlignmentQualityDiagnostics {
     bool usedECC = false;
     bool usedSIFT = false;
     std::size_t referenceFeatureExtractions = 0;
+    std::size_t estimatedReferenceCacheBytes = 0;
     double similarityRMSE = 0.0;
     double affineRMSE = 0.0;
     double similarityEdgeAlignmentError = 0.0;

@@ -82,3 +82,16 @@ The desktop lab exposes this as `--model auto`; explicit model selection remains
 available and unchanged. On both supplied real pairs, automatic mode retained
 similarity: the higher-parallax pair remained `review`, while the lower-parallax
 pair was already `accept` without requiring a more deformable model.
+
+## Reusable capture session
+
+`CaptureAlignmentSession` owns one capture reference and evaluates multiple
+moving frames through the same `CaptureFast` feature cache. An explicit
+reference update invalidates preparation exactly once. The session can be
+cancelled and resumed; cancelled submissions return before inspecting frame
+pixels.
+
+Diagnostics report completed and cancelled evaluations, reference updates,
+feature extractions, the retained reference image, and estimated reference-cache
+memory. The session is synchronous and thread-agnostic; worker ownership remains
+part of the later application-integration plan.
