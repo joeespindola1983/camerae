@@ -11,7 +11,35 @@ public protocol EditVideoComposing: Sendable {
         progress: @escaping @Sendable (Double) async -> Void
     ) async throws -> URL
 
+    func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan?,
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL
+
     func cancel() async
+}
+
+public extension EditVideoComposing {
+    func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan?,
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
+        guard spatialAlignment == nil else {
+            throw EditVideoComposerError.spatialAlignmentUnsupported
+        }
+        return try await export(
+            project: project,
+            assets: assets,
+            outputURL: outputURL,
+            progress: progress
+        )
+    }
 }
 
 public actor EditVideoComposer: EditVideoComposing {
@@ -33,8 +61,28 @@ public actor EditVideoComposer: EditVideoComposing {
         outputURL: URL,
         progress: @escaping @Sendable (Double) async -> Void
     ) async throws -> URL {
+        try await export(
+            project: project,
+            assets: assets,
+            spatialAlignment: nil,
+            outputURL: outputURL,
+            progress: progress
+        )
+    }
+
+    public func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan?,
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
         guard exportSession == nil else { throw EditVideoComposerError.exportAlreadyRunning }
-        let plan = try planner.makePlan(document: project, assets: assets)
+        let plan = try planner.makePlan(
+            document: project,
+            assets: assets,
+            spatialAlignment: spatialAlignment
+        )
         let built = try await buildComposition(plan: plan, assets: assets)
         try fileManager.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let temporaryURL = outputURL.deletingLastPathComponent()
@@ -153,10 +201,12 @@ public actor EditVideoComposer: EditVideoComposing {
             instruction.timeRange = CMTimeRange(start: start, duration: duration)
             let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: compositionVideoTrack)
             layer.setTransform(
-                aspectFitTransform(
+                EditVideoTransformResolver.layerTransform(
                     naturalSize: naturalSize,
                     preferredTransform: preferredTransform,
-                    renderSize: CGSize(width: plan.renderWidth, height: plan.renderHeight)
+                    renderSize: CGSize(width: plan.renderWidth, height: plan.renderHeight),
+                    spatialTransform: segment.spatialTransform,
+                    commonCrop: plan.commonCrop
                 ),
                 at: start
             )
@@ -172,7 +222,52 @@ public actor EditVideoComposer: EditVideoComposing {
         return (composition, videoComposition)
     }
 
-    private func aspectFitTransform(
+    private func validateExport(at url: URL) async throws {
+        let values = try url.resourceValues(forKeys: [.fileSizeKey])
+        guard (values.fileSize ?? 0) > 0 else { throw EditVideoComposerError.emptyOutput }
+        let asset = AVURLAsset(url: url)
+        guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
+            throw EditVideoComposerError.emptyOutput
+        }
+        let duration = CMTimeGetSeconds(try await asset.load(.duration))
+        guard duration.isFinite, duration > 0 else { throw EditVideoComposerError.emptyOutput }
+    }
+}
+
+public enum EditVideoTransformResolver {
+    public static func layerTransform(
+        naturalSize: CGSize,
+        preferredTransform: CGAffineTransform,
+        renderSize: CGSize,
+        spatialTransform: ClipAlignmentTransform,
+        commonCrop: ClipAlignmentNormalizedRect
+    ) -> CGAffineTransform {
+        let baseline = aspectFitTransform(
+            naturalSize: naturalSize,
+            preferredTransform: preferredTransform,
+            renderSize: renderSize
+        )
+        let correction = CGAffineTransform(
+            a: spatialTransform.a,
+            b: spatialTransform.b,
+            c: spatialTransform.c,
+            d: spatialTransform.d,
+            tx: spatialTransform.tx * renderSize.width,
+            ty: spatialTransform.ty * renderSize.height
+        )
+        let cropScale = 1 / min(commonCrop.width, commonCrop.height)
+        let crop = CGAffineTransform(
+            a: cropScale,
+            b: 0,
+            c: 0,
+            d: cropScale,
+            tx: -commonCrop.x * renderSize.width * cropScale,
+            ty: -commonCrop.y * renderSize.height * cropScale
+        )
+        return baseline.concatenating(correction).concatenating(crop)
+    }
+
+    public static func aspectFitTransform(
         naturalSize: CGSize,
         preferredTransform: CGAffineTransform,
         renderSize: CGSize
@@ -194,17 +289,6 @@ public actor EditVideoComposer: EditVideoComposing {
         transform = transform.concatenating(CGAffineTransform(translationX: x, y: y))
         return transform
     }
-
-    private func validateExport(at url: URL) async throws {
-        let values = try url.resourceValues(forKeys: [.fileSizeKey])
-        guard (values.fileSize ?? 0) > 0 else { throw EditVideoComposerError.emptyOutput }
-        let asset = AVURLAsset(url: url)
-        guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
-            throw EditVideoComposerError.emptyOutput
-        }
-        let duration = CMTimeGetSeconds(try await asset.load(.duration))
-        guard duration.isFinite, duration > 0 else { throw EditVideoComposerError.emptyOutput }
-    }
 }
 
 public enum EditVideoComposerError: LocalizedError, Equatable {
@@ -216,6 +300,7 @@ public enum EditVideoComposerError: LocalizedError, Equatable {
     case exportFailed
     case cancelled
     case emptyOutput
+    case spatialAlignmentUnsupported
 
     public var errorDescription: String? {
         switch self {
@@ -227,6 +312,7 @@ public enum EditVideoComposerError: LocalizedError, Equatable {
         case .exportFailed: return "não foi possível concluir a exportação"
         case .cancelled: return "exportação cancelada"
         case .emptyOutput: return "o MP4 exportado está vazio ou inválido"
+        case .spatialAlignmentUnsupported: return "este compositor não aceita alinhamento espacial"
         }
     }
 }

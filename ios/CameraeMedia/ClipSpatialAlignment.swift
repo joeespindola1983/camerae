@@ -93,6 +93,16 @@ public struct ClipAlignmentNormalizedRect: Codable, Equatable, Sendable {
             height: maximumY - minimumY
         )
     }
+
+    fileprivate var largestCenteredCanvasAspectRect: Self {
+        let side = min(width, height)
+        return Self(
+            x: x + (width - side) / 2,
+            y: y + (height - side) / 2,
+            width: side,
+            height: side
+        )
+    }
 }
 
 public struct ClipAlignmentQuality: Codable, Equatable, Sendable {
@@ -208,6 +218,7 @@ public struct ClipSpatialAlignmentPlanner: Sendable {
             }
         }
 
+        commonCrop = commonCrop.largestCenteredCanvasAspectRect
         if 1 - commonCrop.area > maximumCropFraction {
             decision = .reject
             reasons.append("excessiveCommonCrop")

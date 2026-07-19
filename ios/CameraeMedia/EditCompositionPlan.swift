@@ -8,6 +8,7 @@ public struct EditCompositionSegment: Equatable, Sendable {
     public let duration: TimeInterval
     public let sourcePixelWidth: Int
     public let sourcePixelHeight: Int
+    public let spatialTransform: ClipAlignmentTransform
 
     public init(
         itemID: UUID,
@@ -15,7 +16,8 @@ public struct EditCompositionSegment: Equatable, Sendable {
         startTime: TimeInterval,
         duration: TimeInterval,
         sourcePixelWidth: Int,
-        sourcePixelHeight: Int
+        sourcePixelHeight: Int,
+        spatialTransform: ClipAlignmentTransform = .identity
     ) {
         self.itemID = itemID
         self.assetID = assetID
@@ -23,6 +25,7 @@ public struct EditCompositionSegment: Equatable, Sendable {
         self.duration = duration
         self.sourcePixelWidth = sourcePixelWidth
         self.sourcePixelHeight = sourcePixelHeight
+        self.spatialTransform = spatialTransform
     }
 }
 
@@ -33,6 +36,7 @@ public struct EditCompositionPlan: Equatable, Sendable {
     public let frameRate: Int
     public let segments: [EditCompositionSegment]
     public let totalDuration: TimeInterval
+    public let commonCrop: ClipAlignmentNormalizedRect
 
     public init(
         canvas: EditCanvas,
@@ -40,7 +44,8 @@ public struct EditCompositionPlan: Equatable, Sendable {
         renderHeight: Int,
         frameRate: Int,
         segments: [EditCompositionSegment],
-        totalDuration: TimeInterval
+        totalDuration: TimeInterval,
+        commonCrop: ClipAlignmentNormalizedRect = .full
     ) {
         self.canvas = canvas
         self.renderWidth = renderWidth
@@ -48,6 +53,7 @@ public struct EditCompositionPlan: Equatable, Sendable {
         self.frameRate = frameRate
         self.segments = segments
         self.totalDuration = totalDuration
+        self.commonCrop = commonCrop
     }
 }
 
@@ -56,9 +62,20 @@ public struct EditCompositionPlanner: Sendable {
 
     public func makePlan(
         document: EditProjectDocument,
-        assets: [MediaAssetID: ResolvedMediaAsset]
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan? = nil
     ) throws -> EditCompositionPlan {
         guard !document.items.isEmpty else { throw EditCompositionError.emptyTimeline }
+        if let spatialAlignment {
+            guard spatialAlignment.decision == .apply else {
+                throw EditCompositionError.spatialAlignmentNotApplicable
+            }
+            let timelineIDs = Set(document.items.map(\.id))
+            guard timelineIDs == Set(spatialAlignment.corrections.keys),
+                  timelineIDs.contains(spatialAlignment.referenceItemID) else {
+                throw EditCompositionError.spatialAlignmentDoesNotMatchTimeline
+            }
+        }
         var segments: [EditCompositionSegment] = []
         var cursor: TimeInterval = 0
 
@@ -79,7 +96,8 @@ public struct EditCompositionPlanner: Sendable {
                 startTime: cursor,
                 duration: descriptor.duration,
                 sourcePixelWidth: descriptor.pixelWidth,
-                sourcePixelHeight: descriptor.pixelHeight
+                sourcePixelHeight: descriptor.pixelHeight,
+                spatialTransform: spatialAlignment?.corrections[item.id]?.transform ?? .identity
             ))
             cursor += descriptor.duration
         }
@@ -91,7 +109,8 @@ public struct EditCompositionPlanner: Sendable {
             renderHeight: size.1,
             frameRate: 30,
             segments: segments,
-            totalDuration: cursor
+            totalDuration: cursor,
+            commonCrop: spatialAlignment?.commonCrop ?? .full
         )
     }
 }
@@ -101,4 +120,6 @@ public enum EditCompositionError: Error, Equatable {
     case missingMedia(MediaAssetID)
     case invalidDuration(MediaAssetID)
     case invalidDimensions(MediaAssetID)
+    case spatialAlignmentNotApplicable
+    case spatialAlignmentDoesNotMatchTimeline
 }

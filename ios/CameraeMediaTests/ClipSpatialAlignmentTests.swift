@@ -25,7 +25,11 @@ struct ClipSpatialAlignmentTests {
         )
 
         #expect(plan.decision == .apply)
-        #expect(plan.commonCrop == .init(x: 0.08, y: 0, width: 0.92, height: 0.96))
+        #expect(abs(plan.commonCrop.x - 0.08) < 0.000_001)
+        #expect(abs(plan.commonCrop.y - 0.02) < 0.000_001)
+        #expect(abs(plan.commonCrop.width - 0.92) < 0.000_001)
+        #expect(abs(plan.commonCrop.height - 0.92) < 0.000_001)
+        #expect(plan.commonCrop.width == plan.commonCrop.height)
         #expect(plan.corrections[movingID]?.model == .translation)
         #expect(plan.corrections[referenceID]?.transform == .identity)
     }

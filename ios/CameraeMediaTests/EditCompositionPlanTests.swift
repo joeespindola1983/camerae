@@ -52,6 +52,65 @@ struct EditCompositionPlanTests {
             )
         }
     }
+
+    @Test("applicable spatial plan is copied into segments with one global crop")
+    func includesSpatialAlignment() throws {
+        let fixture = CompositionFixture()
+        let document = fixture.document(canvas: .landscape16x9)
+        let movingTransform = ClipAlignmentTransform(
+            a: 1, b: 0, c: 0, d: 1, tx: -0.04, ty: 0.02
+        )
+        let spatialPlan = try ClipSpatialAlignmentPlanner().makePlan(
+            referenceItemID: fixture.itemIDs[0],
+            candidates: [
+                .identity(itemID: fixture.itemIDs[0]),
+                ClipAlignmentCandidate(
+                    itemID: fixture.itemIDs[1],
+                    model: .translation,
+                    transform: movingTransform,
+                    validRegion: .init(x: 0, y: 0.02, width: 0.96, height: 0.98),
+                    quality: .init(decision: .apply, score: 0.9, reasonCodes: [])
+                )
+            ]
+        )
+
+        let plan = try EditCompositionPlanner().makePlan(
+            document: document,
+            assets: fixture.assets,
+            spatialAlignment: spatialPlan
+        )
+
+        #expect(plan.segments[0].spatialTransform == .identity)
+        #expect(plan.segments[1].spatialTransform == movingTransform)
+        #expect(plan.commonCrop == spatialPlan.commonCrop)
+    }
+
+    @Test("review or reject plan cannot enter the render plan")
+    func unsafeSpatialPlanIsBlocked() throws {
+        let fixture = CompositionFixture()
+        let referenceID = fixture.itemIDs[0]
+        let rejected = try ClipSpatialAlignmentPlanner().makePlan(
+            referenceItemID: referenceID,
+            candidates: [
+                .identity(itemID: referenceID),
+                ClipAlignmentCandidate(
+                    itemID: fixture.itemIDs[1],
+                    model: .translation,
+                    transform: .identity,
+                    validRegion: .full,
+                    quality: .init(decision: .reject, score: 0.1, reasonCodes: [])
+                )
+            ]
+        )
+
+        #expect(throws: EditCompositionError.spatialAlignmentNotApplicable) {
+            try EditCompositionPlanner().makePlan(
+                document: fixture.document(canvas: .landscape16x9),
+                assets: fixture.assets,
+                spatialAlignment: rejected
+            )
+        }
+    }
 }
 
 private struct CompositionFixture {

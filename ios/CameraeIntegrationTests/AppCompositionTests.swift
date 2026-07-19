@@ -171,12 +171,21 @@ struct AppCompositionTests {
         let resolved = ResolvedMediaAsset(descriptor: descriptor, url: root.appendingPathComponent("source.mp4"))
         let composer = EditVideoComposerStub()
         let model = EditExportViewModel(project: project, composer: composer)
+        let spatialAlignment = try ClipSpatialAlignmentPlanner().makePlan(
+            referenceItemID: document.items[0].id,
+            candidates: [.identity(itemID: document.items[0].id)]
+        )
 
-        await model.export(document: document, assets: [reference.id: resolved])
+        await model.export(
+            document: document,
+            assets: [reference.id: resolved],
+            spatialAlignment: spatialAlignment
+        )
 
         #expect(model.progress == 1)
         #expect(model.outputURL?.lastPathComponent == "My Portfolio.mp4")
         #expect(model.errorMessage == nil)
+        #expect(await composer.receivedSpatialAlignment == spatialAlignment)
         let reloaded = try await EditProjectCatalog(project: project.coreRecord).loadOrCreate()
         #expect(reloaded.lastExportRelativePath == "Exports/My Portfolio.mp4")
     }
@@ -472,6 +481,8 @@ private struct DelayedStorageProvider: StorageCapacityProviding {
 }
 
 private actor EditVideoComposerStub: EditVideoComposing {
+    private(set) var receivedSpatialAlignment: EditSpatialAlignmentPlan?
+
     func export(
         project: EditProjectDocument,
         assets: [MediaAssetID: ResolvedMediaAsset],
@@ -483,6 +494,22 @@ private actor EditVideoComposerStub: EditVideoComposing {
         await progress(0.5)
         await progress(1)
         return outputURL
+    }
+
+    func export(
+        project: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan?,
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws -> URL {
+        receivedSpatialAlignment = spatialAlignment
+        return try await export(
+            project: project,
+            assets: assets,
+            outputURL: outputURL,
+            progress: progress
+        )
     }
 
     func cancel() async {}

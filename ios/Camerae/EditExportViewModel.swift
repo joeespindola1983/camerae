@@ -21,7 +21,8 @@ final class EditExportViewModel: ObservableObject {
 
     func export(
         document: EditProjectDocument,
-        assets: [MediaAssetID: ResolvedMediaAsset]
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan? = nil
     ) async {
         guard !isExporting else { return }
         isExporting = true
@@ -37,6 +38,7 @@ final class EditExportViewModel: ObservableObject {
             let result = try await composer.export(
                 project: document,
                 assets: assets,
+                spatialAlignment: spatialAlignment,
                 outputURL: destination
             ) { value in
                 await self.updateProgress(value)

@@ -1,0 +1,113 @@
+#import <CameraeVision/CameraeVision.h>
+#import <CoreVideo/CoreVideo.h>
+#import <XCTest/XCTest.h>
+
+@interface CameraeVisionClipAlignmentTests : XCTestCase
+@end
+
+@implementation CameraeVisionClipAlignmentTests
+
+- (void)testKnownTranslationReturnsNormalizedConservativeClipTransform {
+    CVPixelBufferRef reference = [self makeTexturedBufferWithWidth:240 height:180 seed:71];
+    CVPixelBufferRef moving = [self makeShiftedCopy:reference shiftX:12 shiftY:-6];
+
+    NSError *error = nil;
+    CEVClipAlignmentResult *result = [CameraeVisionClipAlignmentEstimator
+        estimateReferencePixelBuffer:reference
+        referenceOrientation:CEVImageOrientationUp
+        movingPixelBuffer:moving
+        movingOrientation:CEVImageOrientationUp
+        error:&error];
+
+    XCTAssertNotNil(result, @"%@", error);
+    XCTAssertEqual(result.schemaVersion, 1);
+    XCTAssertEqualObjects(result.selectedModel, @"translation");
+    XCTAssertEqual(result.transform3x3.count, 9);
+    XCTAssertEqual(result.validRegion.count, 4);
+    XCTAssertEqualWithAccuracy(result.transform3x3[2].doubleValue, -0.05, 0.025);
+    XCTAssertEqualWithAccuracy(result.transform3x3[5].doubleValue, 6.0 / 180.0, 0.025);
+    XCTAssertGreaterThan(result.score, 0.5);
+    XCTAssertTrue(result.decision == CEVAlignmentDecisionAccept ||
+                  result.decision == CEVAlignmentDecisionReview);
+
+    CVPixelBufferRelease(reference);
+    CVPixelBufferRelease(moving);
+}
+
+- (void)testUnsupportedMovingPixelFormatReturnsTypedError {
+    CVPixelBufferRef reference = [self makeTexturedBufferWithWidth:80 height:80 seed:11];
+    CVPixelBufferRef grayscale = nil;
+    CVPixelBufferCreate(kCFAllocatorDefault, 80, 80, kCVPixelFormatType_OneComponent8,
+                        NULL, &grayscale);
+    NSError *error = nil;
+
+    XCTAssertNil([CameraeVisionClipAlignmentEstimator
+        estimateReferencePixelBuffer:reference
+        referenceOrientation:CEVImageOrientationUp
+        movingPixelBuffer:grayscale
+        movingOrientation:CEVImageOrientationUp
+        error:&error]);
+    XCTAssertEqual(error.code, CameraeVisionErrorUnsupportedPixelFormat);
+
+    CVPixelBufferRelease(reference);
+    CVPixelBufferRelease(grayscale);
+}
+
+- (CVPixelBufferRef)makeTexturedBufferWithWidth:(size_t)width
+                                         height:(size_t)height
+                                           seed:(uint32_t)seed CF_RETURNS_RETAINED {
+    CVPixelBufferRef buffer = nil;
+    NSDictionary *attributes = @{(NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{}};
+    CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
+                        (__bridge CFDictionaryRef)attributes, &buffer);
+    CVPixelBufferLockBaseAddress(buffer, 0);
+    uint8_t *base = (uint8_t *)CVPixelBufferGetBaseAddress(buffer);
+    const size_t stride = CVPixelBufferGetBytesPerRow(buffer);
+    uint32_t state = seed;
+    for (size_t y = 0; y < height; ++y) {
+        for (size_t x = 0; x < width; ++x) {
+            state = state * 1664525u + 1013904223u;
+            uint8_t *pixel = base + y * stride + x * 4;
+            pixel[0] = (uint8_t)state;
+            pixel[1] = (uint8_t)(state >> 8);
+            pixel[2] = (uint8_t)(state >> 16);
+            pixel[3] = 255;
+        }
+    }
+    CVPixelBufferUnlockBaseAddress(buffer, 0);
+    return buffer;
+}
+
+- (CVPixelBufferRef)makeShiftedCopy:(CVPixelBufferRef)source
+                             shiftX:(int)shiftX
+                             shiftY:(int)shiftY CF_RETURNS_RETAINED {
+    const size_t width = CVPixelBufferGetWidth(source);
+    const size_t height = CVPixelBufferGetHeight(source);
+    CVPixelBufferRef output = nil;
+    NSDictionary *attributes = @{(NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{}};
+    CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
+                        (__bridge CFDictionaryRef)attributes, &output);
+    CVPixelBufferLockBaseAddress(source, kCVPixelBufferLock_ReadOnly);
+    CVPixelBufferLockBaseAddress(output, 0);
+    uint8_t *sourceBase = (uint8_t *)CVPixelBufferGetBaseAddress(source);
+    uint8_t *outputBase = (uint8_t *)CVPixelBufferGetBaseAddress(output);
+    const size_t sourceStride = CVPixelBufferGetBytesPerRow(source);
+    const size_t outputStride = CVPixelBufferGetBytesPerRow(output);
+    memset(outputBase, 0, outputStride * height);
+    for (int y = 0; y < (int)height; ++y) {
+        for (int x = 0; x < (int)width; ++x) {
+            const int sourceX = x - shiftX;
+            const int sourceY = y - shiftY;
+            if (sourceX < 0 || sourceY < 0 || sourceX >= (int)width || sourceY >= (int)height) {
+                continue;
+            }
+            memcpy(outputBase + y * outputStride + x * 4,
+                   sourceBase + sourceY * sourceStride + sourceX * 4, 4);
+        }
+    }
+    CVPixelBufferUnlockBaseAddress(output, 0);
+    CVPixelBufferUnlockBaseAddress(source, kCVPixelBufferLock_ReadOnly);
+    return output;
+}
+
+@end

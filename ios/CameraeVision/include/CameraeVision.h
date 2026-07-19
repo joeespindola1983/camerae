@@ -2,4 +2,5 @@
 
 #import <CameraeVision/CameraeVisionRuntime.h>
 #import <CameraeVision/CameraeVisionCaptureSession.h>
+#import <CameraeVision/CameraeVisionClipAlignment.h>
 #import <CameraeVision/OpenCVBridge.h>
