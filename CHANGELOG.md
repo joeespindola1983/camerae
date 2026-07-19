@@ -1,5 +1,18 @@
 # Changelog
 
+## v7.0.0
+
+- Extracted OpenCV alignment into the shared desktop C++ `camerae_vision` module, independent from Astro, Repeatable, Timelapse, and platform UI code.
+- Added deterministic alignment feasibility coverage for `accept`, `review`, and `reject`, with stable typed diagnostics and versioned JSON schema 1 reports.
+- Added the lightweight `CaptureFast` evaluator using reduced input, ORB, similarity/affine comparison, reference-feature caching, measured latency, and no image I/O, SIFT, or ECC.
+- Added a reusable capture-alignment session with explicit reference invalidation, cancellation, resume, bounded cache diagnostics, and zero evaluation work while cancelled.
+- Added an optional capture-support contract that is disabled by default and creates no evaluator or scheduled work until enabled.
+- Added a desktop capture simulator with virtual cadence, latest-only backpressure, bounded pending frames, reduced decoding, decision distributions, latency percentiles, and approximate retained memory.
+- Added conservative automatic final model selection across similarity, affine, and homography while preserving explicit model selection and exposing all candidate metrics through the desktop lab.
+- Added seeded synthetic regression coverage for rigid, affine, perspective, and moving-object scenarios plus desktop benchmark guardrails for fast capture evaluation, final alignment, and retained memory.
+- Expanded the release gate's C++ stage to explicitly cover both Camerae Processing and all Camerae Vision regression, benchmark, session, diagnostics, and simulator tests.
+- Kept Camerae Vision integration with the live iOS and Android capture pipelines outside this release; that work remains a separate platform phase.
+
 ## v6.0.0
 
 - Added a new branded entry experience, shared Camerae design tokens, bundled typography, module-specific themes, and redesigned project surfaces for Repeatable and Astro.

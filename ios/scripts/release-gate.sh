@@ -79,7 +79,7 @@ print_plan() {
   esac
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
-  echo "tests: architecture, Swift, processing"
+  echo "tests: architecture, Swift, Camerae Processing, Camerae Vision"
   echo "build: unsigned device build before signed archive"
 }
 
@@ -169,7 +169,7 @@ step "Run Swift component and integration tests"
   CODE_SIGNING_ALLOWED=NO \
   test)
 
-step "Run C++ processing tests"
+step "Run C++ Camerae Processing and Camerae Vision tests"
 cmake -S "$ROOT_DIR/processing" -B "$ROOT_DIR/.build/release-gate-processing" -DBUILD_TESTING=ON
 cmake --build "$ROOT_DIR/.build/release-gate-processing" --parallel 2
 ctest --test-dir "$ROOT_DIR/.build/release-gate-processing" --output-on-failure

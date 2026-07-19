@@ -19,7 +19,7 @@ check_plan="$($SCRIPT check --plan)"
 expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
-expect_contains "$check_plan" "tests: architecture, Swift, processing"
+expect_contains "$check_plan" "tests: architecture, Swift, Camerae Processing, Camerae Vision"
 
 firebase_plan="$($SCRIPT firebase --plan --publish)"
 expect_contains "$firebase_plan" "mode: firebase"
