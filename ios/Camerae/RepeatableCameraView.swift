@@ -109,6 +109,9 @@ struct RepeatableCameraView: View {
             }
         }
         .toolbar(capturePhase == .align ? .hidden : .visible, for: .navigationBar)
+        .onAppear {
+            AppOrientationLock.shared.unlock()
+        }
         .task {
             await camera.start()
             await camera.setExposureBias(evBias)
@@ -129,7 +132,7 @@ struct RepeatableCameraView: View {
         }
         .onDisappear {
             stopReferenceBlinking()
-            AppOrientationLock.shared.unlock()
+            AppOrientationLock.shared.restorePortrait()
         }
         .alert("Excluir esta captura?", isPresented: $isShowingDeleteConfirmation) {
             Button("Excluir captura", role: .destructive) {

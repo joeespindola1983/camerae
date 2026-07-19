@@ -4,7 +4,7 @@ import UIKit
 final class AppOrientationLock {
     static let shared = AppOrientationLock()
 
-    private(set) var mask: UIInterfaceOrientationMask = .all
+    private(set) var mask: UIInterfaceOrientationMask = .portrait
 
     private init() {}
 
@@ -15,6 +15,11 @@ final class AppOrientationLock {
 
     func unlock() {
         mask = .all
+        applyGeometryPreference()
+    }
+
+    func restorePortrait() {
+        mask = .portrait
         applyGeometryPreference()
     }
 

@@ -113,6 +113,24 @@ public actor ProjectCatalog {
         return updated
     }
 
+    @discardableResult
+    public func deleteProject(_ projectID: UUID) throws -> Bool {
+        var projects = try load().projects
+        guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return false }
+        let project = projects.remove(at: index)
+
+        if fileManager.fileExists(atPath: project.directoryURL.path) {
+            try fileManager.removeItem(at: project.directoryURL)
+        }
+
+        var summaries = cachedSummaries
+        summaries.removeValue(forKey: projectID)
+        try writeIndex(projects, summaries: summaries)
+        cachedProjects = projects
+        cachedSummaries = summaries
+        return true
+    }
+
     public func markOpened(_ projectID: UUID) throws -> ProjectRecord? {
         var projects = try load().projects
         guard let index = projects.firstIndex(where: { $0.id == projectID }) else { return nil }

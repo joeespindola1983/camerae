@@ -88,11 +88,14 @@ void testFailuresAndCancellation(const std::filesystem::path& root) {
 
 } // namespace
 
+void runAlignmentProcessorTests();
+
 int main() {
     const auto root = std::filesystem::temp_directory_path() /
         ("camerae-processing-tests-" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
     std::filesystem::create_directories(root);
     try {
+        runAlignmentProcessorTests();
         testProfiles();
         testSyntheticAverage(root);
         testFailuresAndCancellation(root);

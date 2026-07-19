@@ -1,5 +1,17 @@
 # Changelog
 
+## v6.0.0
+
+- Added a new branded entry experience, shared Camerae design tokens, bundled typography, module-specific themes, and redesigned project surfaces for Repeatable and Astro.
+- Added direct project deletion with catalog, application, and integration coverage.
+- Separated Astro planning from its live camera phase, keeping duration, format, exposure, interval, batch, and preflight controls in a dedicated setup screen.
+- Improved orientation ownership so setup and project screens return to portrait while live capture can use the device orientation.
+- Refined camera presentation, module navigation, responsive layouts, and reusable visual assets without changing existing project or session storage formats.
+- Added an experimental desktop OpenCV alignment laboratory with ORB, AKAZE, and SIFT detectors; translation, similarity, affine, and homography models; optional CLAHE, mutual matching, RANSAC, and ECC; and reproducible diagnostics.
+- Added desktop alignment feasibility classification (`accept`, `review`, or `reject`) based on geometric consistency, overlap, spatial coverage, deformation, and local edge residuals.
+- Documented the future Camerae Vision module boundary and a deliberately staged Fast-model implementation plan; no mobile Camerae Vision integration is included in this release.
+- Expanded Core, integration, and C++ coverage for project deletion, navigation composition, synthetic alignment, and processing regressions.
+
 ## v5.0.0
 
 - Added duration presets and Custom planning for Repeatable video, Repeatable timelapse, and Astro captures.

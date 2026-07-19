@@ -175,6 +175,11 @@ final class ProjectStore: ObservableObject {
         apply(try await catalog.load())
     }
 
+    func deleteProject(_ project: CameraProject) async throws {
+        _ = try await catalog.deleteProject(project.id)
+        apply(try await catalog.load())
+    }
+
     private func apply(_ snapshot: ProjectCatalogSnapshot) {
         projects = snapshot.projects.map { record in
             CameraProject(record: record, summary: snapshot.summary(for: record.id))

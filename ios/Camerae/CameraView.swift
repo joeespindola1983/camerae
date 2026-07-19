@@ -23,6 +23,7 @@ struct CameraView: View {
     @State private var durationOption = AstroDurationOption.thirtyMinutes
     @State private var customDurationMinutes = 60
     @State private var sourceFormat = CaptureSourceFormat.heic
+    @State private var capturePhase = AstroCapturePhase.setup
 
     init(
         project: CameraProject,
@@ -41,35 +42,34 @@ struct CameraView: View {
     }
 
     var body: some View {
-        ZStack {
-            CameraPreview(session: camera.session)
-                .ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                topBar
-                Spacer()
-                if isControlsVisible {
-                    controls
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            if isExportingOriginalFrames {
-                BlockingProgressOverlay(
-                    title: "Exportando ZIP",
-                    message: "Gerando pacote com os frames originais",
-                    detail: camera.originalFrameExportProgress?.detailText ?? "Preparando",
-                    cancelTitle: "Parar",
-                    cancelAction: {
-                        exportTask?.cancel()
-                    }
-                )
+        Group {
+            switch capturePhase {
+            case .setup:
+                setupView
+            case .capture:
+                captureView
             }
         }
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            if capturePhase == .setup, let onClose {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onClose) {
+                        Label("Timelapses", systemImage: "chevron.left")
+                    }
+                    .accessibilityLabel("Voltar para timelapses")
+                }
+            }
+        }
+        .toolbar(capturePhase == .capture ? .hidden : .visible, for: .navigationBar)
+        .onAppear {
+            AppOrientationLock.shared.restorePortrait()
+        }
+        .onDisappear {
+            AppOrientationLock.shared.restorePortrait()
+        }
         .task {
             await camera.start()
         }
@@ -98,16 +98,123 @@ struct CameraView: View {
         }
     }
 
+    private var setupView: some View {
+        List {
+            Section("Captura") {
+                Picker("Duração", selection: $durationOption) {
+                    ForEach(AstroDurationOption.allCases) { option in
+                        Text(option.title).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if durationOption == .custom {
+                    Stepper(
+                        "Duração: \(customDurationMinutes) min",
+                        value: $customDurationMinutes,
+                        in: 5...720,
+                        step: 5
+                    )
+                }
+
+                Picker("Formato", selection: $sourceFormat) {
+                    Text("HEIC").tag(CaptureSourceFormat.heic)
+                    Text("JPEG").tag(CaptureSourceFormat.jpeg)
+                }
+                .pickerStyle(.segmented)
+            }
+
+            Section("Ajustes") {
+                Toggle(isOn: $usesAutomaticAstroExposure) {
+                    Label("Exposição automática Astro", systemImage: "camera.aperture")
+                }
+
+                if usesAutomaticAstroExposure {
+                    ControlSlider(
+                        title: "Intervalo timelapse",
+                        value: $timelapseIntervalSeconds,
+                        range: 2...120,
+                        step: 1,
+                        suffix: "s"
+                    )
+                }
+
+                ControlSlider(
+                    title: "Intervalo astro",
+                    value: $astroIntervalSeconds,
+                    range: 1...10,
+                    step: 1,
+                    suffix: "s"
+                )
+
+                ControlSlider(
+                    title: "Capturas por frame",
+                    value: $astroBatchSize,
+                    range: 5...30,
+                    step: 1,
+                    suffix: ""
+                )
+            }
+
+            Section("Planejamento") {
+                CapturePreflightCard(model: planning)
+            }
+
+            Section {
+                Button {
+                    AppOrientationLock.shared.unlock()
+                    capturePhase = .capture
+                } label: {
+                    Label("Abrir câmera", systemImage: "viewfinder")
+                }
+                .disabled(!canStartCapture)
+            }
+        }
+    }
+
+    private var captureView: some View {
+        ZStack {
+            CameraPreview(session: camera.session)
+                .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                topBar
+                Spacer()
+                if isControlsVisible {
+                    controls
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            if isExportingOriginalFrames {
+                BlockingProgressOverlay(
+                    title: "Exportando ZIP",
+                    message: "Gerando pacote com os frames originais",
+                    detail: camera.originalFrameExportProgress?.detailText ?? "Preparando",
+                    cancelTitle: "Parar",
+                    cancelAction: {
+                        exportTask?.cancel()
+                    }
+                )
+            }
+        }
+    }
+
     private var topBar: some View {
         HStack(spacing: 12) {
-            if let onClose {
-                Button(action: onClose) {
+            if !camera.isTimelapseRunning {
+                Button {
+                    AppOrientationLock.shared.restorePortrait()
+                    capturePhase = .setup
+                } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .semibold))
                         .frame(width: 44, height: 44)
                         .background(.ultraThinMaterial, in: Circle())
                 }
-                .accessibilityLabel("Voltar para capturas")
+                .accessibilityLabel("Voltar para configuração")
             }
 
             VStack(alignment: .leading, spacing: 4) {
@@ -161,89 +268,20 @@ struct CameraView: View {
     }
 
     private var controls: some View {
-        VStack(spacing: 10) {
-            ScrollView(.vertical, showsIndicators: false) {
-                VStack(spacing: 10) {
-                    HStack {
-                        MetricPill(title: "Originais", value: "\(camera.frameCount)")
-                        MetricPill(title: "Bons", value: "\(camera.astroCompositeFrameCount)")
-                        MetricPill(title: "Lote", value: camera.astroBatchProgressLabel)
-                    }
-
-                    HStack {
-                        MetricPill(title: "Fase", value: camera.astroExposurePhaseLabel)
-                        MetricPill(title: "Base", value: camera.baseExposureLabel)
-                        MetricPill(title: "Ultima", value: camera.lastCapturedExposureLabel)
-                    }
-
-                    AstroBatchPreview(url: camera.astroPreviewURL)
-
-                    Picker("Duração", selection: $durationOption) {
-                        ForEach(AstroDurationOption.allCases) { option in
-                            Text(option.title).tag(option)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .disabled(camera.isTimelapseRunning)
-
-                    if durationOption == .custom {
-                        Stepper(
-                            "Duração: \(customDurationMinutes) min",
-                            value: $customDurationMinutes,
-                            in: 5...720,
-                            step: 5
-                        )
-                        .font(.system(size: 12, weight: .semibold))
-                        .disabled(camera.isTimelapseRunning)
-                    }
-
-                    Picker("Formato", selection: $sourceFormat) {
-                        Text("HEIC").tag(CaptureSourceFormat.heic)
-                        Text("JPEG").tag(CaptureSourceFormat.jpeg)
-                    }
-                    .pickerStyle(.segmented)
-                    .disabled(camera.isTimelapseRunning)
-
-                    Toggle(isOn: $usesAutomaticAstroExposure) {
-                        Label("Auto -> Astro", systemImage: "camera.aperture")
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .disabled(camera.isTimelapseRunning)
-
-                    if usesAutomaticAstroExposure {
-                        ControlSlider(
-                            title: "Intervalo timelapse",
-                            value: $timelapseIntervalSeconds,
-                            range: 2...120,
-                            step: 1,
-                            suffix: "s",
-                            isDisabled: camera.isTimelapseRunning
-                        )
-                    }
-
-                    ControlSlider(
-                        title: "Intervalo astro",
-                        value: $astroIntervalSeconds,
-                        range: 1...10,
-                        step: 1,
-                        suffix: "s",
-                        isDisabled: camera.isTimelapseRunning
-                    )
-
-                    ControlSlider(
-                        title: "Capturas por frame",
-                        value: $astroBatchSize,
-                        range: 5...30,
-                        step: 1,
-                        suffix: "",
-                        isDisabled: camera.isTimelapseRunning
-                    )
-                }
-                .padding(.bottom, 2)
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                MetricPill(title: "Originais", value: "\(camera.frameCount)")
+                MetricPill(title: "Bons", value: "\(camera.astroCompositeFrameCount)")
+                MetricPill(title: "Lote", value: camera.astroBatchProgressLabel)
             }
-            .frame(maxHeight: 410)
 
-            CapturePreflightCard(model: planning)
+            HStack(spacing: 8) {
+                MetricPill(title: "Fase", value: camera.astroExposurePhaseLabel)
+                MetricPill(title: "Base", value: camera.baseExposureLabel)
+                MetricPill(title: "Última", value: camera.lastCapturedExposureLabel)
+            }
+
+            AstroBatchPreview(url: camera.astroPreviewURL)
 
             Button {
                 Task {
@@ -272,7 +310,8 @@ struct CameraView: View {
             .disabled(!camera.isTimelapseRunning && !canStartCapture)
         }
         .foregroundStyle(.white)
-        .padding(10)
+        .font(.system(size: 11, weight: .medium))
+        .padding(8)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.top, 8)
     }
@@ -342,6 +381,11 @@ struct CameraView: View {
             isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
         ))
     }
+}
+
+private enum AstroCapturePhase {
+    case setup
+    case capture
 }
 
 private enum AstroDurationOption: String, CaseIterable, Identifiable {

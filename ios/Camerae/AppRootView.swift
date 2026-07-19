@@ -6,19 +6,26 @@ struct AppRootView: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            ModuleSelectionView(path: $path)
+            EntryHomeView(path: $path)
                 .navigationDestination(for: CameraModule.self) { module in
-                    ProjectListView(module: module, path: $path)
+                    if module == .repeatable || module == .astrophotography {
+                        ProjectListScreen(module: module, path: $path)
+                    } else {
+                        ProjectListView(module: module, path: $path)
+                    }
                 }
                 .navigationDestination(for: CameraProject.self) { project in
                     ModuleRuntimeView(project: project, path: $path)
                 }
         }
         .environmentObject(projectStore)
+        .onAppear {
+            AppOrientationLock.shared.restorePortrait()
+        }
     }
 }
 
-private struct ModuleSelectionView: View {
+private struct LegacyModuleSelectionView: View {
     @EnvironmentObject private var projectStore: ProjectStore
     @Binding var path: NavigationPath
 
@@ -109,7 +116,6 @@ private struct ModuleSelectionView: View {
         ) {
             HomeModuleCard(
                 module: .repeatable,
-                accent: Color(red: 1, green: 0.55, blue: 0.2),
                 projectCount: projectStore.projects(for: .repeatable).count,
                 isCompact: !isLandscape,
                 createAction: { startCreating(.repeatable) },
@@ -118,7 +124,6 @@ private struct ModuleSelectionView: View {
 
             HomeModuleCard(
                 module: .astrophotography,
-                accent: Color(red: 0.48, green: 0.52, blue: 1),
                 projectCount: projectStore.projects(for: .astrophotography).count,
                 isCompact: !isLandscape,
                 createAction: { startCreating(.astrophotography) },
@@ -127,7 +132,6 @@ private struct ModuleSelectionView: View {
 
             HomeModuleCard(
                 module: .edit,
-                accent: Color(red: 0.35, green: 0.86, blue: 0.72),
                 projectCount: projectStore.projects(for: .edit).count,
                 isCompact: !isLandscape,
                 createAction: { startCreating(.edit) },
@@ -204,11 +208,12 @@ private struct ModuleSelectionView: View {
 
 private struct HomeModuleCard: View {
     let module: CameraModule
-    let accent: Color
     let projectCount: Int
     let isCompact: Bool
     let createAction: () -> Void
     let projectsAction: () -> Void
+
+    private var accent: Color { module.designTheme.accent }
 
     var body: some View {
         VStack(spacing: 16) {
@@ -365,6 +370,7 @@ private struct ProjectListView: View {
         .onAppear {
             projectStore.reload()
         }
+        .cameraeTheme(module.designTheme)
     }
 
     private func createProject(named name: String) {
@@ -458,7 +464,7 @@ private struct ProjectRow: View {
     }
 }
 
-private struct ProjectRowSummary {
+struct ProjectRowSummary {
     let project: CameraProject
 
     var subtitle: String {
@@ -487,7 +493,7 @@ private struct ProjectRowSummary {
     }
 }
 
-private struct NewProjectSheet: View {
+struct NewProjectSheet: View {
     let module: CameraModule
     @Binding var name: String
     let defaultName: String

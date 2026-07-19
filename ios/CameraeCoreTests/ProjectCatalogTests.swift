@@ -119,6 +119,22 @@ struct ProjectCatalogComponentTests {
         #expect(snapshot.summary(for: project.id) == summary)
     }
 
+    @Test("deleting a project removes its directory and catalog entry")
+    func deleteProject() async throws {
+        let library = try TemporaryLibrary()
+        defer { library.remove() }
+        let catalog = ProjectCatalog(rootDirectory: library.url)
+        let project = try await catalog.createProject(module: .astrophotography, name: "Temporary")
+
+        let removed = try await catalog.deleteProject(project.id)
+        let reloaded = try await ProjectCatalog(rootDirectory: library.url).load()
+
+        #expect(removed)
+        #expect(reloaded.projects.isEmpty)
+        #expect(reloaded.summary(for: project.id) == nil)
+        #expect(!FileManager.default.fileExists(atPath: project.directoryURL.path))
+    }
+
     @Test("a corrupt derived index rebuilds from valid manifests")
     func corruptIndexRebuilds() async throws {
         let library = try TemporaryLibrary()

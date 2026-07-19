@@ -8,9 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-find_package(OpenCV REQUIRED COMPONENTS core imgcodecs imgproc photo)
+find_package(OpenCV REQUIRED COMPONENTS calib3d core features2d imgcodecs imgproc photo video)
 
 add_library(camerae_processing
+    src/alignment_processor.cpp
     src/astro_processor.cpp
 )
 
@@ -34,8 +35,18 @@ target_link_libraries(camerae-astro-preview
         camerae_processing
 )
 
+add_executable(camerae-alignment-preview
+    tools/alignment_preview.cpp
+)
+
+target_link_libraries(camerae-alignment-preview
+    PRIVATE
+        camerae_processing
+)
+
 if(BUILD_TESTING)
     add_executable(camerae_processing_tests
+        tests/alignment_processor_tests.cpp
         tests/astro_processor_tests.cpp
     )
 

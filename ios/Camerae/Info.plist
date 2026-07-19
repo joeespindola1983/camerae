@@ -29,6 +29,11 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Camerae usa sua posicao para ajudar a repetir o enquadramento no mesmo local.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Outfit-Variable.ttf</string>
+		<string>DMMono-Regular.ttf</string>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict/>
 	<key>UIRequiredDeviceCapabilities</key>

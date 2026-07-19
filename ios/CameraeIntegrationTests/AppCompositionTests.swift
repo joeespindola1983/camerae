@@ -7,6 +7,16 @@ import Testing
 @Suite("App component integration", .serialized)
 @MainActor
 struct AppCompositionTests {
+    @Test("Camera modules keep their Figma workflow themes")
+    func cameraModuleThemes() {
+        #expect(CameraModule.repeatable.designTheme == .repeatable)
+        #expect(CameraModule.astrophotography.designTheme == .astro)
+        #expect(CameraModule.edit.designTheme == .editor)
+        #expect(CameraeWorkflowTheme.repeatable.assetName == "CameraeAccentRepeatable")
+        #expect(CameraeWorkflowTheme.astro.assetName == "CameraeAccentAstro")
+        #expect(CameraeWorkflowTheme.editor.assetName == "CameraeAccentEditor")
+    }
+
     @Test("Repeatable video countdown remains conservative and reaches zero")
     func repeatableVideoCountdown() {
         let startedAt = Date(timeIntervalSince1970: 1_000)

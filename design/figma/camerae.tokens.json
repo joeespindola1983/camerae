@@ -1,0 +1,62 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "metadata": {
+    "source": "Figma Design System for Timelapse App",
+    "figmaFileKey": "c8gsnSu31erYFG3u3QMQgN",
+    "figmaFoundationsNode": "18:2",
+    "syncedAt": "2026-07-16"
+  },
+  "color": {
+    "background": {
+      "canvas": { "$type": "color", "$value": "#08091A" },
+      "surface": { "$type": "color", "$value": "#0D1035" },
+      "warm": { "$type": "color", "$value": "#FBF5EE" }
+    },
+    "text": {
+      "primary": { "$type": "color", "$value": "#EEF1FF" },
+      "inverse": { "$type": "color", "$value": "#050200" },
+      "muted": { "$type": "color", "$value": "#FFFFFF66" }
+    },
+    "accent": {
+      "repeatable": { "$type": "color", "$value": "#FF7A30" },
+      "astro": { "$type": "color", "$value": "#4D6FFF" },
+      "editor": { "$type": "color", "$value": "#8B5CF6" }
+    },
+    "overlay": {
+      "card": { "$type": "color", "$value": "#FFFFFF12" }
+    },
+    "border": {
+      "strong": { "$type": "color", "$value": "#FFFFFF2E" }
+    },
+    "shadow": {
+      "soft": { "$type": "color", "$value": "#000000B2" },
+      "strong": { "$type": "color", "$value": "#000000CC" }
+    }
+  },
+  "spacing": {
+    "2xs": { "$type": "dimension", "$value": 4 },
+    "xs": { "$type": "dimension", "$value": 8 },
+    "sm": { "$type": "dimension", "$value": 12 },
+    "md": { "$type": "dimension", "$value": 16 },
+    "xl": { "$type": "dimension", "$value": 24 },
+    "4xl": { "$type": "dimension", "$value": 64 }
+  },
+  "radius": {
+    "sm": { "$type": "dimension", "$value": 8 },
+    "md": { "$type": "dimension", "$value": 12 },
+    "lg": { "$type": "dimension", "$value": 16 },
+    "xl": { "$type": "dimension", "$value": 20 },
+    "device": { "$type": "dimension", "$value": 52 },
+    "full": { "$type": "dimension", "$value": 999 }
+  },
+  "typography": {
+    "brandDisplay": { "fontFamily": "Outfit", "fontWeight": 200, "fontSize": 52, "lineHeight": 52, "letterSpacing": -2.08 },
+    "screenHeading": { "fontFamily": "Outfit", "fontWeight": 600, "fontSize": 28, "lineHeight": 34, "letterSpacing": -0.4 },
+    "bodyLarge": { "fontFamily": "Outfit", "fontWeight": 400, "fontSize": 16, "lineHeight": 24, "letterSpacing": 0 },
+    "metricValue": { "fontFamily": "Outfit", "fontWeight": 500, "fontSize": 24, "lineHeight": 29, "letterSpacing": 0 },
+    "monoLabel": { "fontFamily": "DM Mono", "fontWeight": 400, "fontSize": 9, "lineHeight": 14, "letterSpacing": 2.7 }
+  },
+  "system": {
+    "$description": "Cores semanticas do iOS nao sao copiadas como RGBA; o SwiftUI usa Color.primary, Color.secondary e Color(uiColor: .systemBackground)."
+  }
+}

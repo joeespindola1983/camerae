@@ -6,8 +6,8 @@ options:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "5.0.0"
-    CURRENT_PROJECT_VERSION: "12"
+    MARKETING_VERSION: "6.0.0"
+    CURRENT_PROJECT_VERSION: "13"
 targets:
   CameraeCore:
     type: framework
@@ -51,6 +51,9 @@ targets:
         CFBundleDisplayName: Camerae
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UIAppFonts:
+          - Outfit-Variable.ttf
+          - DMMono-Regular.ttf
         UILaunchScreen: {}
         NSCameraUsageDescription: Camerae usa a camera para capturar timelapses e alinhar fotos com uma referencia.
         NSLocationWhenInUseUsageDescription: Camerae usa sua posicao para ajudar a repetir o enquadramento no mesmo local.
