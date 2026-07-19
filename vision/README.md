@@ -107,3 +107,26 @@ separately.
 Both desktop JSON reports declare `schemaVersion: 1` and include `reasonCodes`.
 The original message arrays remain present for backward compatibility. Any
 future incompatible report change must increment the schema version.
+
+## Regression dataset and benchmark
+
+`camerae_vision_regression_tests` generates a seeded synthetic dataset covering
+similarity, affine shear, perspective, and a large moving object. It freezes
+model selection, photometric improvement, and the rule that unstable scenes do
+not receive `stableGeometry`.
+
+`camerae-vision-benchmark` measures both the cached `CaptureFast` session and
+automatic final alignment:
+
+```sh
+.build/vision/camerae-vision-benchmark \
+  --iterations 20 \
+  --report out/vision-benchmark.json
+```
+
+The CTest benchmark uses intentionally broad desktop regression guardrails:
+capture p95 below 500 ms, final automatic p95 below 5 seconds, and retained
+session memory below 16 MB. These catch explosive regressions without treating
+normal machine variance as a product budget. The initial local 20-iteration
+snapshot measured about 16.9 ms capture p95, 112.5 ms final p95, and 0.76 MB of
+estimated retained session memory.

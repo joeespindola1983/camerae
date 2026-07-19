@@ -57,6 +57,29 @@ add_executable(camerae-capture-quality-simulator
     tools/capture_quality_simulator.cpp
 )
 
+add_library(camerae_vision_benchmark_support
+    tools/vision_benchmark_support.cpp
+)
+
+target_include_directories(camerae_vision_benchmark_support
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools
+)
+
+target_link_libraries(camerae_vision_benchmark_support
+    PUBLIC
+        camerae_vision
+)
+
+add_executable(camerae-vision-benchmark
+    tools/vision_benchmark.cpp
+)
+
+target_link_libraries(camerae-vision-benchmark
+    PRIVATE
+        camerae_vision_benchmark_support
+)
+
 target_link_libraries(camerae-capture-quality-simulator
     PRIVATE
         camerae_capture_quality_simulator_support
@@ -145,4 +168,26 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME camerae_diagnostics_tests COMMAND camerae_diagnostics_tests)
+
+    add_executable(camerae_vision_benchmark_tests
+        tests/vision_benchmark_tests.cpp
+    )
+
+    target_link_libraries(camerae_vision_benchmark_tests
+        PRIVATE
+            camerae_vision_benchmark_support
+    )
+
+    add_test(NAME camerae_vision_benchmark_tests COMMAND camerae_vision_benchmark_tests)
+
+    add_executable(camerae_vision_regression_tests
+        tests/vision_regression_tests.cpp
+    )
+
+    target_link_libraries(camerae_vision_regression_tests
+        PRIVATE
+            camerae_vision
+    )
+
+    add_test(NAME camerae_vision_regression_tests COMMAND camerae_vision_regression_tests)
 endif()
