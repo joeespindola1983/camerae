@@ -8,7 +8,7 @@ struct CameraeApp: App {
 
     var body: some Scene {
         WindowGroup {
-            AppRootView()
+            CameraeNextRootView()
                 .onAppear {
                     UIApplication.shared.isIdleTimerDisabled = true
                 }

@@ -156,6 +156,20 @@ public struct EditSpatialAlignmentPlan: Codable, Equatable, Sendable {
     public let decision: ClipAlignmentDecision
     public let reasonCodes: [String]
 
+    public init(
+        referenceItemID: UUID,
+        corrections: [UUID: ClipAlignmentCandidate],
+        commonCrop: ClipAlignmentNormalizedRect,
+        decision: ClipAlignmentDecision,
+        reasonCodes: [String]
+    ) {
+        self.referenceItemID = referenceItemID
+        self.corrections = corrections
+        self.commonCrop = commonCrop
+        self.decision = decision
+        self.reasonCodes = reasonCodes
+    }
+
     public var applicableCorrections: [UUID: ClipAlignmentCandidate] {
         decision == .apply ? corrections : [:]
     }

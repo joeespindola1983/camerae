@@ -14,6 +14,7 @@ struct RepeatableCameraView: View {
     private let onDeletedOpenedTimelapse: () -> Void
     private let explicitReferenceURL: URL?
     private let openedSession: TimelapseSession?
+    private let usesNextInterface: Bool
     @Binding private var videoSettings: WorkflowVideoSettings
 
     @State private var intervalSeconds = 5.0
@@ -37,17 +38,19 @@ struct RepeatableCameraView: View {
     @State private var isShowingDeleteConfirmation = false
     @State private var deleteErrorMessage: String?
     @State private var capturePhase = RepeatableCapturePhase.setup
-    @State private var isPositionHUDVisible = true
+    @State private var isPositionHUDVisible = CameraeNextCaptureHUDDefaults.showsRepeatablePosition
     @State private var isScaleHUDVisible = false
     @State private var isMotionHUDVisible = true
     @State private var isTimelapseInfoVisible = false
     @State private var isGridVisible = true
+    @State private var selectedGridStyle = CameraeNextGridStyle.default
+    @State private var isShowingGridPicker = false
     @State private var isVisualMatchGuideVisible = true
     @State private var isMagnifierVisible = false
     @State private var magnifierCenter = CGPoint.zero
     @State private var magnifierZoom = AlignmentMagnifierZoom.four
     @State private var alignmentDisplaySize = CGSize.zero
-    @State private var activeHUDCategory: AlignmentHUDCategory?
+    @State private var activeHUDCategory: AlignmentHUDCategory? = CameraeNextCaptureHUDDefaults.repeatableSelectedGroup
     @State private var referenceOverlayID = UUID()
     @State private var edgeReferenceRenderID = UUID()
     @State private var currentAlignmentOrientation = CaptureDisplayOrientation.portrait
@@ -61,10 +64,15 @@ struct RepeatableCameraView: View {
         referenceURL: URL? = nil,
         openedSession: TimelapseSession? = nil,
         videoSettings: Binding<WorkflowVideoSettings>,
+        nextConfiguration: CameraeNextCaptureConfiguration? = nil,
         onClose: @escaping () -> Void = {},
         onCompletedTimelapse: @escaping () -> Void = {},
         onDeletedOpenedTimelapse: @escaping () -> Void = {}
     ) {
+        CameraeCaptureDiagnostics.event(
+            "R01.7 repeatable.init",
+            "hasNextConfiguration=\(nextConfiguration != nil)"
+        )
         self.project = project
         let sessionStore = TimelapseSessionStore(project: project)
         self.store = sessionStore
@@ -73,8 +81,10 @@ struct RepeatableCameraView: View {
         self.onDeletedOpenedTimelapse = onDeletedOpenedTimelapse
         self.explicitReferenceURL = referenceURL
         self.openedSession = openedSession
+        self.usesNextInterface = nextConfiguration != nil
         _videoSettings = videoSettings
-        let referenceLens = openedSession?.cameraLens
+        let referenceLens = nextConfiguration?.cameraLens
+            ?? openedSession?.cameraLens
             ?? sessionStore.cameraLens(forFrameURL: referenceURL ?? sessionStore.firstReferenceFrameURL())
         _camera = StateObject(wrappedValue: CameraController(
             project: project,
@@ -84,6 +94,17 @@ struct RepeatableCameraView: View {
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
         ))
+        if let nextConfiguration {
+            _intervalSeconds = State(initialValue: nextConfiguration.intervalSeconds)
+            _selectedCaptureKind = State(initialValue: nextConfiguration.repeatableKind)
+            _overlayOpacity = State(initialValue: nextConfiguration.referenceOpacity)
+            _evBias = State(initialValue: nextConfiguration.exposureBias)
+            _sourceFormat = State(initialValue: nextConfiguration.sourceFormat)
+            _durationOption = State(initialValue: .custom)
+            _customVideoSeconds = State(initialValue: max(1, nextConfiguration.videoDurationSeconds))
+            _customTimelapseMinutes = State(initialValue: max(1, nextConfiguration.durationMinutes))
+            _capturePhase = State(initialValue: .align)
+        }
     }
 
     var body: some View {
@@ -110,18 +131,20 @@ struct RepeatableCameraView: View {
         }
         .toolbar(capturePhase == .align ? .hidden : .visible, for: .navigationBar)
         .onAppear {
+            CameraeCaptureDiagnostics.event("R02 repeatable.onAppear", "phase=\(capturePhase)")
             AppOrientationLock.shared.unlock()
         }
         .task {
+            CameraeCaptureDiagnostics.event("R03 repeatable.task.begin")
             await camera.start()
+            CameraeCaptureDiagnostics.event("R04 repeatable.camera.start.returned", "state=\(String(describing: camera.lifecycleState))")
             await camera.setExposureBias(evBias)
+            CameraeCaptureDiagnostics.event("R05 repeatable.exposure.applied", "ev=\(evBias)")
             loadReference()
+            CameraeCaptureDiagnostics.event("R06 repeatable.reference.loaded", "hasReference=\(referenceImage != nil)")
         }
         .task(id: planningInput) {
             await refreshPreflight()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
-            refreshReferenceOverlay()
         }
         .onChange(of: camera.completedSession) {
             loadReference()
@@ -131,7 +154,9 @@ struct RepeatableCameraView: View {
             }
         }
         .onDisappear {
+            CameraeCaptureDiagnostics.event("R80 repeatable.onDisappear")
             stopReferenceBlinking()
+            camera.stop()
             AppOrientationLock.shared.restorePortrait()
         }
         .alert("Excluir esta captura?", isPresented: $isShowingDeleteConfirmation) {
@@ -150,6 +175,18 @@ struct RepeatableCameraView: View {
         } message: {
             Text(deleteErrorMessage ?? "")
         }
+        .fullScreenCover(isPresented: $isShowingGridPicker, onDismiss: restartCameraIfNeeded) {
+            CameraeNextGridPickerView(
+                selection: $selectedGridStyle,
+                isVisible: $isGridVisible,
+                theme: .repeatable
+            )
+        }
+    }
+
+    private func restartCameraIfNeeded() {
+        guard camera.lifecycleState != .running else { return }
+        Task { await camera.start() }
     }
 
     private var setupView: some View {
@@ -324,6 +361,8 @@ struct RepeatableCameraView: View {
                     .clipped()
                     .ignoresSafeArea()
 
+                cameraLifecycleOverlay
+
                 if let referenceImage {
                     ReferenceOverlayImage(
                         image: overlayImage(for: referenceImage),
@@ -339,7 +378,7 @@ struct RepeatableCameraView: View {
                 }
 
                 if isGridVisible {
-                    RuleOfThirdsGrid()
+                    CameraeNextGridOverlay(style: selectedGridStyle)
                         .frame(width: proxy.size.width, height: proxy.size.height)
                         .allowsHitTesting(false)
                         .ignoresSafeArea()
@@ -412,73 +451,183 @@ struct RepeatableCameraView: View {
                         }
                 }
 
-                VStack(spacing: 0) {
-                    alignmentTopBar
-                    Spacer(minLength: 0)
-                    alignmentBottomBar(for: proxy.size)
-                }
-                .padding(.horizontal, 12)
-                .padding(.top, safeTop + 12)
-                .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
-                .foregroundStyle(.white)
-                .shadow(radius: 12)
+                if usesNextInterface {
+                    nextCaptureScrims(for: proxy.size)
 
-                VStack {
-                    Spacer(minLength: 0)
-                    hudTogglePanel
-                    Spacer(minLength: 0)
+                    nextCaptureTopHUD(for: proxy.size)
+
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        alignmentBottomBar(for: proxy.size)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
+                    .foregroundStyle(.white)
+                    .shadow(radius: 12)
+                } else {
+                    VStack(spacing: 0) {
+                        alignmentTopBar
+                        Spacer(minLength: 0)
+                        alignmentBottomBar(for: proxy.size)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.top, safeTop + 12)
+                    .padding(.bottom, max(proxy.safeAreaInsets.bottom, 12))
+                    .foregroundStyle(.white)
+                    .shadow(radius: 12)
+
+                    VStack {
+                        Spacer(minLength: 0)
+                        hudTogglePanel
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .padding(.leading, 12)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                .padding(.leading, 12)
             }
             .onAppear {
                 alignmentDisplaySize = proxy.size
-                initializeMagnifierPositionIfNeeded(for: proxy.size)
+                if isMagnifierVisible {
+                    initializeMagnifierPositionIfNeeded(for: proxy.size)
+                }
                 updateAlignmentOrientation(for: proxy.size)
             }
             .onChange(of: proxy.size) { _, size in
                 alignmentDisplaySize = size
-                clampMagnifierPosition(for: size)
+                if isMagnifierVisible {
+                    clampMagnifierPosition(for: size)
+                }
                 updateAlignmentOrientation(for: size)
             }
         }
     }
 
+    private func nextCaptureScrims(for size: CGSize) -> some View {
+        let isLandscape = size.width > size.height
+        return VStack(spacing: 0) {
+            LinearGradient(
+                colors: [Color.black.opacity(0.72), Color.black.opacity(0.28), .clear],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: isLandscape ? 190 : 226)
+
+            Spacer(minLength: 0)
+
+            LinearGradient(
+                colors: [.clear, Color.black.opacity(0.68)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: isLandscape ? 76 : 150)
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func nextCaptureTopHUD(for size: CGSize) -> some View {
+        let orientation: CameraeCapturePanelOrientation = size.width > size.height ? .landscape : .portrait
+        let strip = CameraeNextCaptureToolStrip(
+            presentation: .init(module: .repeatable, orientation: orientation),
+            selection: activeHUDCategory,
+            theme: .repeatable,
+            onSelect: { category in
+                activeHUDCategory = activeHUDCategory == category ? nil : category
+            }
+        )
+
+        ZStack(alignment: .top) {
+            nextCaptureBackButton
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 8) {
+                strip
+                nextCaptureToolTray
+            }
+        }
+        .padding(.horizontal, orientation == .portrait ? 16 : 20)
+        .padding(.top, CameraeNextCaptureHUDLayout.topInset)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var nextCaptureBackButton: some View {
+        Button {
+            guard !isCaptureActive else { return }
+            AppOrientationLock.shared.unlock()
+            onClose()
+        } label: {
+            Image(systemName: "chevron.left")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(CameraeColor.captureForeground)
+                .frame(width: 44, height: 44)
+                .background(CameraeColor.captureScrim.opacity(0.9), in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(CameraeColor.captureHairline, lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Voltar para configuração")
+        .accessibilityHint(isCaptureActive ? "Finalize a captura antes de voltar" : "Fecha a câmera")
+    }
+
+    @ViewBuilder
+    private var nextCaptureToolTray: some View {
+        if let presentation = CameraeNextCaptureToolTrayPresentation(
+            module: .repeatable,
+            selection: activeHUDCategory
+        ), let activeHUDCategory {
+            CameraeNextCaptureToolTray(presentation: presentation) {
+                hudCategoryOptions(for: activeHUDCategory)
+            }
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
+    @ViewBuilder
+    private var cameraLifecycleOverlay: some View {
+        let presentation = CameraeCaptureLifecyclePresentation(state: camera.lifecycleState)
+        if presentation.isVisible {
+            VStack(spacing: 12) {
+                if presentation.showsProgress {
+                    ProgressView()
+                        .controlSize(.large)
+                        .tint(.white)
+                } else {
+                    Image(systemName: "exclamationmark.camera")
+                        .font(.system(size: 30, weight: .medium))
+                }
+                Text(presentation.title ?? "")
+                    .font(.headline)
+                if let message = presentation.message {
+                    Text(message)
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.72))
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .foregroundStyle(.white)
+            .padding(20)
+            .frame(maxWidth: 320)
+            .background(.black.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(24)
+        }
+    }
+
     private var hudTogglePanel: some View {
         HStack(spacing: 8) {
-            VStack(spacing: 10) {
-                categoryButton(
-                    category: .trace,
-                    systemImage: "scribble",
-                    accessibilityLabel: "Abrir controles de traco"
-                )
-
-                categoryButton(
-                    category: .guides,
-                    systemImage: "viewfinder",
-                    accessibilityLabel: "Abrir controles de guias"
-                )
-
-                categoryButton(
-                    category: .blink,
-                    systemImage: "eye",
-                    accessibilityLabel: "Abrir controles de piscar referencia"
-                )
-
-                categoryButton(
-                    category: .sensors,
-                    systemImage: "location.north.line",
-                    accessibilityLabel: "Abrir controles de sensores"
-                )
-
-                categoryButton(
-                    category: .info,
-                    systemImage: "info.circle",
-                    accessibilityLabel: "Abrir controles de informacoes"
-                )
-            }
-            .padding(6)
-            .background(.black.opacity(0.24), in: Capsule())
+            CameraeNextCaptureToolStrip(
+                presentation: .init(
+                    module: .repeatable,
+                    orientation: alignmentDisplaySize.width > alignmentDisplaySize.height ? .landscape : .portrait
+                ),
+                selection: activeHUDCategory,
+                theme: .repeatable,
+                onSelect: { category in
+                    activeHUDCategory = activeHUDCategory == category ? nil : category
+                }
+            )
 
             if let activeHUDCategory {
                 hudCategoryOptions(for: activeHUDCategory)
@@ -514,32 +663,32 @@ struct RepeatableCameraView: View {
                 }
 
             case .guides:
-                hudToggleButton(
-                    systemImage: "square.grid.3x3",
+                captureAssetToggleButton(
+                    assetName: "CameraeCaptureGlyphGrid",
                     isOn: isGridVisible,
-                    accessibilityLabel: "Alternar grade de enquadramento"
+                    accessibilityLabel: "Escolher grade de enquadramento"
                 ) {
-                    isGridVisible.toggle()
+                    isShowingGridPicker = true
                 }
 
-                hudToggleButton(
-                    systemImage: "point.3.connected.trianglepath.dotted",
+                captureAssetToggleButton(
+                    assetName: "CameraeCaptureGlyphTarget",
                     isOn: isVisualMatchGuideVisible,
                     accessibilityLabel: "Alternar pontos de similaridade"
                 ) {
                     isVisualMatchGuideVisible.toggle()
                 }
 
-                hudToggleButton(
-                    systemImage: "arrow.up.left.and.arrow.down.right",
+                captureAssetToggleButton(
+                    assetName: "CameraeCaptureGlyphFarther",
                     isOn: isScaleHUDVisible,
                     accessibilityLabel: "Alternar escala visual"
                 ) {
                     isScaleHUDVisible.toggle()
                 }
 
-                hudToggleButton(
-                    systemImage: "magnifyingglass",
+                captureAssetToggleButton(
+                    assetName: "CameraeCaptureGlyphMagnifier",
                     isOn: isMagnifierVisible,
                     accessibilityLabel: "Alternar lupa de alinhamento"
                 ) {
@@ -603,7 +752,7 @@ struct RepeatableCameraView: View {
                     isMotionHUDVisible.toggle()
                 }
 
-            case .info:
+            case .information:
                 hudToggleButton(
                     systemImage: "info.circle",
                     isOn: isTimelapseInfoVisible,
@@ -613,22 +762,40 @@ struct RepeatableCameraView: View {
                 }
             }
         }
-        .padding(6)
-        .background(.black.opacity(0.24), in: Capsule())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func categoryButton(
-        category: AlignmentHUDCategory,
-        systemImage: String,
-        accessibilityLabel: String
+    private func captureAssetToggleButton(
+        assetName: String,
+        isOn: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
     ) -> some View {
-        hudToggleButton(
-            systemImage: systemImage,
-            isOn: activeHUDCategory == category,
-            accessibilityLabel: accessibilityLabel
-        ) {
-            activeHUDCategory = activeHUDCategory == category ? nil : category
+        Button(action: action) {
+            Image(assetName)
+                .renderingMode(.template)
+                .resizable()
+                .scaledToFit()
+                .foregroundStyle(CameraeColor.captureForeground)
+                .frame(width: 24, height: 24)
+                .frame(width: 40, height: 40)
+                .background(CameraeColor.captureScrim.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(CameraeColor.captureHairline, lineWidth: 1)
+                }
+                .overlay(alignment: .bottom) {
+                    if isOn {
+                        Circle()
+                            .fill(CameraeWorkflowTheme.repeatable.accent)
+                            .frame(width: 7, height: 7)
+                            .offset(y: 4)
+                    }
+                }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityValue(isOn ? "Ativo" : "Inativo")
     }
 
     private func edgeColorButton(_ tint: EdgeOverlayTint) -> some View {
@@ -721,12 +888,20 @@ struct RepeatableCameraView: View {
         Button(action: action) {
             Image(systemName: systemImage)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(isOn ? (tint ?? .white) : .white.opacity(0.42))
+                .foregroundStyle(isOn ? (tint ?? .white) : .white.opacity(0.62))
                 .frame(width: 40, height: 40)
-                .background(isOn ? (tint ?? .white).opacity(0.2) : .black.opacity(0.22), in: Circle())
+                .background(CameraeColor.captureScrim.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .overlay {
-                    Circle()
-                        .stroke(isOn ? (tint ?? .white).opacity(0.34) : .white.opacity(0.1), lineWidth: 1)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(CameraeColor.captureHairline, lineWidth: 1)
+                }
+                .overlay(alignment: .bottom) {
+                    if isOn {
+                        Circle()
+                            .fill(tint ?? CameraeWorkflowTheme.repeatable.accent)
+                            .frame(width: 7, height: 7)
+                            .offset(y: 4)
+                    }
                 }
         }
         .buttonStyle(.plain)
@@ -735,6 +910,19 @@ struct RepeatableCameraView: View {
 
     private var alignmentTopBar: some View {
         HStack(spacing: 12) {
+            if usesNextInterface, !isCaptureActive {
+                Button {
+                    AppOrientationLock.shared.unlock()
+                    onClose()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.black.opacity(0.42), in: Circle())
+                }
+                .accessibilityLabel("Voltar para configuração")
+            }
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(selectedCaptureKind.title)
                     .font(.system(size: 17, weight: .semibold))
@@ -753,11 +941,55 @@ struct RepeatableCameraView: View {
 
     private func alignmentBottomBar(for size: CGSize) -> some View {
         VStack(spacing: 12) {
-            if isTimelapseInfoVisible {
+            if usesNextInterface {
+                nextCapturePanel(for: size)
+            } else if isTimelapseInfoVisible {
                 alignmentInfoPanel(for: size)
             }
 
-            alignmentActionBar
+            if !usesNextInterface {
+                alignmentActionBar
+            }
+        }
+    }
+
+    private func nextCapturePanel(for size: CGSize) -> some View {
+        let orientation = size.width > size.height
+            ? CameraeCapturePanelOrientation.landscape
+            : .portrait
+        let presentation = CameraeNextCaptureSessionPresentation.repeatable(
+            frameCount: camera.frameCount,
+            exposure: camera.baseExposureLabel,
+            reference: referenceName,
+            lastExposure: camera.lastCapturedExposureLabel,
+            countdown: camera.countdownLabel,
+            gps: currentGPSLabel,
+            isRunning: isCaptureActive,
+            idleActionTitle: primaryButtonTitle,
+            idleActionSystemImage: primaryButtonImage
+        )
+
+        return CameraeCaptureSessionPanel(
+            theme: presentation.theme,
+            orientation: orientation,
+            metrics: presentation.metrics,
+            actionTitle: isCaptureActive ? activeStopButtonTitle : presentation.actionTitle,
+            actionSystemImage: presentation.actionSystemImage,
+            isRunning: presentation.isRunning,
+            isBusy: camera.isSinglePhotoCaptureRunning,
+            isActionDisabled: !isCaptureActive && !canStartCapture,
+            showsLandscapePreview: presentation.showsLandscapePreview,
+            action: {
+                Task { await performPrimaryCaptureAction() }
+            }
+        ) {
+            if let referenceImage {
+                Image(uiImage: referenceImage)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.clear
+            }
         }
     }
 
@@ -1346,13 +1578,7 @@ private extension EdgeOverlayTint {
     }
 }
 
-private enum AlignmentHUDCategory {
-    case trace
-    case guides
-    case blink
-    case sensors
-    case info
-}
+private typealias AlignmentHUDCategory = CameraeNextCaptureToolGroupID
 
 private enum ReferenceBlinkInterval: CaseIterable {
     case two

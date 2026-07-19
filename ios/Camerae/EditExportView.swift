@@ -5,16 +5,19 @@ import SwiftUI
 struct EditExportView: View {
     let document: EditProjectDocument
     let assets: [MediaAssetID: ResolvedMediaAsset]
+    let spatialAlignment: EditSpatialAlignmentPlan?
     @StateObject private var model: EditExportViewModel
     @Environment(\.dismiss) private var dismiss
 
     init(
         project: CameraProject,
         document: EditProjectDocument,
-        assets: [MediaAssetID: ResolvedMediaAsset]
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        spatialAlignment: EditSpatialAlignmentPlan? = nil
     ) {
         self.document = document
         self.assets = assets
+        self.spatialAlignment = spatialAlignment
         _model = StateObject(wrappedValue: EditExportViewModel(project: project))
     }
 
@@ -27,6 +30,7 @@ struct EditExportView: View {
                     LabeledContent("Quadros", value: "30 fps")
                     LabeledContent("Clipes", value: "\(document.items.count)")
                     LabeledContent("Duração", value: durationDescription)
+                    LabeledContent("Alinhamento", value: spatialAlignment == nil ? "Desligado" : "Aplicado")
                 }
 
                 if model.isExporting {
@@ -48,12 +52,20 @@ struct EditExportView: View {
                 } else {
                     Section {
                         Button {
-                            Task { await model.export(document: document, assets: assets) }
+                            Task {
+                                await model.export(
+                                    document: document,
+                                    assets: assets,
+                                    spatialAlignment: spatialAlignment
+                                )
+                            }
                         } label: {
                             Label("Exportar MP4", systemImage: "film")
                         }
                     } footer: {
-                        Text("Os clipes serão unidos na ordem da sequência, preservando o áudio disponível.")
+                        Text(spatialAlignment == nil
+                            ? "Os clipes serão unidos na ordem da sequência, sem alinhamento espacial."
+                            : "O plano de alinhamento e o crop comum serão aplicados à exportação.")
                     }
                 }
             }

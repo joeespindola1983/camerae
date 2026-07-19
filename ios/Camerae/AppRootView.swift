@@ -557,7 +557,7 @@ private struct ModuleRuntimeView: View {
     }
 }
 
-private struct AstroProjectRuntimeView: View {
+struct AstroProjectRuntimeView: View {
     let project: CameraProject
     @Binding var path: NavigationPath
 

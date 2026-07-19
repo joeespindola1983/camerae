@@ -28,6 +28,13 @@
     "border": {
       "strong": { "$type": "color", "$value": "#FFFFFF2E" }
     },
+    "capture": {
+      "foreground": { "$type": "color", "$value": "#FFFFFF" },
+      "foregroundMuted": { "$type": "color", "$value": "#FFFFFFB3" },
+      "scrim": { "$type": "color", "$value": "#000000CC" },
+      "hairline": { "$type": "color", "$value": "#FFFFFF66" },
+      "danger": { "$type": "color", "$value": "#FF5D5D" }
+    },
     "shadow": {
       "soft": { "$type": "color", "$value": "#000000B2" },
       "strong": { "$type": "color", "$value": "#000000CC" }

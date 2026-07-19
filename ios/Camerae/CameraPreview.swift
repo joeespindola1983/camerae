@@ -6,19 +6,32 @@ struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
 
     func makeUIView(context: Context) -> PreviewView {
+        CameraeCaptureDiagnostics.event(
+            "P01 preview.makeUIView",
+            "sessionRunning=\(session.isRunning) inputs=\(session.inputs.count) outputs=\(session.outputs.count)"
+        )
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
+        CameraeCaptureDiagnostics.event(
+            "P02 preview.layer.attached",
+            "connection=\(view.previewLayer.connection != nil)"
+        )
         return view
     }
 
     func updateUIView(_ uiView: PreviewView, context: Context) {
+        if uiView.previewLayer.session !== session {
+            CameraeCaptureDiagnostics.event("P03 preview.session.replaced")
+        }
         uiView.previewLayer.session = session
         uiView.updatePreviewOrientation()
     }
 }
 
 final class PreviewView: UIView {
+    private var lastLoggedWindowState: Bool?
+    private var lastLoggedAngle: CGFloat?
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
     }
@@ -32,14 +45,33 @@ final class PreviewView: UIView {
         updatePreviewOrientation()
     }
 
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        let isAttached = window != nil
+        if lastLoggedWindowState != isAttached {
+            CameraeCaptureDiagnostics.event(
+                isAttached ? "P04 preview.attachedToWindow" : "P80 preview.detachedFromWindow",
+                "bounds=\(bounds.debugDescription) connection=\(previewLayer.connection != nil)"
+            )
+            lastLoggedWindowState = isAttached
+        }
+        updatePreviewOrientation()
+    }
+
     func updatePreviewOrientation() {
         guard let connection = previewLayer.connection,
               let angle = window?.windowScene?.interfaceOrientation.videoRotationAngle,
               connection.isVideoRotationAngleSupported(angle) else {
+            if window != nil, previewLayer.connection == nil {
+                CameraeCaptureDiagnostics.error("P90 preview.noConnection", "sessionRunning=\(previewLayer.session?.isRunning ?? false)")
+            }
             return
         }
 
+        guard lastLoggedAngle != angle else { return }
         connection.videoRotationAngle = angle
+        CameraeCaptureDiagnostics.event("P05 preview.orientation", "angle=\(angle)")
+        lastLoggedAngle = angle
     }
 }
 

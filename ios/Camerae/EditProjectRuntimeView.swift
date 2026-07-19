@@ -221,7 +221,7 @@ struct EditProjectRuntimeView: View {
     }
 }
 
-private struct EditMediaPickerView: View {
+struct EditMediaPickerView: View {
     @ObservedObject var model: EditProjectViewModel
     let onAdded: () -> Void
     @Environment(\.dismiss) private var dismiss

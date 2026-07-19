@@ -9,6 +9,7 @@ struct CameraView: View {
     private let onDeleteProject: () throws -> Void
     private let onClose: (() -> Void)?
     private let onCompletedSession: ((TimelapseSession) -> Void)?
+    private let usesNextInterface: Bool
 
     @State private var timelapseIntervalSeconds = 5.0
     @State private var astroIntervalSeconds = 1.0
@@ -24,21 +25,39 @@ struct CameraView: View {
     @State private var customDurationMinutes = 60
     @State private var sourceFormat = CaptureSourceFormat.heic
     @State private var capturePhase = AstroCapturePhase.setup
+    @State private var isGridVisible = true
+    @State private var selectedGridStyle = CameraeNextGridStyle.default
+    @State private var isShowingGridPicker = false
 
     init(
         project: CameraProject,
+        nextConfiguration: CameraeNextCaptureConfiguration? = nil,
         onDeleteProject: @escaping () throws -> Void = {},
         onClose: (() -> Void)? = nil,
         onCompletedSession: ((TimelapseSession) -> Void)? = nil
     ) {
+        CameraeCaptureDiagnostics.event(
+            "R01.7 astro.init",
+            "hasNextConfiguration=\(nextConfiguration != nil)"
+        )
         self.project = project
         self.onDeleteProject = onDeleteProject
         self.onClose = onClose
         self.onCompletedSession = onCompletedSession
+        self.usesNextInterface = nextConfiguration != nil
         _camera = StateObject(wrappedValue: CameraController(project: project))
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
         ))
+        if let nextConfiguration {
+            _astroIntervalSeconds = State(initialValue: nextConfiguration.astroExposureSeconds)
+            _astroBatchSize = State(initialValue: Double(nextConfiguration.astroCapturesPerFrame))
+            _usesAutomaticAstroExposure = State(initialValue: nextConfiguration.usesAutomaticAstroExposure)
+            _durationOption = State(initialValue: .custom)
+            _customDurationMinutes = State(initialValue: max(1, nextConfiguration.durationMinutes))
+            _sourceFormat = State(initialValue: nextConfiguration.sourceFormat)
+            _capturePhase = State(initialValue: .capture)
+        }
     }
 
     var body: some View {
@@ -68,6 +87,7 @@ struct CameraView: View {
             AppOrientationLock.shared.restorePortrait()
         }
         .onDisappear {
+            camera.stop()
             AppOrientationLock.shared.restorePortrait()
         }
         .task {
@@ -80,6 +100,13 @@ struct CameraView: View {
             if !exportedArchiveURLs.isEmpty {
                 ExportedArchivesView(urls: exportedArchiveURLs)
             }
+        }
+        .fullScreenCover(isPresented: $isShowingGridPicker, onDismiss: restartCameraIfNeeded) {
+            CameraeNextGridPickerView(
+                selection: $selectedGridStyle,
+                isVisible: $isGridVisible,
+                theme: .astro
+            )
         }
         .navigationDestination(item: $processingSession) { session in
             AstroProcessingView(session: session) {
@@ -96,6 +123,11 @@ struct CameraView: View {
                 processingSession = session
             }
         }
+    }
+
+    private func restartCameraIfNeeded() {
+        guard camera.lifecycleState != .running else { return }
+        Task { await camera.start() }
     }
 
     private var setupView: some View {
@@ -177,27 +209,47 @@ struct CameraView: View {
             CameraPreview(session: camera.session)
                 .ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                topBar
-                Spacer()
-                if isControlsVisible {
-                    controls
-                        .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
+            if usesNextInterface, isGridVisible {
+                CameraeNextGridOverlay(style: selectedGridStyle)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(false)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+
+            GeometryReader { proxy in
+                VStack(spacing: 0) {
+                    topBar
+                    Spacer()
+                    if isControlsVisible {
+                        controls(for: proxy.size)
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
+            }
 
             if isExportingOriginalFrames {
-                BlockingProgressOverlay(
-                    title: "Exportando ZIP",
-                    message: "Gerando pacote com os frames originais",
-                    detail: camera.originalFrameExportProgress?.detailText ?? "Preparando",
-                    cancelTitle: "Parar",
-                    cancelAction: {
-                        exportTask?.cancel()
-                    }
-                )
+                if usesNextInterface {
+                    CameraeNextOperationOverlay(
+                        state: .processing(
+                            title: "Exportando originais",
+                            detail: camera.originalFrameExportProgress?.detailText ?? "Preparando",
+                            canCancel: true
+                        ),
+                        theme: .init(workflow: .astro),
+                        onCancel: { exportTask?.cancel() }
+                    )
+                } else {
+                    BlockingProgressOverlay(
+                        title: "Exportando ZIP",
+                        message: "Gerando pacote com os frames originais",
+                        detail: camera.originalFrameExportProgress?.detailText ?? "Preparando",
+                        cancelTitle: "Parar",
+                        cancelAction: {
+                            exportTask?.cancel()
+                        }
+                    )
+                }
             }
         }
     }
@@ -226,6 +278,18 @@ struct CameraView: View {
             }
 
             Spacer()
+
+            if usesNextInterface {
+                Button {
+                    isShowingGridPicker = true
+                } label: {
+                    Image(systemName: "square.grid.3x3")
+                        .font(.system(size: 18, weight: .semibold))
+                        .frame(width: 44, height: 44)
+                        .background(.ultraThinMaterial, in: Circle())
+                }
+                .accessibilityLabel("Escolher grade de composição")
+            }
 
             Button {
                 withAnimation(.easeInOut(duration: 0.2)) {
@@ -267,7 +331,16 @@ struct CameraView: View {
         .shadow(radius: 12)
     }
 
-    private var controls: some View {
+    @ViewBuilder
+    private func controls(for size: CGSize) -> some View {
+        if usesNextInterface {
+            nextControls(for: size)
+        } else {
+            legacyControls
+        }
+    }
+
+    private var legacyControls: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
                 MetricPill(title: "Originais", value: "\(camera.frameCount)")
@@ -314,6 +387,50 @@ struct CameraView: View {
         .padding(8)
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         .padding(.top, 8)
+    }
+
+    private func nextControls(for size: CGSize) -> some View {
+        let orientation = size.width > size.height
+            ? CameraeCapturePanelOrientation.landscape
+            : .portrait
+        let presentation = CameraeNextCaptureSessionPresentation.astro(
+            originalCount: camera.frameCount,
+            acceptedCount: camera.astroCompositeFrameCount,
+            batch: camera.astroBatchProgressLabel,
+            phase: camera.astroExposurePhaseLabel,
+            baseExposure: camera.baseExposureLabel,
+            lastExposure: camera.lastCapturedExposureLabel,
+            isRunning: camera.isTimelapseRunning
+        )
+
+        return CameraeCaptureSessionPanel(
+            theme: presentation.theme,
+            orientation: orientation,
+            metrics: presentation.metrics,
+            actionTitle: presentation.actionTitle,
+            actionSystemImage: presentation.actionSystemImage,
+            isRunning: presentation.isRunning,
+            isActionDisabled: !camera.isTimelapseRunning && !canStartCapture,
+            showsLandscapePreview: presentation.showsLandscapePreview,
+            action: {
+                Task {
+                    guard let plan = planning.result?.resolvedPlan else { return }
+                    if let preflight = planning.result {
+                        camera.configureCapturePreflight(preflight)
+                    }
+                    camera.setCaptureSourceFormat(plan.sourceFormat)
+                    await camera.toggleAstroBatchCapture(
+                        timelapseInterval: timelapseIntervalSeconds,
+                        astroInterval: astroIntervalSeconds,
+                        batchSize: Int(astroBatchSize),
+                        usesAutomaticExposure: usesAutomaticAstroExposure,
+                        plan: plan
+                    )
+                }
+            }
+        ) {
+            AstroBatchPreview(url: camera.astroPreviewURL)
+        }
     }
 
     private var plannedDuration: TimeInterval {

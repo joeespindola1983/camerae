@@ -1,9 +1,30 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import CameraeCore
 import CoreLocation
 import CoreMotion
 import ImageIO
 import UIKit
+
+enum CameraeLocationAuthorizationAction: Equatable, Sendable {
+    case requestWhenInUse
+    case startUpdates
+    case unavailable
+}
+
+enum CameraeLocationAuthorizationPolicy {
+    static func action(for status: CLAuthorizationStatus) -> CameraeLocationAuthorizationAction {
+        switch status {
+        case .notDetermined:
+            .requestWhenInUse
+        case .authorizedAlways, .authorizedWhenInUse:
+            .startUpdates
+        case .denied, .restricted:
+            .unavailable
+        @unknown default:
+            .unavailable
+        }
+    }
+}
 
 @MainActor
 final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, CLLocationManagerDelegate {
@@ -35,6 +56,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var availableRepeatableLenses = RepeatableCameraLens.availableBackLenses()
     @Published private(set) var selectedRepeatableLens = RepeatableCameraLens.wide
     @Published private(set) var supportedSourceFormats: Set<CaptureSourceFormat> = [.jpeg]
+    @Published private(set) var lifecycleState = CameraeCaptureLifecycleState.idle
 
     private let captureMode: CameraCaptureMode
     private let captureQueue = DispatchQueue(label: "camerae.capture.queue")
@@ -61,6 +83,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private var latestLocation: CLLocation?
     private var latestHeading: CLHeading?
     private var bestFineGeoPose: GeoPose?
+    private var didRequestTemporaryFullAccuracy = false
     private var pendingReferenceOrientation: CaptureDisplayOrientation?
     nonisolated(unsafe) private var referenceCGImage: CGImage?
     nonisolated(unsafe) private var lastVisualAlignmentAnalysis = Date.distantPast
@@ -72,6 +95,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var selectedSourceFormat = CaptureSourceFormat.heic
     private var captureStorageGuard: CaptureStorageGuard?
     private var stoppedForStorage = false
+    private var lifecycleGeneration: UInt64 = 0
 
     init(
         project: CameraProject,
@@ -101,6 +125,37 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             name: ProcessInfo.thermalStateDidChangeNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCaptureSessionDidStartRunning(_:)),
+            name: .AVCaptureSessionDidStartRunning,
+            object: session
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCaptureSessionDidStopRunning(_:)),
+            name: .AVCaptureSessionDidStopRunning,
+            object: session
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCaptureSessionWasInterrupted(_:)),
+            name: .AVCaptureSessionWasInterrupted,
+            object: session
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCaptureSessionInterruptionEnded(_:)),
+            name: .AVCaptureSessionInterruptionEnded,
+            object: session
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleCaptureSessionRuntimeError(_:)),
+            name: .AVCaptureSessionRuntimeError,
+            object: session
+        )
+        CameraeCaptureDiagnostics.event("C00 controller.init", "mode=\(captureMode)")
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(handleCameraeVisionPowerStateChange),
@@ -163,26 +218,104 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     @objc nonisolated private func handleCameraeVisionMemoryWarning(_ notification: Notification) {
+        CameraeCaptureDiagnostics.error("C90 memory.warning", "OpenCV scheduling paused")
         cameraeVisionCoordinator.pause(.memoryPressure)
     }
 
+    @objc nonisolated private func handleCaptureSessionDidStartRunning(_ notification: Notification) {
+        CameraeCaptureDiagnostics.event("C15 avfoundation.didStartRunning")
+    }
+
+    @objc nonisolated private func handleCaptureSessionDidStopRunning(_ notification: Notification) {
+        CameraeCaptureDiagnostics.event("C81 avfoundation.didStopRunning")
+    }
+
+    @objc nonisolated private func handleCaptureSessionWasInterrupted(_ notification: Notification) {
+        let rawReason = notification.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber
+        CameraeCaptureDiagnostics.error(
+            "C91 avfoundation.interrupted",
+            "reason=\(rawReason?.intValue.description ?? "unknown")"
+        )
+        Task { @MainActor in
+            self.status = "Câmera interrompida pelo sistema"
+        }
+    }
+
+    @objc nonisolated private func handleCaptureSessionInterruptionEnded(_ notification: Notification) {
+        CameraeCaptureDiagnostics.event("C16 avfoundation.interruptionEnded")
+    }
+
+    @objc nonisolated private func handleCaptureSessionRuntimeError(_ notification: Notification) {
+        let error = notification.userInfo?[AVCaptureSessionErrorKey] as? NSError
+        let detail = error.map { "domain=\($0.domain) code=\($0.code) message=\($0.localizedDescription)" }
+            ?? "unknown runtime error"
+        CameraeCaptureDiagnostics.error("C92 avfoundation.runtimeError", detail)
+        Task { @MainActor in
+            self.status = "Erro da câmera: \(error?.localizedDescription ?? "desconhecido")"
+            self.lifecycleState = .failed(error?.localizedDescription ?? "Erro interno do AVFoundation")
+        }
+    }
+
     func start() async {
+        lifecycleGeneration &+= 1
+        let generation = lifecycleGeneration
+        lifecycleState = .preparing
+        CameraeCaptureDiagnostics.event("C01 controller.start", "generation=\(generation)")
+        CameraeCaptureDiagnostics.event(
+            "C02 permission.request",
+            "current=\(AVCaptureDevice.authorizationStatus(for: .video).rawValue)"
+        )
         let allowed = await AVCaptureDevice.requestAccess(for: .video)
+        CameraeCaptureDiagnostics.event("C03 permission.result", "allowed=\(allowed)")
+        guard generation == lifecycleGeneration else { return }
         guard allowed else {
             status = "Permissao da camera negada"
+            lifecycleState = .unauthorized
+            CameraeCaptureDiagnostics.error("C03 permission.denied", "authorization rejected")
             return
         }
 
         do {
+            CameraeCaptureDiagnostics.event("C04 configure.await.begin")
             try await configureIfNeeded()
+            CameraeCaptureDiagnostics.event("C17 configure.await.end")
+            guard generation == lifecycleGeneration else { return }
             supportedSourceFormats = photoOutput.availablePhotoCodecTypes.contains(.hevc)
                 ? [.heic, .jpeg]
                 : [.jpeg]
             startMotionUpdates()
             startLocationUpdates()
             status = "Camera principal pronta"
+            lifecycleState = .running
+            cameraeVisionCoordinator.resume(.lifecycle)
+            CameraeCaptureDiagnostics.event(
+                "C18 controller.ready",
+                "running=\(session.isRunning) inputs=\(session.inputs.count) outputs=\(session.outputs.count)"
+            )
         } catch {
             status = "Erro: \(error.localizedDescription)"
+            lifecycleState = .failed(error.localizedDescription)
+            CameraeCaptureDiagnostics.error("C93 controller.start.failed", error.localizedDescription)
+        }
+    }
+
+    func stop() {
+        lifecycleGeneration &+= 1
+        lifecycleState = .stopped
+        timelapseTask?.cancel()
+        videoStopTask?.cancel()
+        motionManager.stopDeviceMotionUpdates()
+        locationManager.stopUpdatingLocation()
+        locationManager.stopUpdatingHeading()
+        cameraeVisionCoordinator.pause(.lifecycle)
+        CameraeCaptureDiagnostics.event("C80 controller.stop.requested")
+
+        captureQueue.async { [session] in
+            if session.isRunning {
+                CameraeCaptureDiagnostics.event("C80 controller.stopRunning.begin")
+                session.stopRunning()
+                CameraeCaptureDiagnostics.event("C82 controller.stopRunning.end")
+            }
         }
     }
 
@@ -534,25 +667,27 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     private func startLocationUpdates() {
-        guard CLLocationManager.locationServicesEnabled() else {
-            return
-        }
-
-        switch locationManager.authorizationStatus {
-        case .notDetermined:
+        switch CameraeLocationAuthorizationPolicy.action(for: locationManager.authorizationStatus) {
+        case .requestWhenInUse:
+            CameraeCaptureDiagnostics.event("L01 location.authorization.requested")
             locationManager.requestWhenInUseAuthorization()
-        case .authorizedAlways, .authorizedWhenInUse:
-            if locationManager.accuracyAuthorization == .reducedAccuracy {
+        case .startUpdates:
+            if locationManager.accuracyAuthorization == .reducedAccuracy,
+               !didRequestTemporaryFullAccuracy {
+                didRequestTemporaryFullAccuracy = true
+                CameraeCaptureDiagnostics.event("L02 location.fullAccuracy.requested")
                 locationManager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: "RepeatableAlignment")
             }
             locationManager.startUpdatingLocation()
             if CLLocationManager.headingAvailable() {
                 locationManager.startUpdatingHeading()
             }
-        case .denied, .restricted:
-            break
-        @unknown default:
-            break
+            CameraeCaptureDiagnostics.event(
+                "L03 location.updates.started",
+                "accuracy=\(locationManager.accuracyAuthorization.rawValue)"
+            )
+        case .unavailable:
+            CameraeCaptureDiagnostics.event("L04 location.unavailable")
         }
     }
 
@@ -1112,23 +1247,35 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     private func configureIfNeeded() async throws {
         let preferredRepeatableLens = selectedRepeatableLens
+        CameraeCaptureDiagnostics.event(
+            "C05 configure.enqueue",
+            "configured=\(configured) preferredLens=\(preferredRepeatableLens.rawValue)"
+        )
         try await withCheckedThrowingContinuation { continuation in
             captureQueue.async {
                 do {
+                    CameraeCaptureDiagnostics.event(
+                        "C06 configure.queue.enter",
+                        "configured=\(self.configured) running=\(self.session.isRunning)"
+                    )
                     guard !self.configured else {
                         if !self.session.isRunning {
+                            CameraeCaptureDiagnostics.event("C14 session.restart.begin")
                             self.session.startRunning()
+                            CameraeCaptureDiagnostics.event("C15 session.restart.end")
                         }
                         continuation.resume(returning: ())
                         return
                     }
 
                     self.isConfiguring = true
+                    CameraeCaptureDiagnostics.event("C07 session.beginConfiguration")
                     self.session.beginConfiguration()
 
                     if self.session.canSetSessionPreset(.photo) {
                         self.session.sessionPreset = .photo
                     }
+                    CameraeCaptureDiagnostics.event("C08 session.preset", "value=photo")
 
                     let deviceType = self.captureMode == .repeatable
                         ? preferredRepeatableLens.deviceType
@@ -1136,8 +1283,16 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     guard let device = AVCaptureDevice.default(deviceType, for: .video, position: .back) else {
                         throw CameraError.noCamera
                     }
+                    CameraeCaptureDiagnostics.event(
+                        "C09 device.selected",
+                        "type=\(deviceType.rawValue) name=\(device.localizedName)"
+                    )
 
                     let input = try AVCaptureDeviceInput(device: device)
+                    CameraeCaptureDiagnostics.event(
+                        "C10 capabilities",
+                        "input=\(self.session.canAddInput(input)) photo=\(self.session.canAddOutput(self.photoOutput)) movie=\(self.session.canAddOutput(self.movieOutput)) videoData=\(self.session.canAddOutput(self.videoDataOutput))"
+                    )
                     guard self.session.canAddInput(input), self.session.canAddOutput(self.photoOutput) else {
                         throw CameraError.configurationFailed
                     }
@@ -1159,11 +1314,19 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     self.device = device
                     self.configured = true
 
+                    CameraeCaptureDiagnostics.event(
+                        "C11 session.commitConfiguration",
+                        "inputs=\(self.session.inputs.count) outputs=\(self.session.outputs.count)"
+                    )
                     self.session.commitConfiguration()
                     self.isConfiguring = false
+                    CameraeCaptureDiagnostics.event("C12 session.startRunning.begin")
                     self.session.startRunning()
+                    CameraeCaptureDiagnostics.event("C13 session.startRunning.end", "running=\(self.session.isRunning)")
 
+                    CameraeCaptureDiagnostics.event("C14 device.prepare.begin")
                     let baseExposure = try self.prepareCapture(device: device)
+                    CameraeCaptureDiagnostics.event("C16 device.prepare.end", "exposure=\(baseExposure)")
                     Task { @MainActor in
                         switch self.captureMode {
                         case .astro:
@@ -1175,6 +1338,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
                     continuation.resume(returning: ())
                 } catch {
+                    CameraeCaptureDiagnostics.error("C94 configure.queue.failed", error.localizedDescription)
                     if self.isConfiguring {
                         self.session.commitConfiguration()
                         self.isConfiguring = false

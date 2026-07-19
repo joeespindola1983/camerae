@@ -274,7 +274,7 @@ private struct PendingTemporaryProject {
     let returnPathCount: Int
 }
 
-private struct ProjectListTheme {
+struct ProjectListTheme {
     let module: CameraModule
 
     var isAstro: Bool { module == .astrophotography }
@@ -320,7 +320,7 @@ private enum ProjectListFilter: String, CaseIterable, Identifiable {
     }
 }
 
-private struct ProjectListHeroCard: View {
+struct ProjectListHeroCard: View {
     let project: CameraProject
     let theme: ProjectListTheme
 
@@ -379,7 +379,7 @@ private struct ProjectListHeroCard: View {
     }
 }
 
-private struct ProjectListRow: View {
+struct ProjectListRow: View {
     let project: CameraProject
     let theme: ProjectListTheme
     private var completed: Bool { (project.summary?.mediaCount ?? 0) > 0 }
@@ -460,7 +460,7 @@ private struct ProjectListStatusBadge: View {
     }
 }
 
-private struct ProjectListEmptyHero: View {
+struct ProjectListEmptyHero: View {
     let theme: ProjectListTheme
     let createAction: () -> Void
     var body: some View {
@@ -482,7 +482,7 @@ private struct ProjectListEmptyHero: View {
     }
 }
 
-private struct ProjectListTitleLabelStyle: LabelStyle {
+struct ProjectListTitleLabelStyle: LabelStyle {
     let theme: ProjectListTheme
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 8) {
@@ -496,7 +496,7 @@ private struct ProjectListTitleLabelStyle: LabelStyle {
     }
 }
 
-private struct ProjectListStarField: View {
+struct ProjectListStarField: View {
     let color: Color
     var body: some View {
         Canvas { context, size in
