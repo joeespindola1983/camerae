@@ -35,6 +35,29 @@ target_link_libraries(camerae-alignment-preview
         camerae_vision
 )
 
+add_library(camerae_capture_quality_simulator_support
+    tools/capture_quality_simulator_support.cpp
+)
+
+target_include_directories(camerae_capture_quality_simulator_support
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}/tools
+)
+
+target_link_libraries(camerae_capture_quality_simulator_support
+    PUBLIC
+        camerae_vision
+)
+
+add_executable(camerae-capture-quality-simulator
+    tools/capture_quality_simulator.cpp
+)
+
+target_link_libraries(camerae-capture-quality-simulator
+    PRIVATE
+        camerae_capture_quality_simulator_support
+)
+
 if(BUILD_TESTING)
     add_executable(camerae_vision_tests
         tests/alignment_tests.cpp
@@ -57,4 +80,18 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME camerae_alignment_quality_tests COMMAND camerae_alignment_quality_tests)
+
+    add_executable(camerae_capture_quality_simulator_tests
+        tests/capture_quality_simulator_tests.cpp
+    )
+
+    target_link_libraries(camerae_capture_quality_simulator_tests
+        PRIVATE
+            camerae_capture_quality_simulator_support
+    )
+
+    add_test(
+        NAME camerae_capture_quality_simulator_tests
+        COMMAND camerae_capture_quality_simulator_tests
+    )
 endif()
