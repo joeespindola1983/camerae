@@ -1,4 +1,4 @@
-#include "camerae_processing/alignment_processor.hpp"
+#include "camerae_vision/alignment.hpp"
 
 #include <algorithm>
 #include <array>
@@ -15,7 +15,7 @@
 #include <opencv2/imgproc.hpp>
 #include <opencv2/video/tracking.hpp>
 
-namespace camerae_processing {
+namespace camerae_vision {
 namespace {
 
 struct PreparedPair {
@@ -844,4 +844,4 @@ std::string alignmentDecisionName(AlignmentDecision decision) {
     return "reject";
 }
 
-} // namespace camerae_processing
+} // namespace camerae_vision

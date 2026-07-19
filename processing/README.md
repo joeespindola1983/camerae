@@ -4,7 +4,10 @@ Laboratorio local para testar o processamento astro do Camerae sem instalar no i
 
 O objetivo e evoluir aqui o algoritmo em C++/OpenCV e depois reaproveitar o mesmo core no iOS e Android.
 
-O laboratorio tambem contem um prototipo modular de registro de imagens. A pesquisa, as metricas do primeiro par real e a recomendacao mobile estao em [`docs/IMAGE_ALIGNMENT_PROTOTYPE.md`](../docs/IMAGE_ALIGNMENT_PROTOTYPE.md).
+O registro de imagens agora pertence ao modulo compartilhado
+[`camerae_vision`](../vision/README.md). A pesquisa, as metricas do primeiro par
+real e a recomendacao mobile estao em
+[`docs/IMAGE_ALIGNMENT_PROTOTYPE.md`](../docs/IMAGE_ALIGNMENT_PROTOTYPE.md).
 
 ## Dependencias
 
@@ -46,7 +49,10 @@ cmake --build build
 ## Preview de alinhamento
 
 ```sh
-./build/camerae-alignment-preview \
+cmake -S ../vision -B ../.build/vision
+cmake --build ../.build/vision
+
+../.build/vision/camerae-alignment-preview \
   --reference /caminho/referencia.png \
   --moving /caminho/movel.png \
   --output-dir out/alignment \

@@ -78,10 +78,10 @@ Esse resultado reforca duas decisoes: a orientacao de captura melhora muito a ma
 ## Comando
 
 ```sh
-cmake -S processing -B processing/build
-cmake --build processing/build
+cmake -S vision -B .build/vision
+cmake --build .build/vision
 
-processing/build/camerae-alignment-preview \
+.build/vision/camerae-alignment-preview \
   --reference /caminho/IMG_2025.png \
   --moving /caminho/IMG_2026.png \
   --output-dir processing/out/alignment \

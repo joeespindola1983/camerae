@@ -1,4 +1,4 @@
-#include "camerae_processing/alignment_processor.hpp"
+#include "camerae_vision/alignment.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -57,9 +57,9 @@ cv::Mat resizedReference(const cv::Mat& image, const cv::Size& size) {
 
 cv::Mat makeFeasibilityPreview(
     const cv::Mat& overlay,
-    const camerae_processing::AlignmentFeasibility& feasibility
+    const camerae_vision::AlignmentFeasibility& feasibility
 ) {
-    using camerae_processing::AlignmentDecision;
+    using camerae_vision::AlignmentDecision;
     cv::Mat output = overlay.clone();
     const int bannerHeight = std::max(92, output.rows / 12);
     cv::Scalar color;
@@ -92,8 +92,8 @@ cv::Mat makeFeasibilityPreview(
 
 void writeReport(
     const std::filesystem::path& path,
-    const camerae_processing::AlignmentSettings& settings,
-    const camerae_processing::AlignmentResult& result
+    const camerae_vision::AlignmentSettings& settings,
+    const camerae_vision::AlignmentResult& result
 ) {
     std::ofstream report(path);
     if (!report) {
@@ -102,8 +102,8 @@ void writeReport(
     const auto& metrics = result.metrics;
     report << std::fixed << std::setprecision(6)
         << "{\n"
-        << "  \"detector\": \"" << camerae_processing::alignmentDetectorName(settings.detector) << "\",\n"
-        << "  \"motionModel\": \"" << camerae_processing::alignmentMotionModelName(settings.motionModel) << "\",\n"
+        << "  \"detector\": \"" << camerae_vision::alignmentDetectorName(settings.detector) << "\",\n"
+        << "  \"motionModel\": \"" << camerae_vision::alignmentMotionModelName(settings.motionModel) << "\",\n"
         << "  \"referenceKeypoints\": " << metrics.referenceKeypoints << ",\n"
         << "  \"movingKeypoints\": " << metrics.movingKeypoints << ",\n"
         << "  \"candidateMatches\": " << metrics.candidateMatches << ",\n"
@@ -122,7 +122,7 @@ void writeReport(
         << "  \"maximumCornerDisplacementRatio\": " << metrics.maximumCornerDisplacementRatio << ",\n"
         << "  \"edgeAlignmentError\": " << metrics.edgeAlignmentError << ",\n"
         << "  \"decision\": \""
-        << camerae_processing::alignmentDecisionName(result.feasibility.decision) << "\",\n"
+        << camerae_vision::alignmentDecisionName(result.feasibility.decision) << "\",\n"
         << "  \"feasibilityScore\": " << result.feasibility.score << ",\n"
         << "  \"feasibilityReasons\": [";
     for (std::size_t index = 0; index < result.feasibility.reasons.size(); ++index) {
@@ -150,7 +150,7 @@ void writeReport(
 } // namespace
 
 int main(int argc, char* argv[]) {
-    using namespace camerae_processing;
+    using namespace camerae_vision;
 
     std::filesystem::path referencePath;
     std::filesystem::path movingPath;

@@ -10,8 +10,14 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(OpenCV REQUIRED COMPONENTS calib3d core features2d imgcodecs imgproc photo video)
 
+if(NOT TARGET camerae_vision)
+    add_subdirectory(
+        ${CMAKE_CURRENT_SOURCE_DIR}/../vision
+        ${CMAKE_CURRENT_BINARY_DIR}/camerae_vision
+    )
+endif()
+
 add_library(camerae_processing
-    src/alignment_processor.cpp
     src/astro_processor.cpp
 )
 
@@ -23,6 +29,7 @@ target_include_directories(camerae_processing
 
 target_link_libraries(camerae_processing
     PUBLIC
+        camerae_vision
         ${OpenCV_LIBS}
 )
 
@@ -35,18 +42,8 @@ target_link_libraries(camerae-astro-preview
         camerae_processing
 )
 
-add_executable(camerae-alignment-preview
-    tools/alignment_preview.cpp
-)
-
-target_link_libraries(camerae-alignment-preview
-    PRIVATE
-        camerae_processing
-)
-
 if(BUILD_TESTING)
     add_executable(camerae_processing_tests
-        tests/alignment_processor_tests.cpp
         tests/astro_processor_tests.cpp
     )
 

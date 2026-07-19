@@ -1,6 +1,7 @@
-#include "camerae_processing/alignment_processor.hpp"
+#include "camerae_vision/alignment.hpp"
 
 #include <cmath>
+#include <iostream>
 #include <stdexcept>
 #include <string>
 
@@ -27,9 +28,9 @@ cv::Mat makeAlignmentFixture() {
     return image;
 }
 
-camerae_processing::AlignmentSettings translationSettings() {
-    camerae_processing::AlignmentSettings settings;
-    settings.motionModel = camerae_processing::AlignmentMotionModel::Translation;
+camerae_vision::AlignmentSettings translationSettings() {
+    camerae_vision::AlignmentSettings settings;
+    settings.motionModel = camerae_vision::AlignmentMotionModel::Translation;
     settings.maxDimension = 0;
     settings.maxFeatures = 3000;
     settings.matchRatio = 0.85f;
@@ -50,7 +51,7 @@ cv::Mat translatedFixture(const cv::Mat& reference, double horizontalOffset) {
 }
 
 void testAlignmentParsing() {
-    using namespace camerae_processing;
+    using namespace camerae_vision;
     requireAlignment(parseAlignmentDetector("AKAZE") == AlignmentDetector::AKAZE,
                      "alignment detector parsing should be case insensitive");
     requireAlignment(parseAlignmentMotionModel("homografia") == AlignmentMotionModel::Homography,
@@ -60,7 +61,7 @@ void testAlignmentParsing() {
 }
 
 void testSyntheticTranslation() {
-    using namespace camerae_processing;
+    using namespace camerae_vision;
 
     const cv::Mat reference = makeAlignmentFixture();
 
@@ -88,7 +89,7 @@ void testSyntheticTranslation() {
 }
 
 void testSyntheticReviewDecision() {
-    using namespace camerae_processing;
+    using namespace camerae_vision;
 
     const cv::Mat reference = makeAlignmentFixture();
     const cv::Mat moving = translatedFixture(reference, 160.0);
@@ -103,7 +104,7 @@ void testSyntheticReviewDecision() {
 }
 
 void testSyntheticRejectDecision() {
-    using namespace camerae_processing;
+    using namespace camerae_vision;
 
     const cv::Mat reference = makeAlignmentFixture();
     const cv::Mat moving = translatedFixture(reference, 320.0);
@@ -119,9 +120,16 @@ void testSyntheticRejectDecision() {
 
 } // namespace
 
-void runAlignmentProcessorTests() {
-    testAlignmentParsing();
-    testSyntheticTranslation();
-    testSyntheticReviewDecision();
-    testSyntheticRejectDecision();
+int main() {
+    try {
+        testAlignmentParsing();
+        testSyntheticTranslation();
+        testSyntheticReviewDecision();
+        testSyntheticRejectDecision();
+        std::cout << "camerae_vision_tests passed\n";
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "camerae_vision_tests failed: " << error.what() << "\n";
+        return 1;
+    }
 }

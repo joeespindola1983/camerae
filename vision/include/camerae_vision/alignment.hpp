@@ -5,7 +5,7 @@
 
 #include <opencv2/core.hpp>
 
-namespace camerae_processing {
+namespace camerae_vision {
 
 enum class AlignmentDetector {
     ORB,
@@ -108,4 +108,4 @@ std::string alignmentDetectorName(AlignmentDetector detector);
 std::string alignmentMotionModelName(AlignmentMotionModel motionModel);
 std::string alignmentDecisionName(AlignmentDecision decision);
 
-} // namespace camerae_processing
+} // namespace camerae_vision
