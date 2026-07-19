@@ -11,6 +11,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 find_package(OpenCV REQUIRED COMPONENTS calib3d core features2d imgcodecs imgproc video)
 
 add_library(camerae_vision
+    src/automatic_alignment.cpp
     src/opencv/alignment.cpp
     src/opencv/alignment_quality.cpp
     src/capture_support.cpp
@@ -106,4 +107,15 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME camerae_capture_support_tests COMMAND camerae_capture_support_tests)
+
+    add_executable(camerae_automatic_alignment_tests
+        tests/automatic_alignment_tests.cpp
+    )
+
+    target_link_libraries(camerae_automatic_alignment_tests
+        PRIVATE
+            camerae_vision
+    )
+
+    add_test(NAME camerae_automatic_alignment_tests COMMAND camerae_automatic_alignment_tests)
 endif()

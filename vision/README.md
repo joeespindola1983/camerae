@@ -69,3 +69,16 @@ When disabled, the component returns before inspecting image inputs, creates no
 evaluator, and schedules no evaluation. Thread/worker ownership, UI preferences,
 and project persistence deliberately remain outside Camerae Vision for the
 future application-integration phase.
+
+## Automatic final model selection
+
+`alignImagesAutomatically` runs the final-quality similarity, affine, and
+homography candidates and returns their diagnostics with the selected result.
+Selection is deliberately conservative: a candidate with a better feasibility
+decision wins, while candidates in the same decision band must materially lower
+local edge error. Affine requires at least 15% improvement and homography 30%.
+
+The desktop lab exposes this as `--model auto`; explicit model selection remains
+available and unchanged. On both supplied real pairs, automatic mode retained
+similarity: the higher-parallax pair remained `review`, while the lower-parallax
+pair was already `accept` without requiring a more deformable model.

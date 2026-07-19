@@ -1,4 +1,5 @@
 #include "camerae_vision/alignment.hpp"
+#include "camerae_vision/automatic_alignment.hpp"
 
 #include <cstdlib>
 #include <filesystem>
@@ -7,6 +8,8 @@
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/imgproc.hpp>
@@ -18,7 +21,7 @@ void printUsage() {
         << "camerae-alignment-preview --reference IMAGE --moving IMAGE --output-dir DIR [options]\n\n"
         << "Options:\n"
         << "  --detector orb|akaze|sift\n"
-        << "  --model translation|similarity|affine|homography\n"
+        << "  --model auto|translation|similarity|affine|homography\n"
         << "  --max-dimension N\n"
         << "  --max-features N\n"
         << "  --match-ratio N\n"
@@ -93,7 +96,9 @@ cv::Mat makeFeasibilityPreview(
 void writeReport(
     const std::filesystem::path& path,
     const camerae_vision::AlignmentSettings& settings,
-    const camerae_vision::AlignmentResult& result
+    const camerae_vision::AlignmentResult& result,
+    bool automaticSelection,
+    const std::vector<camerae_vision::AlignmentCandidateSummary>& candidates
 ) {
     std::ofstream report(path);
     if (!report) {
@@ -104,6 +109,7 @@ void writeReport(
         << "{\n"
         << "  \"detector\": \"" << camerae_vision::alignmentDetectorName(settings.detector) << "\",\n"
         << "  \"motionModel\": \"" << camerae_vision::alignmentMotionModelName(settings.motionModel) << "\",\n"
+        << "  \"automaticModelSelection\": " << (automaticSelection ? "true" : "false") << ",\n"
         << "  \"referenceKeypoints\": " << metrics.referenceKeypoints << ",\n"
         << "  \"movingKeypoints\": " << metrics.movingKeypoints << ",\n"
         << "  \"candidateMatches\": " << metrics.candidateMatches << ",\n"
@@ -133,6 +139,21 @@ void writeReport(
         report << "\n  ";
     }
     report << "],\n"
+        << "  \"modelCandidates\": [";
+    for (std::size_t index = 0; index < candidates.size(); ++index) {
+        const auto& candidate = candidates[index];
+        report << (index == 0 ? "\n" : ",\n")
+            << "    {\"model\": \"" << camerae_vision::alignmentMotionModelName(candidate.model)
+            << "\", \"succeeded\": " << (candidate.succeeded ? "true" : "false")
+            << ", \"decision\": \"" << camerae_vision::alignmentDecisionName(candidate.decision)
+            << "\", \"score\": " << candidate.score
+            << ", \"reprojectionRMSE\": " << candidate.reprojectionRMSE
+            << ", \"edgeAlignmentError\": " << candidate.edgeAlignmentError << "}";
+    }
+    if (!candidates.empty()) {
+        report << "\n  ";
+    }
+    report << "],\n"
         << "  \"transformMovingToReference\": [\n";
     for (int row = 0; row < result.transform.rows; ++row) {
         report << "    [";
@@ -156,6 +177,7 @@ int main(int argc, char* argv[]) {
     std::filesystem::path movingPath;
     std::filesystem::path outputDirectory = "out/alignment";
     double overlayOpacity = 0.5;
+    bool automaticSelection = false;
     AlignmentSettings settings;
 
     try {
@@ -173,7 +195,13 @@ int main(int argc, char* argv[]) {
             } else if (argument == "--detector") {
                 settings.detector = parseAlignmentDetector(requireValue(index, argc, argv));
             } else if (argument == "--model") {
-                settings.motionModel = parseAlignmentMotionModel(requireValue(index, argc, argv));
+                const std::string model = requireValue(index, argc, argv);
+                if (model == "auto") {
+                    automaticSelection = true;
+                } else {
+                    automaticSelection = false;
+                    settings.motionModel = parseAlignmentMotionModel(model);
+                }
             } else if (argument == "--max-dimension") {
                 settings.maxDimension = std::stoi(requireValue(index, argc, argv));
             } else if (argument == "--max-features") {
@@ -206,7 +234,20 @@ int main(int argc, char* argv[]) {
             throw std::runtime_error("nao foi possivel ler as imagens de entrada");
         }
 
-        const AlignmentResult result = alignImages(referenceInput, movingInput, settings);
+        AlignmentResult result;
+        std::vector<AlignmentCandidateSummary> candidates;
+        if (automaticSelection) {
+            AutomaticAlignmentSettings automaticSettings;
+            automaticSettings.alignment = settings;
+            AutomaticAlignmentResult automatic = alignImagesAutomatically(
+                referenceInput, movingInput, automaticSettings
+            );
+            settings.motionModel = automatic.selectedModel;
+            candidates = std::move(automatic.candidates);
+            result = std::move(automatic.alignment);
+        } else {
+            result = alignImages(referenceInput, movingInput, settings);
+        }
         const cv::Mat reference = resizedReference(referenceInput, result.alignedImage.size());
         std::filesystem::create_directories(outputDirectory);
         requireWrite(outputDirectory / "01_reference.jpg", reference);
@@ -230,7 +271,9 @@ int main(int argc, char* argv[]) {
             makeAlignmentRedCyan(reference, result.alignedImage, result.validMask)
         );
         requireWrite(outputDirectory / "07_inlier_matches.jpg", result.matchVisualization);
-        writeReport(outputDirectory / "metrics.json", settings, result);
+        writeReport(
+            outputDirectory / "metrics.json", settings, result, automaticSelection, candidates
+        );
 
         std::cout << std::fixed << std::setprecision(3)
             << "detector: " << alignmentDetectorName(settings.detector) << "\n"
