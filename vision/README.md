@@ -57,3 +57,15 @@ For the supplied real pairs, the higher-parallax `IMG_2025/IMG_2026` pair was
 classified `review` with similarity, while the lower-parallax
 `IMG_2029/IMG_2030` pair was classified `accept` with affine. This matches the
 expected distinction between correctable capture and a capture needing caution.
+
+## Optional capture-support contract
+
+`CaptureSupportSettings` identifies the `AlignmentQuality` component, keeps it
+disabled by default, and provides conservative (1 Hz), balanced (2 Hz), and
+responsive (4 Hz) cadence policies. `AlignmentQualityCaptureSupport` creates
+its evaluator lazily on the first enabled evaluation and reuses it afterward.
+
+When disabled, the component returns before inspecting image inputs, creates no
+evaluator, and schedules no evaluation. Thread/worker ownership, UI preferences,
+and project persistence deliberately remain outside Camerae Vision for the
+future application-integration phase.

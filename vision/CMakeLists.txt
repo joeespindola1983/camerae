@@ -13,6 +13,7 @@ find_package(OpenCV REQUIRED COMPONENTS calib3d core features2d imgcodecs imgpro
 add_library(camerae_vision
     src/opencv/alignment.cpp
     src/opencv/alignment_quality.cpp
+    src/capture_support.cpp
 )
 
 target_include_directories(camerae_vision
@@ -94,4 +95,15 @@ if(BUILD_TESTING)
         NAME camerae_capture_quality_simulator_tests
         COMMAND camerae_capture_quality_simulator_tests
     )
+
+    add_executable(camerae_capture_support_tests
+        tests/capture_support_tests.cpp
+    )
+
+    target_link_libraries(camerae_capture_support_tests
+        PRIVATE
+            camerae_vision
+    )
+
+    add_test(NAME camerae_capture_support_tests COMMAND camerae_capture_support_tests)
 endif()
