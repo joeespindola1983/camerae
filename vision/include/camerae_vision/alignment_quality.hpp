@@ -25,6 +25,7 @@ struct CaptureAlignmentQuality {
     double estimatedLatencyMilliseconds = 0.0;
     AlignmentMotionModel selectedModel = AlignmentMotionModel::Similarity;
     std::vector<std::string> reasons;
+    std::vector<AlignmentReasonCode> reasonCodes;
 };
 
 struct AlignmentQualityDiagnostics {

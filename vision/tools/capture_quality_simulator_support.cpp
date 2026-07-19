@@ -126,6 +126,7 @@ std::string reportJSON(const CaptureSimulationReport& report) {
     std::ostringstream output;
     output << std::fixed << std::setprecision(6)
         << "{\n"
+        << "  \"schemaVersion\": " << cameraeVisionDiagnosticsSchemaVersion << ",\n"
         << "  \"receivedFrames\": " << report.receivedFrames << ",\n"
         << "  \"analyzedFrames\": " << report.analyzedFrames << ",\n"
         << "  \"droppedFrames\": " << report.droppedFrames << ",\n"
@@ -160,6 +161,12 @@ std::string reportJSON(const CaptureSimulationReport& report) {
             << "      \"reprojectionRMSE\": " << frame.reprojectionRMSE << ",\n"
             << "      \"edgeAlignmentError\": " << frame.edgeAlignmentError << ",\n"
             << "      \"latencyMilliseconds\": " << frame.latencyMilliseconds << ",\n"
+            << "      \"reasonCodes\": [";
+        for (std::size_t reasonIndex = 0; reasonIndex < frame.reasonCodes.size(); ++reasonIndex) {
+            output << (reasonIndex == 0 ? "" : ", ")
+                << "\"" << alignmentReasonCodeName(frame.reasonCodes[reasonIndex]) << "\"";
+        }
+        output << "],\n"
             << "      \"reasons\": [";
         for (std::size_t reasonIndex = 0; reasonIndex < frame.reasons.size(); ++reasonIndex) {
             output << (reasonIndex == 0 ? "" : ", ")

@@ -87,6 +87,7 @@ void testReportCountsDecisionsAndContainsRequiredJSONFields() {
             "report should count every alignment decision");
     require(report.analyzedFrames == 3, "report should count analyzed frames");
     for (const std::string& field : {
+             "\"schemaVersion\"", "\"reasonCodes\"",
              "\"p50Milliseconds\"", "\"p95Milliseconds\"", "\"maximumMilliseconds\"",
              "\"receivedFrames\"", "\"analyzedFrames\"", "\"droppedFrames\"",
              "\"peakRetainedBytes\"", "\"decisionPercentages\""}) {

@@ -1,5 +1,6 @@
 #include "camerae_vision/alignment.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
@@ -14,6 +15,14 @@ void requireAlignment(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+bool hasReasonCode(
+    const camerae_vision::AlignmentFeasibility& feasibility,
+    camerae_vision::AlignmentReasonCode code
+) {
+    return std::find(feasibility.reasonCodes.begin(), feasibility.reasonCodes.end(), code) !=
+        feasibility.reasonCodes.end();
 }
 
 cv::Mat makeAlignmentFixture() {
@@ -86,6 +95,8 @@ void testSyntheticTranslation() {
                      "alignment should materially reduce photometric error");
     requireAlignment(result.feasibility.decision == AlignmentDecision::Accept,
                      "clean synthetic translation should pass the feasibility gate");
+    requireAlignment(hasReasonCode(result.feasibility, AlignmentReasonCode::StableGeometry),
+                     "accepted alignment should expose a typed stable-geometry reason");
 }
 
 void testSyntheticReviewDecision() {
@@ -101,6 +112,8 @@ void testSyntheticReviewDecision() {
                      "large but correctable translation should require review");
     requireAlignment(!result.feasibility.reasons.empty(),
                      "review decision should explain the quality concern");
+    requireAlignment(hasReasonCode(result.feasibility, AlignmentReasonCode::LargeCrop),
+                     "review alignment should expose a typed crop reason");
 }
 
 void testSyntheticRejectDecision() {
@@ -116,6 +129,8 @@ void testSyntheticRejectDecision() {
                      "extreme translation should fail the feasibility gate");
     requireAlignment(!result.feasibility.reasons.empty(),
                      "reject decision should explain the hard failure");
+    requireAlignment(hasReasonCode(result.feasibility, AlignmentReasonCode::InsufficientOverlap),
+                     "rejected alignment should expose a typed overlap reason");
 }
 
 } // namespace

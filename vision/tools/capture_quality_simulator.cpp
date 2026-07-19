@@ -160,9 +160,11 @@ int main(int argc, char* argv[]) {
                 frame.latencyMilliseconds = quality.estimatedLatencyMilliseconds;
                 frame.selectedModel = quality.selectedModel;
                 frame.reasons = quality.reasons;
+                frame.reasonCodes = quality.reasonCodes;
             } catch (const std::exception& error) {
                 frame.decision = AlignmentDecision::Reject;
                 frame.reasons.push_back(std::string("falha na analise: ") + error.what());
+                frame.reasonCodes.push_back(AlignmentReasonCode::AnalysisFailure);
                 frame.latencyMilliseconds = std::chrono::duration<double, std::milli>(
                     std::chrono::steady_clock::now() - started
                 ).count();

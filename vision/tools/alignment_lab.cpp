@@ -107,6 +107,7 @@ void writeReport(
     const auto& metrics = result.metrics;
     report << std::fixed << std::setprecision(6)
         << "{\n"
+        << "  \"schemaVersion\": " << camerae_vision::cameraeVisionDiagnosticsSchemaVersion << ",\n"
         << "  \"detector\": \"" << camerae_vision::alignmentDetectorName(settings.detector) << "\",\n"
         << "  \"motionModel\": \"" << camerae_vision::alignmentMotionModelName(settings.motionModel) << "\",\n"
         << "  \"automaticModelSelection\": " << (automaticSelection ? "true" : "false") << ",\n"
@@ -130,6 +131,13 @@ void writeReport(
         << "  \"decision\": \""
         << camerae_vision::alignmentDecisionName(result.feasibility.decision) << "\",\n"
         << "  \"feasibilityScore\": " << result.feasibility.score << ",\n"
+        << "  \"reasonCodes\": [";
+    for (std::size_t index = 0; index < result.feasibility.reasonCodes.size(); ++index) {
+        report << (index == 0 ? "" : ", ") << "\""
+            << camerae_vision::alignmentReasonCodeName(result.feasibility.reasonCodes[index])
+            << "\"";
+    }
+    report << "],\n"
         << "  \"feasibilityReasons\": [";
     for (std::size_t index = 0; index < result.feasibility.reasons.size(); ++index) {
         report << (index == 0 ? "\n" : ",\n")

@@ -95,3 +95,15 @@ Diagnostics report completed and cancelled evaluations, reference updates,
 feature extractions, the retained reference image, and estimated reference-cache
 memory. The session is synchronous and thread-agnostic; worker ownership remains
 part of the later application-integration plan.
+
+## Typed diagnostics and JSON schema
+
+Alignment results now expose stable `AlignmentReasonCode` values alongside the
+existing human-readable Portuguese messages. Examples include
+`insufficientOverlap`, `highLocalResidual`, `possibleParallaxOrMotion`, and
+`stableGeometry`. Platforms should branch on codes and display localized text
+separately.
+
+Both desktop JSON reports declare `schemaVersion: 1` and include `reasonCodes`.
+The original message arrays remain present for backward compatibility. Any
+future incompatible report change must increment the schema version.

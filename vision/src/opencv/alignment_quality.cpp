@@ -319,35 +319,49 @@ CaptureAlignmentQuality AlignmentQualityEvaluator::evaluate(
     quality.edgeAlignmentError = localEdgeError;
     double score = 1.0;
     bool reject = false;
-    const auto hardFailure = [&](bool condition, double penalty, const std::string& reason) {
+    const auto hardFailure = [&](bool condition, double penalty, AlignmentReasonCode code,
+                                 const std::string& reason) {
         if (condition) {
             reject = true;
             score -= penalty;
+            quality.reasonCodes.push_back(code);
             quality.reasons.push_back(reason);
         }
     };
-    const auto warning = [&](bool condition, double penalty, const std::string& reason) {
+    const auto warning = [&](bool condition, double penalty, AlignmentReasonCode code,
+                             const std::string& reason) {
         if (condition) {
             score -= penalty;
+            quality.reasonCodes.push_back(code);
             quality.reasons.push_back(reason);
         }
     };
-    hardFailure(selected->inliers < 20, 0.55, "poucos pontos geometricamente consistentes");
-    hardFailure(selected->inlierRatio < 0.25, 0.45, "correspondencias inconsistentes");
-    hardFailure(overlap < 0.55, 0.45, "menos de 55% da imagem permanece util");
-    hardFailure(selected->reprojectionRMSE > 6.0, 0.45, "erro geometrico muito alto");
-    hardFailure(areaRatio < 0.35 || areaRatio > 2.0, 0.55, "mudanca de area extrema");
+    hardFailure(selected->inliers < 20, 0.55, AlignmentReasonCode::InsufficientInliers,
+                "poucos pontos geometricamente consistentes");
+    hardFailure(selected->inlierRatio < 0.25, 0.45, AlignmentReasonCode::InconsistentMatches,
+                "correspondencias inconsistentes");
+    hardFailure(overlap < 0.55, 0.45, AlignmentReasonCode::InsufficientOverlap,
+                "menos de 55% da imagem permanece util");
+    hardFailure(selected->reprojectionRMSE > 6.0, 0.45,
+                AlignmentReasonCode::HighReprojectionError, "erro geometrico muito alto");
+    hardFailure(areaRatio < 0.35 || areaRatio > 2.0, 0.55,
+                AlignmentReasonCode::ExtremeAreaChange, "mudanca de area extrema");
     hardFailure(std::min(scaleX, scaleY) < 0.35 || std::max(scaleX, scaleY) > 2.5,
-                0.55, "escala extrema");
-    hardFailure(localEdgeError > 8.0, 0.40, "residuo local muito alto");
-    warning(!reject && overlap < 0.80, 0.18, "recorte necessario e grande");
-    warning(!reject && selected->reprojectionRMSE > 2.0, 0.15, "erro geometrico acima do ideal");
-    warning(!reject && localEdgeError > 3.5, 0.25, "residuo local acima do ideal");
+                0.55, AlignmentReasonCode::ExtremeEdgeScale, "escala extrema");
+    hardFailure(localEdgeError > 8.0, 0.40, AlignmentReasonCode::HighLocalResidual,
+                "residuo local muito alto");
+    warning(!reject && overlap < 0.80, 0.18, AlignmentReasonCode::LargeCrop,
+            "recorte necessario e grande");
+    warning(!reject && selected->reprojectionRMSE > 2.0, 0.15,
+            AlignmentReasonCode::HighReprojectionError, "erro geometrico acima do ideal");
+    warning(!reject && localEdgeError > 3.5, 0.25,
+            AlignmentReasonCode::PossibleParallaxOrMotion, "residuo local acima do ideal");
     quality.score = std::clamp(score, 0.0, 1.0);
     quality.decision = reject ? AlignmentDecision::Reject :
         (quality.reasons.empty() && quality.score >= 0.80 ? AlignmentDecision::Accept :
                                                             AlignmentDecision::Review);
     if (quality.decision == AlignmentDecision::Accept) {
+        quality.reasonCodes.push_back(AlignmentReasonCode::StableGeometry);
         quality.reasons.push_back("geometria estavel e deformacao dentro dos limites");
     }
     quality.estimatedLatencyMilliseconds = std::chrono::duration<double, std::milli>(

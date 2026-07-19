@@ -1,5 +1,7 @@
 #pragma once
 
+#include "camerae_vision/diagnostics.hpp"
+
 #include <string>
 #include <vector>
 
@@ -66,6 +68,7 @@ struct AlignmentFeasibility {
     AlignmentDecision decision = AlignmentDecision::Reject;
     double score = 0.0;
     std::vector<std::string> reasons;
+    std::vector<AlignmentReasonCode> reasonCodes;
 };
 
 struct AlignmentResult {

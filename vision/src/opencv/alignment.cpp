@@ -437,47 +437,65 @@ AlignmentFeasibility evaluateFeasibility(const AlignmentMetrics& metrics, bool p
     double score = 1.0;
     bool reject = false;
 
-    const auto hardFailure = [&](bool condition, double penalty, const std::string& reason) {
+    const auto hardFailure = [&](bool condition, double penalty, AlignmentReasonCode code,
+                                 const std::string& reason) {
         if (condition) {
             reject = true;
             score -= penalty;
+            feasibility.reasonCodes.push_back(code);
             feasibility.reasons.push_back(reason);
         }
     };
-    const auto warning = [&](bool condition, double penalty, const std::string& reason) {
+    const auto warning = [&](bool condition, double penalty, AlignmentReasonCode code,
+                             const std::string& reason) {
         if (condition) {
             score -= penalty;
+            feasibility.reasonCodes.push_back(code);
             feasibility.reasons.push_back(reason);
         }
     };
 
-    hardFailure(metrics.inlierMatches < 20, 0.55, "poucos pontos geometricamente consistentes");
-    hardFailure(metrics.inlierRatio < 0.25, 0.45, "a maioria das correspondencias e inconsistente");
-    hardFailure(metrics.inlierCoverageRatio < 0.05, 0.45, "pontos concentrados em uma area muito pequena");
-    hardFailure(metrics.overlapRatio < 0.55, 0.45, "menos de 55% da imagem permanece util");
-    hardFailure(metrics.reprojectionRMSE > 6.0, 0.45, "erro geometrico muito alto");
-    hardFailure(!projectionIsConvex, 0.70, "a transformacao dobra ou inverte o quadro");
+    hardFailure(metrics.inlierMatches < 20, 0.55, AlignmentReasonCode::InsufficientInliers,
+                "poucos pontos geometricamente consistentes");
+    hardFailure(metrics.inlierRatio < 0.25, 0.45, AlignmentReasonCode::InconsistentMatches,
+                "a maioria das correspondencias e inconsistente");
+    hardFailure(metrics.inlierCoverageRatio < 0.05, 0.45, AlignmentReasonCode::InsufficientCoverage,
+                "pontos concentrados em uma area muito pequena");
+    hardFailure(metrics.overlapRatio < 0.55, 0.45, AlignmentReasonCode::InsufficientOverlap,
+                "menos de 55% da imagem permanece util");
+    hardFailure(metrics.reprojectionRMSE > 6.0, 0.45, AlignmentReasonCode::HighReprojectionError,
+                "erro geometrico muito alto");
+    hardFailure(!projectionIsConvex, 0.70, AlignmentReasonCode::NonConvexProjection,
+                "a transformacao dobra ou inverte o quadro");
     hardFailure(metrics.projectedAreaRatio < 0.35 || metrics.projectedAreaRatio > 2.0,
-                0.55, "mudanca de area extrema");
+                0.55, AlignmentReasonCode::ExtremeAreaChange, "mudanca de area extrema");
     hardFailure(metrics.minimumEdgeScale < 0.35 || metrics.maximumEdgeScale > 2.5,
-                0.55, "escala extrema em uma borda");
-    hardFailure(metrics.edgeAlignmentError > 8.0, 0.40,
+                0.55, AlignmentReasonCode::ExtremeEdgeScale, "escala extrema em uma borda");
+    hardFailure(metrics.edgeAlignmentError > 8.0, 0.40, AlignmentReasonCode::HighLocalResidual,
                 "residuo local muito alto; possivel paralaxe ou cena movel");
 
-    warning(!reject && metrics.inlierRatio < 0.65, 0.15, "consistencia de matches moderada");
+    warning(!reject && metrics.inlierRatio < 0.65, 0.15,
+            AlignmentReasonCode::ModerateMatchConsistency, "consistencia de matches moderada");
     warning(!reject && metrics.inlierCoverageRatio < 0.20, 0.18,
+            AlignmentReasonCode::PoorFrameCoverage,
             "pontos nao cobrem bem o quadro");
     warning(!reject && metrics.inlierGridCoverageRatio < 0.25, 0.12,
+            AlignmentReasonCode::SparseGridCoverage,
             "pontos ausentes em varias regioes do quadro");
-    warning(!reject && metrics.overlapRatio < 0.80, 0.18, "recorte necessario e grande");
-    warning(!reject && metrics.reprojectionRMSE > 2.0, 0.15, "erro geometrico acima do ideal");
+    warning(!reject && metrics.overlapRatio < 0.80, 0.18, AlignmentReasonCode::LargeCrop,
+            "recorte necessario e grande");
+    warning(!reject && metrics.reprojectionRMSE > 2.0, 0.15,
+            AlignmentReasonCode::HighReprojectionError, "erro geometrico acima do ideal");
     warning(!reject && (metrics.projectedAreaRatio < 0.70 || metrics.projectedAreaRatio > 1.35),
-            0.15, "mudanca de area relevante");
+            0.15, AlignmentReasonCode::RelevantAreaChange, "mudanca de area relevante");
     warning(!reject && (metrics.minimumEdgeScale < 0.70 || metrics.maximumEdgeScale > 1.40),
-            0.18, "deformacao de borda perceptivel");
+            0.18, AlignmentReasonCode::PerceptibleEdgeDeformation,
+            "deformacao de borda perceptivel");
     warning(!reject && metrics.maximumCornerDisplacementRatio > 0.40,
-            0.15, "deslocamento de quadro muito grande");
+            0.15, AlignmentReasonCode::LargeFrameDisplacement,
+            "deslocamento de quadro muito grande");
     warning(!reject && metrics.edgeAlignmentError > 3.5, 0.25,
+            AlignmentReasonCode::PossibleParallaxOrMotion,
             "residuo local sugere paralaxe, vento ou objetos moveis");
 
     feasibility.score = std::clamp(score, 0.0, 1.0);
@@ -487,6 +505,7 @@ AlignmentFeasibility evaluateFeasibility(const AlignmentMetrics& metrics, bool p
         feasibility.decision = AlignmentDecision::Review;
     } else {
         feasibility.decision = AlignmentDecision::Accept;
+        feasibility.reasonCodes.push_back(AlignmentReasonCode::StableGeometry);
         feasibility.reasons.push_back("geometria estavel e deformacao dentro dos limites");
     }
     return feasibility;
