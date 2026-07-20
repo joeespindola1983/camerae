@@ -1,4 +1,5 @@
 import Testing
+import CameraeCore
 @testable import Camerae
 
 @Suite("Camerae Next workflow configuration")
@@ -99,5 +100,117 @@ struct CameraeNextWorkflowConfigurationTests {
             CameraeNextWorkflowConfigurationPresentation(configuration: .astroDefault)
                 .durationLabels == ["15 min", "30 min", "1 h", "Personal."]
         )
+    }
+
+    @Test("Planning variants preserve the capture gate contract")
+    func planningVariants() {
+        let warning = CameraeNextCapturePlanningPresentation(
+            storage: .init(
+                decision: .warning,
+                reason: .lowStorageMargin,
+                requiredBytes: 1_400_000_000,
+                availableBytes: 1_800_000_000,
+                shortfallBytes: 0
+            ),
+            metricsDetail: "360 frames"
+        )
+        let blocked = CameraeNextCapturePlanningPresentation(
+            storage: .init(
+                decision: .blocked,
+                reason: .insufficientStorage,
+                requiredBytes: 2_200_000_000,
+                availableBytes: 1_000_000_000,
+                shortfallBytes: 1_200_000_000
+            ),
+            metricsDetail: "360 frames"
+        )
+
+        #expect(warning.state == .warning)
+        #expect(warning.canStart)
+        #expect(blocked.state == .blocked)
+        #expect(!blocked.canStart)
+    }
+
+    @Test("Planning surfaces compatibility and power variants without blocking valid storage")
+    func planningCompatibilityVariants() {
+        let storage = CaptureAdmissionResult(
+            decision: .allowed,
+            reason: .sufficientCapacity,
+            requiredBytes: 1_000,
+            availableBytes: 10_000,
+            shortfallBytes: 0
+        )
+
+        let adjusted = CameraeNextCapturePlanningPresentation(
+            storage: storage,
+            formatWasAdjusted: true,
+            metricsDetail: "120 frames"
+        )
+        let power = CameraeNextCapturePlanningPresentation(
+            storage: storage,
+            externalPowerRecommended: true,
+            metricsDetail: "120 frames"
+        )
+
+        #expect(adjusted.state == .adjusted)
+        #expect(adjusted.canStart)
+        #expect(power.state == .externalPower)
+        #expect(power.canStart)
+    }
+
+    @Test("Camera availability resolves single, fallback and unavailable states")
+    func cameraAvailability() {
+        let single = CameraeNextCameraSetupPresentation(
+            availableLenses: [.wide],
+            selectedLens: .wide,
+            preferredLens: .wide
+        )
+        let fallback = CameraeNextCameraSetupPresentation(
+            availableLenses: [.wide],
+            selectedLens: .wide,
+            preferredLens: .telephoto
+        )
+        let userSelection = CameraeNextCameraSetupPresentation(
+            availableLenses: [.ultraWide, .wide, .telephoto],
+            selectedLens: .telephoto,
+            preferredLens: .wide
+        )
+        let unavailable = CameraeNextCameraSetupPresentation(
+            availableLenses: [],
+            selectedLens: .wide,
+            preferredLens: .wide
+        )
+
+        #expect(single.state == .single)
+        #expect(fallback.state == .fallback)
+        #expect(userSelection.state == .available)
+        #expect(unavailable.state == .unavailable)
+        #expect(!unavailable.canStart)
+    }
+
+    @Test("Reference card follows the actual project reference")
+    func referenceState() {
+        #expect(CameraeNextReferencePresentation(module: .repeatable, state: .missing).title == "Nenhuma referência definida")
+        #expect(CameraeNextReferencePresentation(module: .astrophotography, state: .active).sectionTitle == "GUIA NOTURNO")
+        #expect(CameraeNextReferencePresentation(module: .astrophotography, state: .unavailable).status == "INDISPONÍVEL")
+    }
+
+    @Test("Custom duration accepts the Figma hour-minute format")
+    func customDuration() {
+        #expect(CameraeNextCustomDuration.format(minutes: 150) == "02 h 30 min")
+        #expect(CameraeNextCustomDuration.parse("02 h 30 min") == 150)
+        #expect(CameraeNextCustomDuration.parse("4:15") == 255)
+        #expect(CameraeNextCustomDuration.parse("0 h 00 min") == nil)
+    }
+
+    @Test("Automatic Astro mode disables only the manual exposure control")
+    func automaticAstroExposure() {
+        var automatic = CameraeNextCaptureConfiguration.astroDefault
+        automatic.usesAutomaticAstroExposure = true
+        let automaticPresentation = CameraeNextWorkflowConfigurationPresentation(configuration: automatic)
+        let manualPresentation = CameraeNextWorkflowConfigurationPresentation(configuration: .astroDefault)
+
+        #expect(!automaticPresentation.isAstroExposureControlEnabled)
+        #expect(manualPresentation.isAstroExposureControlEnabled)
     }
 }

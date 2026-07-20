@@ -1,5 +1,13 @@
 # Changelog
 
+## v8.1.0-qa.1
+
+- Added shared SwiftUI state components for Repeatable and Astro planning, camera availability, fallback, and reference/guide status using the module-specific design-system themes.
+- Connected the new configuration interface to real capture preflight estimates so storage warnings remain actionable while blocked, unavailable, and error states prevent capture from starting.
+- Added the themed custom-duration sheet with validated hour/minute input and quick presets for Repeatable timelapse and Astro sessions.
+- Disabled manual Astro exposure controls in Automatic mode and preserved the existing legacy screens while the Next interface continues its staged migration.
+- Expanded TDD coverage for planning gates, camera selection and fallback, reference states, custom durations, and conditional Astro controls.
+
 ## v7.0.0
 
 - Extracted OpenCV alignment into the shared desktop C++ `camerae_vision` module, independent from Astro, Repeatable, Timelapse, and platform UI code.

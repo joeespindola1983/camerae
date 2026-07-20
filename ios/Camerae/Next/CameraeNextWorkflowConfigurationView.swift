@@ -1,7 +1,8 @@
 import CameraeCore
+import Foundation
 import SwiftUI
 
-struct CameraeNextCaptureConfiguration: Equatable, Sendable {
+struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
     var module: CameraModule
     var repeatableKind: RepeatableCaptureKind
     var durationMinutes: Int
@@ -99,6 +100,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
     let cameraPresentation: CameraeNextCameraPresentation
     let showsVideoSettings: Bool
     let showsInterval: Bool
+    let isAstroExposureControlEnabled: Bool
 
     init(configuration: CameraeNextCaptureConfiguration) {
         let isAstro = configuration.module == .astrophotography
@@ -118,6 +120,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
             : .selector
         showsVideoSettings = isVideo
         showsInterval = isAstro || !isVideo
+        isAstroExposureControlEnabled = isAstro && !configuration.usesAutomaticAstroExposure
     }
 }
 
@@ -127,6 +130,12 @@ struct CameraeNextWorkflowConfigurationView: View {
     let onShowSessions: () -> Void
 
     @State private var configuration: CameraeNextCaptureConfiguration
+    @StateObject private var planning: CapturePlanningViewModel
+    @State private var usesCustomDuration = false
+    @State private var isShowingCustomDuration = false
+
+    private let availableLenses: [RepeatableCameraLens]
+    private let preferredLens: RepeatableCameraLens
 
     init(
         project: CameraProject,
@@ -136,13 +145,50 @@ struct CameraeNextWorkflowConfigurationView: View {
         self.project = project
         self.onStart = onStart
         self.onShowSessions = onShowSessions
-        _configuration = State(initialValue: project.module == .astrophotography ? .astroDefault : .repeatableDefault)
+        let preferredLens = RepeatableCameraLens.wide
+        let availableLenses = RepeatableCameraLens.availableBackLenses()
+        var initialConfiguration = project.module == .astrophotography
+            ? CameraeNextCaptureConfiguration.astroDefault
+            : CameraeNextCaptureConfiguration.repeatableDefault
+        if !availableLenses.contains(preferredLens), let fallback = availableLenses.first {
+            initialConfiguration.cameraLens = fallback
+        }
+        self.availableLenses = availableLenses
+        self.preferredLens = preferredLens
+        _configuration = State(initialValue: initialConfiguration)
+        _planning = StateObject(wrappedValue: CapturePlanningViewModel(
+            projectDirectoryURL: project.directoryURL
+        ))
     }
 
     private var theme: CameraeNextTheme { .init(workflow: project.module.designTheme) }
     private var isAstro: Bool { project.module == .astrophotography }
     private var presentation: CameraeNextWorkflowConfigurationPresentation {
         .init(configuration: configuration)
+    }
+    private var cameraSetupPresentation: CameraeNextCameraSetupPresentation {
+        .init(
+            module: project.module,
+            availableLenses: availableLenses,
+            selectedLens: configuration.cameraLens,
+            preferredLens: preferredLens
+        )
+    }
+    private var planningPresentation: CameraeNextCapturePlanningPresentation {
+        if planning.isLoading { return .evaluating }
+        if let result = planning.result { return .init(result: result) }
+        if planning.errorMessage != nil { return .error(planning.errorMessage) }
+        return .evaluating
+    }
+    private var referencePresentation: CameraeNextReferencePresentation {
+        .init(module: project.module, state: referenceState)
+    }
+    private var referenceState: CameraeNextReferenceState {
+        guard let url = project.referenceFrameURL else { return .missing }
+        return FileManager.default.fileExists(atPath: url.path) ? .active : .unavailable
+    }
+    private var canStart: Bool {
+        planningPresentation.canStart && cameraSetupPresentation.canStart
     }
 
     var body: some View {
@@ -165,11 +211,17 @@ struct CameraeNextWorkflowConfigurationView: View {
             .scrollIndicators(.hidden)
             .safeAreaInset(edge: .bottom) {
                 CameraeNextActionButton(
-                    title: presentation.primaryActionTitle,
+                    title: primaryActionTitle,
                     systemImage: nil,
-                    theme: theme
+                    theme: theme,
+                    isBusy: planning.isLoading,
+                    isDisabled: !canStart
                 ) {
-                    onStart(configuration)
+                    var resolved = configuration
+                    if let format = planning.result?.resolvedPlan.sourceFormat {
+                        resolved.sourceFormat = format
+                    }
+                    onStart(resolved)
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -191,6 +243,28 @@ struct CameraeNextWorkflowConfigurationView: View {
         .tint(theme.accent)
         .preferredColorScheme(theme.colorScheme)
         .onAppear { AppOrientationLock.shared.restorePortrait() }
+        .task(id: configuration) {
+            await refreshPreflight()
+        }
+        .sheet(isPresented: $isShowingCustomDuration) {
+            CameraeNextCustomDurationSheet(
+                minutes: $configuration.durationMinutes,
+                module: project.module,
+                theme: theme,
+                onApply: { usesCustomDuration = true }
+            )
+        }
+    }
+
+    private var primaryActionTitle: String {
+        if cameraSetupPresentation.state == .unavailable {
+            return "Câmera indisponível"
+        }
+        switch planningPresentation.state {
+        case .blocked: return "Libere espaço para continuar"
+        case .error: return "Planejamento indisponível"
+        default: return presentation.primaryActionTitle
+        }
     }
 
     private var modePicker: some View {
@@ -213,6 +287,9 @@ struct CameraeNextWorkflowConfigurationView: View {
                     configuration.usesAutomaticAstroExposure = value == .automatic
                 } else {
                     configuration.repeatableKind = value == .video ? .video : .timelapse
+                    if configuration.repeatableKind == .video {
+                        usesCustomDuration = false
+                    }
                 }
             }
         )
@@ -242,20 +319,39 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
 
     private var durationValues: [Int] {
-        presentation.showsVideoSettings ? [30, 60, 120] : [15, 30, 60, 180]
+        presentation.showsVideoSettings ? [30, 60, 120] : [15, 30, 60, 0]
     }
 
     private var durationBinding: Binding<Int> {
-        presentation.showsVideoSettings ? $configuration.videoDurationSeconds : $configuration.durationMinutes
+        if presentation.showsVideoSettings {
+            return $configuration.videoDurationSeconds
+        }
+        return Binding(
+            get: { usesCustomDuration ? 0 : configuration.durationMinutes },
+            set: { value in
+                if value == 0 {
+                    isShowingCustomDuration = true
+                } else {
+                    usesCustomDuration = false
+                    configuration.durationMinutes = value
+                }
+            }
+        )
     }
 
     @ViewBuilder
     private var cameraCard: some View {
-        switch presentation.cameraPresentation {
-        case .selector:
-            CameraeNextCameraSelector(selection: $configuration.cameraLens, theme: theme)
-        case let .lockedStatus(lens, zoom):
-            CameraeNextCameraStatus(lens: lens, zoom: zoom, theme: theme)
+        if !isAstro, cameraSetupPresentation.state == .available {
+            CameraeNextCameraSelector(
+                selection: $configuration.cameraLens,
+                theme: theme,
+                availableLenses: availableLenses
+            )
+        } else {
+            CameraeNextCameraSetupStateCard(
+                presentation: cameraSetupPresentation,
+                theme: theme
+            )
         }
     }
 
@@ -273,7 +369,9 @@ struct CameraeNextWorkflowConfigurationView: View {
                         theme: theme
                     ) {
                         Slider(value: $configuration.astroExposureSeconds, in: 1...30, step: 1)
+                            .disabled(!presentation.isAstroExposureControlEnabled)
                     }
+                    .opacity(presentation.isAstroExposureControlEnabled ? 1 : 0.58)
                     CameraeNextSliderRow(
                         title: "Intervalo",
                         value: "\(Int(configuration.intervalSeconds))s",
@@ -346,51 +444,99 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
 
     private var planningCard: some View {
-        CameraeNextCard(theme: theme) {
-            VStack(alignment: .leading, spacing: 8) {
-                HStack {
-                    CameraeNextSectionLabel(title: "Planejamento", theme: theme)
-                    Text("PRONTO")
-                        .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
-                        .foregroundStyle(theme.accent)
-                }
-                Text("\(configuration.estimatedFrameCount) frames  ·  \(configuration.estimatedStorageDescription)  ·  82% livre")
-                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
-                    .foregroundStyle(theme.text)
-                ProgressView(value: min(Double(configuration.estimatedFrameCount) / 1_800, 1))
-                    .tint(theme.accent)
-            }
-        }
+        CameraeNextCapturePlanningCard(presentation: planningPresentation, theme: theme)
     }
 
     private var referenceCard: some View {
-        CameraeNextCard(theme: theme) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(theme.surface)
-                    .frame(width: 56, height: 56)
-                    .overlay {
-                        Text(isAstro ? "AST" : "REF")
-                            .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-                            .tracking(1.4)
-                            .foregroundStyle(theme.accent)
-                    }
-                VStack(alignment: .leading, spacing: 3) {
-                    CameraeNextSectionLabel(title: isAstro ? "Guia noturno" : "Referência", theme: theme)
-                    Text(isAstro ? "Céu e horizonte" : "Primeiro enquadramento")
-                        .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
-                        .foregroundStyle(theme.text)
-                    Text(isAstro ? "Nível e orientação salvos" : "Rotação e GPS salvos")
-                        .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
-                        .foregroundStyle(theme.muted)
-                }
-                Spacer()
-                Text("ATIVA")
-                    .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-                    .tracking(1.2)
-                    .foregroundStyle(theme.accent)
-            }
+        CameraeNextReferenceStateCard(presentation: referencePresentation, theme: theme)
+    }
+
+    private func refreshPreflight() async {
+        do {
+            let plan = try capturePlan
+            await planning.evaluate(
+                plan: plan,
+                sizeProfile: sizeProfile,
+                capabilityProfile: .init(
+                    supportedSourceFormats: [.heic, .jpeg],
+                    supportedAstroPipelines: isAstro ? [astroPipeline] : []
+                ),
+                observedDrainPerHour: configuration.repeatableKind == .video ? 0.12 : (isAstro ? 0.20 : 0.10)
+            )
+        } catch {
+            // Transient invalid input keeps the primary action blocked.
         }
+    }
+
+    private var capturePlan: CapturePlan {
+        get throws {
+            let workflow: CaptureWorkflow = isAstro
+                ? .astro
+                : (configuration.repeatableKind == .video ? .repeatableVideo : .repeatableTimelapse)
+            return try CapturePlan(
+                workflow: workflow,
+                plannedDuration: configuration.repeatableKind == .video
+                    ? TimeInterval(configuration.videoDurationSeconds)
+                    : TimeInterval(configuration.durationMinutes * 60),
+                captureInterval: workflow == .repeatableVideo
+                    ? nil
+                    : (isAstro
+                        ? max(configuration.astroExposureSeconds * Double(configuration.astroCapturesPerFrame), 0.1)
+                        : configuration.intervalSeconds),
+                sourceFormat: configuration.sourceFormat,
+                captureFPS: workflow == .repeatableVideo ? configuration.videoSettings.fps : nil,
+                renderFPS: workflow == .repeatableVideo ? nil : configuration.videoSettings.fps,
+                resolution: captureResolution,
+                astroPipeline: isAstro ? astroPipeline : nil
+            )
+        }
+    }
+
+    private var sizeProfile: CaptureSizeProfile {
+        if configuration.repeatableKind == .video, !isAstro {
+            return .init(
+                videoBitsPerSecondUpperBound: videoBitsPerSecondUpperBound,
+                publicationOverheadFraction: 0.10
+            )
+        }
+        return .init(
+            bytesPerFrameUpperBound: configuration.sourceFormat == .heic ? 4_000_000 : 8_000_000,
+            processingOverheadFraction: isAstro ? 0.50 : 0.10,
+            publicationOverheadFraction: isAstro ? 0.25 : 0.20
+        )
+    }
+
+    private var captureResolution: CaptureResolution {
+        guard configuration.repeatableKind == .video, !isAstro else { return .fullSensor }
+        switch configuration.videoSettings.resolution {
+        case .preview: return .fullHD
+        case .fourK: return .ultraHD
+        case .full: return .fullSensor
+        }
+    }
+
+    private var videoBitsPerSecondUpperBound: UInt64 {
+        let base: Double = switch configuration.videoSettings.resolution {
+        case .preview: 16_000_000
+        case .fourK: 60_000_000
+        case .full: 90_000_000
+        }
+        return UInt64(base * (Double(configuration.videoSettings.fps) / 30) * configuration.videoSettings.quality.bitRateMultiplier)
+    }
+
+    private var astroPipeline: AstroPipelineProfile {
+        let thermal: CaptureThermalState = switch ProcessInfo.processInfo.thermalState {
+        case .nominal: .nominal
+        case .fair: .fair
+        case .serious: .serious
+        case .critical: .critical
+        @unknown default: .unknown
+        }
+        return AstroPipelineResolver().resolve(.init(
+            physicalMemoryBytes: ProcessInfo.processInfo.physicalMemory,
+            thermalState: thermal,
+            isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled
+        ))
     }
 
     private func summary(title: String, value: String, accent: Bool = false) -> some View {

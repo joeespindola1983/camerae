@@ -223,6 +223,7 @@ struct CameraeNextSettingRow<Control: View>: View {
 struct CameraeNextCameraSelector: View {
     @Binding var selection: RepeatableCameraLens
     let theme: CameraeNextTheme
+    var availableLenses = RepeatableCameraLens.allCases
 
     var body: some View {
         CameraeNextCard(theme: theme) {
@@ -247,6 +248,7 @@ struct CameraeNextCameraSelector: View {
         symbol: String
     ) -> some View {
         let selected = selection == lens
+        let isAvailable = availableLenses.contains(lens)
         return Button { selection = lens } label: {
             VStack(spacing: 7) {
                 Image(systemName: symbol)
@@ -268,7 +270,10 @@ struct CameraeNextCameraSelector: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(!isAvailable)
+        .opacity(isAvailable ? 1 : 0.38)
         .accessibilityLabel("Câmera \(label)")
+        .accessibilityHint(isAvailable ? "" : "Indisponível neste aparelho")
         .accessibilityAddTraits(selected ? .isSelected : [])
     }
 }
