@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import Camerae
 
@@ -28,5 +29,23 @@ struct CameraeNextGridCatalogTests {
     @Test("default grid remains the familiar rule of thirds")
     func defaultGrid() {
         #expect(CameraeNextGridStyle.default == .ruleOfThirds)
+    }
+
+    @Test("picker has one close action and commits selection immediately")
+    func pickerContract() {
+        #expect(!CameraeNextGridPickerPresentation.showsLeadingVisibilityToggle)
+        #expect(CameraeNextGridPickerPresentation.closeTitle == "Fechar")
+        #expect(CameraeNextGridPickerPresentation.dismissesAfterSelection)
+    }
+
+    @Test("selected grid becomes the default for future captures")
+    func persistentSelection() throws {
+        let suiteName = "CameraeNextGridCatalogTests-\(UUID().uuidString)"
+        let suite = try #require(UserDefaults(suiteName: suiteName))
+        defer { suite.removePersistentDomain(forName: suiteName) }
+
+        #expect(CameraeNextGridPreference.current(in: suite) == .ruleOfThirds)
+        CameraeNextGridPreference.save(.goldenSpiralMirrored, in: suite)
+        #expect(CameraeNextGridPreference.current(in: suite) == .goldenSpiralMirrored)
     }
 }

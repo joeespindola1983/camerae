@@ -35,6 +35,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var isSinglePhotoCaptureRunning = false
     @Published private(set) var isVideoRecording = false
     @Published private(set) var videoRecordingStartedAt: Date?
+    @Published private(set) var timelapseStartedAt: Date?
     @Published private(set) var frameCount = 0
     @Published private(set) var astroCompositeFrameCount = 0
     @Published private(set) var baseExposureLabel = "-"
@@ -55,6 +56,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var originalFrameExportProgress: OriginalFrameExportProgress?
     @Published private(set) var availableRepeatableLenses = RepeatableCameraLens.availableBackLenses()
     @Published private(set) var selectedRepeatableLens = RepeatableCameraLens.wide
+    @Published private(set) var selectedCameraZoomFactor = 1.0
     @Published private(set) var supportedSourceFormats: Set<CaptureSourceFormat> = [.jpeg]
     @Published private(set) var lifecycleState = CameraeCaptureLifecycleState.idle
 
@@ -93,6 +95,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
     nonisolated(unsafe) private var selectedSourceFormat = CaptureSourceFormat.heic
+    nonisolated(unsafe) private var requestedInitialZoomFactor = 1.0
     private var captureStorageGuard: CaptureStorageGuard?
     private var stoppedForStorage = false
     private var lifecycleGeneration: UInt64 = 0
@@ -100,7 +103,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     init(
         project: CameraProject,
         captureMode: CameraCaptureMode = .astro,
-        initialRepeatableLens: RepeatableCameraLens? = nil
+        initialRepeatableLens: RepeatableCameraLens? = nil,
+        initialCameraZoomFactor: Double = 1
     ) {
         self.captureMode = captureMode
         store = TimelapseSessionStore(project: project)
@@ -114,6 +118,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
            let firstAvailableLens = availableRepeatableLenses.first {
             selectedRepeatableLens = firstAvailableLens
         }
+        selectedCameraZoomFactor = max(initialCameraZoomFactor, 1)
+        requestedInitialZoomFactor = selectedCameraZoomFactor
         locationManager.delegate = self
         locationManager.desiredAccuracy = kCLLocationAccuracyBestForNavigation
         locationManager.distanceFilter = kCLDistanceFilterNone
@@ -355,7 +361,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         do {
             currentSession = try store.createSession(
                 captureKind: .photo,
-                cameraLens: captureMode == .repeatable ? selectedRepeatableLens : nil
+                cameraLens: selectedRepeatableLens,
+                cameraZoomFactor: selectedCameraZoomFactor
             )
             completedSession = nil
             frameCount = 0
@@ -486,6 +493,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
                         self.session.addInput(newInput)
                         self.session.commitConfiguration()
+                        try Self.applyZoom(1, to: newDevice)
                         self.device = newDevice
                         _ = try self.prepareCapture(device: newDevice)
                         continuation.resume(returning: ())
@@ -496,6 +504,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             }
 
             selectedRepeatableLens = lens
+            selectedCameraZoomFactor = 1
             status = "Camera \(lens.shortTitle) selecionada"
         } catch {
             status = "Camera falhou: \(error.localizedDescription)"
@@ -575,7 +584,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             stoppedForStorage = false
             currentSession = try store.createSession(
                 captureKind: .timelapse,
-                cameraLens: captureMode == .repeatable ? selectedRepeatableLens : nil
+                cameraLens: selectedRepeatableLens,
+                cameraZoomFactor: selectedCameraZoomFactor
             )
             if let currentSession {
                 try store.saveCapturePlan(plan, in: currentSession)
@@ -619,7 +629,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         do {
             stoppedForStorage = false
             astroExposureStrategy = usesAutomaticExposure ? .automatic(maxDuration: 1.0) : .fixed(duration: 1.0)
-            currentSession = try store.createSession(captureKind: .timelapse)
+            currentSession = try store.createSession(
+                captureKind: .timelapse,
+                cameraLens: selectedRepeatableLens,
+                cameraZoomFactor: selectedCameraZoomFactor
+            )
             if let currentSession {
                 try store.saveCapturePlan(plan, in: currentSession)
             }
@@ -827,6 +841,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseTask?.cancel()
         timelapseTask = nil
         isTimelapseRunning = false
+        timelapseStartedAt = nil
         unlockFocusAfterCaptureSequence()
         countdownLabel = "-"
         astroBatchProgressLabel = "-"
@@ -852,6 +867,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         guard !Task.isCancelled else { return }
         countdownLabel = "-"
+        timelapseStartedAt = Date()
         await lockFocusForCaptureSequence()
         guard !Task.isCancelled else { return }
         status = "Capturando timelapse"
@@ -1002,6 +1018,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private func finishPlannedTimelapse() {
         timelapseTask = nil
         isTimelapseRunning = false
+        timelapseStartedAt = nil
         unlockFocusAfterCaptureSequence()
         countdownLabel = "-"
         astroBatchProgressLabel = "-"
@@ -1047,7 +1064,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
             let videoSession = try store.createSession(
                 captureKind: .video,
-                cameraLens: selectedRepeatableLens
+                cameraLens: selectedRepeatableLens,
+                cameraZoomFactor: selectedCameraZoomFactor
             )
             try store.saveCapturePlan(plan, in: videoSession)
             let sessionWithMotion = try saveReferencePoseIfAvailable(for: videoSession)
@@ -1277,9 +1295,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     }
                     CameraeCaptureDiagnostics.event("C08 session.preset", "value=photo")
 
-                    let deviceType = self.captureMode == .repeatable
-                        ? preferredRepeatableLens.deviceType
-                        : .builtInWideAngleCamera
+                    let deviceType = preferredRepeatableLens.deviceType
                     guard let device = AVCaptureDevice.default(deviceType, for: .video, position: .back) else {
                         throw CameraError.noCamera
                     }
@@ -1311,6 +1327,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                         self.session.addOutput(self.videoDataOutput)
                     }
                     self.photoOutput.maxPhotoQualityPrioritization = .speed
+                    try self.applyInitialZoom(to: device)
                     self.device = device
                     self.configured = true
 
@@ -1347,6 +1364,19 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 }
             }
         }
+    }
+
+    nonisolated private static func applyZoom(_ requestedFactor: Double, to device: AVCaptureDevice) throws {
+        let minimum = max(Double(device.minAvailableVideoZoomFactor), 1)
+        let maximum = max(Double(device.maxAvailableVideoZoomFactor), minimum)
+        let applied = min(max(requestedFactor, minimum), maximum)
+        try device.lockForConfiguration()
+        device.videoZoomFactor = CGFloat(applied)
+        device.unlockForConfiguration()
+    }
+
+    nonisolated private func applyInitialZoom(to device: AVCaptureDevice) throws {
+        try Self.applyZoom(requestedInitialZoomFactor, to: device)
     }
 
     private func captureOriginalPhoto() async throws -> CapturedPhoto {

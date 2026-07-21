@@ -58,8 +58,62 @@ struct CameraeNextCaptureToolCatalogTests {
         #expect(tray?.tools.map(\.id) == [.grid, .visualMatch, .scale, .magnifier])
     }
 
+    @Test func informationIsADirectToggleInsteadOfATray() {
+        #expect(CameraeNextCaptureToolGroupID.trace.opensTray)
+        #expect(CameraeNextCaptureToolGroupID.guides.opensTray)
+        #expect(CameraeNextCaptureToolGroupID.blink.opensTray)
+        #expect(CameraeNextCaptureToolGroupID.sensors.opensTray)
+        #expect(!CameraeNextCaptureToolGroupID.information.opensTray)
+    }
+
+    @Test func comparisonTrayOffersSharedReferenceOpacityPresets() {
+        let tray = CameraeNextCaptureToolTrayPresentation(
+            module: .repeatable,
+            selection: .blink
+        )
+
+        #expect(tray?.title == "COMPARAÇÃO")
+        #expect(tray?.tools.map(\.id) == [.referenceBlink, .blinkInterval, .referenceOpacity])
+        #expect(CameraeNextReferenceOpacityOption.allCases.map(\.label) == ["25", "50", "100"])
+        #expect(CameraeNextReferenceOpacityOption.allCases.map(\.opacity) == [0.25, 0.5, 1])
+        #expect(CameraeNextReferenceOpacityOption.nearest(to: 0.45) == .half)
+    }
+
+    @Test func comparisonTrayUsesTheRequestedBlinkIntervals() {
+        #expect(CameraeNextReferenceBlinkInterval.allCases.map(\.label) == ["1s", "2s", "4s", "8s"])
+        #expect(CameraeNextReferenceBlinkInterval.allCases.map(\.seconds) == [1, 2, 4, 8])
+    }
+
+    @Test func motionSensorAlwaysExplainsItsVisibleState() {
+        #expect(CameraeNextMotionHUDPresentation(
+            isVisible: false,
+            hasReferenceMotion: false,
+            hasCurrentMotion: false
+        ) == .hidden)
+        #expect(CameraeNextMotionHUDPresentation(
+            isVisible: true,
+            hasReferenceMotion: true,
+            hasCurrentMotion: true
+        ) == .alignment)
+        #expect(CameraeNextMotionHUDPresentation(
+            isVisible: true,
+            hasReferenceMotion: false,
+            hasCurrentMotion: true
+        ) == .referenceUnavailable)
+        #expect(CameraeNextMotionHUDPresentation(
+            isVisible: true,
+            hasReferenceMotion: true,
+            hasCurrentMotion: false
+        ) == .sensorUnavailable)
+    }
+
+    @Test func opacityToolUsesTheFigmaHalfFilledCircleSymbol() {
+        #expect(CameraeNextCaptureToolID.referenceOpacity.systemImage == "circle.lefthalf.filled")
+    }
+
     @Test func liveCaptureStartsWithoutHeadingAndRespectsTheSafeArea() {
         #expect(!CameraeNextCaptureHUDDefaults.showsRepeatablePosition)
+        #expect(!CameraeNextCaptureHUDDefaults.showsRepeatableMotion)
         #expect(CameraeNextCaptureHUDDefaults.repeatableSelectedGroup == nil)
         #expect(CameraeNextCaptureHUDLayout.topInset == 6)
     }

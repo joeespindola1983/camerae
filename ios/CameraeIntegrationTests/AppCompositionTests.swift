@@ -2,6 +2,7 @@ import CameraeCore
 import CameraeMedia
 import Foundation
 import Testing
+import UIKit
 @testable import Camerae
 
 @Suite("App component integration", .serialized)
@@ -237,6 +238,33 @@ struct AppCompositionTests {
         #expect(summaries.first?.frameCount == 1)
         #expect(summaries.first?.referenceFrameURL?.pathExtension == "heic")
         #expect(try store.capturePlan(in: session) == plan)
+    }
+
+    @Test("a new project reference replaces the previous reference on disk")
+    func referenceReplacement() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeReferenceReplacement-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectStore = ProjectStore(rootDirectory: root)
+        let project = try await projectStore.createProject(module: .repeatable, name: "Reference")
+        let store = TimelapseSessionStore(project: project)
+
+        let first = try store.importReferenceImage(testImage(color: .red))
+        let firstURL = try #require(store.firstFrameURL(in: first))
+        let second = try store.importReferenceImage(testImage(color: .blue))
+        let secondURL = try #require(store.firstFrameURL(in: second))
+
+        #expect(!FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(FileManager.default.fileExists(atPath: secondURL.path))
+        #expect(store.sessionSummaries().filter { $0.captureKind == .photo }.map(\.session.id) == [second.id])
+        #expect(store.firstReferenceFrameURL() == secondURL)
+    }
+
+    private func testImage(color: UIColor) -> UIImage {
+        UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
+            color.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
+        }
     }
 
     @Test("capture planning view model publishes a blocked preflight")

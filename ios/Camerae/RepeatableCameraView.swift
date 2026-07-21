@@ -19,15 +19,14 @@ struct RepeatableCameraView: View {
 
     @State private var intervalSeconds = 5.0
     @State private var selectedCaptureKind = RepeatableCaptureKind.video
-    @State private var overlayOpacity = 0.45
+    @State private var overlayOpacity = 0.5
     @State private var alignmentOverlayStyle = AlignmentOverlayStyle.normal
     @State private var edgeReferenceImage: UIImage?
     @State private var edgeOverlayTint = EdgeOverlayTint.green
     @State private var edgeOverlayStroke = EdgeOverlayStroke()
     @State private var isReferenceBlinking = false
     @State private var isReferenceBlinkVisible = true
-    @State private var referenceBlinkInterval = ReferenceBlinkInterval.five
-    @State private var referenceBlinkOpacity = ReferenceBlinkOpacity.half
+    @State private var referenceBlinkInterval = CameraeNextReferenceBlinkInterval.two
     @State private var referenceBlinkTask: Task<Void, Never>?
     @State private var evBias = 0.0
     @State private var referenceImage: UIImage?
@@ -40,10 +39,10 @@ struct RepeatableCameraView: View {
     @State private var capturePhase = RepeatableCapturePhase.setup
     @State private var isPositionHUDVisible = CameraeNextCaptureHUDDefaults.showsRepeatablePosition
     @State private var isScaleHUDVisible = false
-    @State private var isMotionHUDVisible = true
+    @State private var isMotionHUDVisible = CameraeNextCaptureHUDDefaults.showsRepeatableMotion
     @State private var isTimelapseInfoVisible = false
     @State private var isGridVisible = true
-    @State private var selectedGridStyle = CameraeNextGridStyle.default
+    @State private var selectedGridStyle = CameraeNextGridPreference.current()
     @State private var isShowingGridPicker = false
     @State private var isVisualMatchGuideVisible = true
     @State private var isMagnifierVisible = false
@@ -86,10 +85,15 @@ struct RepeatableCameraView: View {
         let referenceLens = nextConfiguration?.cameraLens
             ?? openedSession?.cameraLens
             ?? sessionStore.cameraLens(forFrameURL: referenceURL ?? sessionStore.firstReferenceFrameURL())
+        let referenceZoomFactor = nextConfiguration?.cameraZoomFactor
+            ?? openedSession?.cameraZoomFactor
+            ?? sessionStore.cameraZoomFactor(forFrameURL: referenceURL ?? sessionStore.firstReferenceFrameURL())
+            ?? 1
         _camera = StateObject(wrappedValue: CameraController(
             project: project,
             captureMode: .repeatable,
-            initialRepeatableLens: referenceLens
+            initialRepeatableLens: referenceLens,
+            initialCameraZoomFactor: referenceZoomFactor
         ))
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
@@ -384,10 +388,28 @@ struct RepeatableCameraView: View {
                         .ignoresSafeArea()
                 }
 
-                if isMotionHUDVisible, let referenceMotion, let currentMotion = camera.currentMotion {
+                if CameraeNextMotionHUDPresentation(
+                    isVisible: isMotionHUDVisible,
+                    hasReferenceMotion: referenceMotion != nil,
+                    hasCurrentMotion: camera.currentMotion != nil
+                ) == .alignment, let referenceMotion, let currentMotion = camera.currentMotion {
                     MotionAlignmentHUD(reference: referenceMotion, current: currentMotion)
                         .frame(width: min(proxy.size.width * 0.54, 220), height: min(proxy.size.width * 0.54, 220))
                         .position(x: proxy.size.width / 2, y: max(proxy.size.height - 240, proxy.size.height * 0.58))
+                }
+
+                if isMotionHUDVisible, referenceMotion == nil {
+                    SensorAvailabilityHUD(
+                        systemImage: "gyroscope",
+                        message: "REFERÊNCIA SEM ORIENTAÇÃO"
+                    )
+                    .position(x: proxy.size.width / 2, y: max(proxy.size.height - 160, proxy.size.height * 0.72))
+                } else if isMotionHUDVisible, camera.currentMotion == nil {
+                    SensorAvailabilityHUD(
+                        systemImage: "gyroscope",
+                        message: "AGUARDANDO SENSOR"
+                    )
+                    .position(x: proxy.size.width / 2, y: max(proxy.size.height - 160, proxy.size.height * 0.72))
                 }
 
                 if isVisualMatchGuideVisible,
@@ -530,10 +552,15 @@ struct RepeatableCameraView: View {
         let orientation: CameraeCapturePanelOrientation = size.width > size.height ? .landscape : .portrait
         let strip = CameraeNextCaptureToolStrip(
             presentation: .init(module: .repeatable, orientation: orientation),
-            selection: activeHUDCategory,
+            selection: activeHUDCategory ?? (isTimelapseInfoVisible ? .information : nil),
             theme: .repeatable,
             onSelect: { category in
-                activeHUDCategory = activeHUDCategory == category ? nil : category
+                if category.opensTray {
+                    activeHUDCategory = activeHUDCategory == category ? nil : category
+                } else {
+                    activeHUDCategory = nil
+                    isTimelapseInfoVisible.toggle()
+                }
             }
         )
 
@@ -709,7 +736,7 @@ struct RepeatableCameraView: View {
                             setReferenceBlinking(!isReferenceBlinking)
                         }
 
-                        ForEach(ReferenceBlinkInterval.allCases, id: \.self) { interval in
+                        ForEach(CameraeNextReferenceBlinkInterval.allCases) { interval in
                             textOptionButton(
                                 label: interval.label,
                                 isSelected: referenceBlinkInterval == interval,
@@ -722,13 +749,23 @@ struct RepeatableCameraView: View {
                     }
 
                     HStack(spacing: 8) {
-                        ForEach(ReferenceBlinkOpacity.allCases, id: \.self) { opacity in
+                        Image(systemName: CameraeNextCaptureToolID.referenceOpacity.systemImage ?? "circle.lefthalf.filled")
+                            .font(.system(size: 18, weight: .medium))
+                            .foregroundStyle(CameraeColor.captureForeground)
+                            .frame(width: 32, height: 32)
+                            .background(CameraeColor.captureScrim.opacity(0.9), in: Circle())
+                            .overlay {
+                                Circle().stroke(CameraeColor.captureHairline, lineWidth: 1)
+                            }
+                            .accessibilityHidden(true)
+
+                        ForEach(CameraeNextReferenceOpacityOption.allCases) { opacity in
                             textOptionButton(
                                 label: opacity.label,
-                                isSelected: referenceBlinkOpacity == opacity,
+                                isSelected: CameraeNextReferenceOpacityOption.nearest(to: overlayOpacity) == opacity,
                                 accessibilityLabel: "Usar opacidade de \(opacity.label)"
                             ) {
-                                referenceBlinkOpacity = opacity
+                                overlayOpacity = opacity.opacity
                                 refreshReferenceOverlay()
                             }
                         }
@@ -957,40 +994,55 @@ struct RepeatableCameraView: View {
         let orientation = size.width > size.height
             ? CameraeCapturePanelOrientation.landscape
             : .portrait
-        let presentation = CameraeNextCaptureSessionPresentation.repeatable(
-            frameCount: camera.frameCount,
-            exposure: camera.baseExposureLabel,
-            reference: referenceName,
-            lastExposure: camera.lastCapturedExposureLabel,
-            countdown: camera.countdownLabel,
-            gps: currentGPSLabel,
-            isRunning: isCaptureActive,
-            idleActionTitle: primaryButtonTitle,
-            idleActionSystemImage: primaryButtonImage
-        )
+        return TimelineView(.periodic(from: .now, by: 1)) { context in
+            let presentation = CameraeNextCaptureSessionPresentation.repeatable(
+                frameCount: camera.frameCount,
+                exposure: camera.baseExposureLabel,
+                lastExposure: camera.lastCapturedExposureLabel,
+                remaining: remainingCaptureLabel(at: context.date),
+                isRunning: isCaptureActive,
+                idleActionTitle: primaryButtonTitle,
+                idleActionSystemImage: primaryButtonImage
+            )
 
-        return CameraeCaptureSessionPanel(
-            theme: presentation.theme,
-            orientation: orientation,
-            metrics: presentation.metrics,
-            actionTitle: isCaptureActive ? activeStopButtonTitle : presentation.actionTitle,
-            actionSystemImage: presentation.actionSystemImage,
-            isRunning: presentation.isRunning,
-            isBusy: camera.isSinglePhotoCaptureRunning,
-            isActionDisabled: !isCaptureActive && !canStartCapture,
-            showsLandscapePreview: presentation.showsLandscapePreview,
-            action: {
-                Task { await performPrimaryCaptureAction() }
-            }
-        ) {
-            if let referenceImage {
-                Image(uiImage: referenceImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Color.clear
+            CameraeCaptureSessionPanel(
+                theme: presentation.theme,
+                orientation: orientation,
+                metrics: presentation.metrics,
+                actionTitle: isCaptureActive ? activeStopButtonTitle : presentation.actionTitle,
+                actionSystemImage: presentation.actionSystemImage,
+                isRunning: presentation.isRunning,
+                isBusy: camera.isSinglePhotoCaptureRunning,
+                isActionDisabled: !isCaptureActive && !canStartCapture,
+                showsLandscapePreview: presentation.showsLandscapePreview,
+                showsMetrics: isTimelapseInfoVisible,
+                action: {
+                    Task { await performPrimaryCaptureAction() }
+                }
+            ) {
+                if let referenceImage {
+                    Image(uiImage: referenceImage)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    Color.clear
+                }
             }
         }
+    }
+
+    private func remainingCaptureLabel(at date: Date) -> String {
+        let startedAt = selectedCaptureKind == .video
+            ? camera.videoRecordingStartedAt
+            : camera.timelapseStartedAt
+        guard let startedAt else {
+            return RepeatableRecordingCountdown.label(seconds: Int(ceil(plannedDuration)))
+        }
+        return RepeatableRecordingCountdown.label(seconds: RepeatableRecordingCountdown.remainingSeconds(
+            startedAt: startedAt,
+            plannedDuration: plannedDuration,
+            now: date
+        ))
     }
 
     private func alignmentInfoPanel(for size: CGSize) -> some View {
@@ -1440,7 +1492,7 @@ struct RepeatableCameraView: View {
 
     private var referenceOverlayOpacity: Double {
         if isReferenceBlinking {
-            return isReferenceBlinkVisible ? referenceBlinkOpacity.opacity : 0
+            return isReferenceBlinkVisible ? overlayOpacity : 0
         }
 
         return alignmentOverlayStyle.isEdgeEnabled ? 1 : overlayOpacity
@@ -1579,62 +1631,6 @@ private extension EdgeOverlayTint {
 }
 
 private typealias AlignmentHUDCategory = CameraeNextCaptureToolGroupID
-
-private enum ReferenceBlinkInterval: CaseIterable {
-    case two
-    case five
-    case ten
-
-    var seconds: Double {
-        switch self {
-        case .two:
-            return 2
-        case .five:
-            return 5
-        case .ten:
-            return 10
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .two:
-            return "2s"
-        case .five:
-            return "5s"
-        case .ten:
-            return "10s"
-        }
-    }
-}
-
-private enum ReferenceBlinkOpacity: CaseIterable {
-    case quarter
-    case half
-    case full
-
-    var opacity: Double {
-        switch self {
-        case .quarter:
-            return 0.25
-        case .half:
-            return 0.5
-        case .full:
-            return 1
-        }
-    }
-
-    var label: String {
-        switch self {
-        case .quarter:
-            return "25"
-        case .half:
-            return "50"
-        case .full:
-            return "100"
-        }
-    }
-}
 
 private enum RepeatableCapturePhase {
     case setup
@@ -2125,6 +2121,24 @@ private struct RepeatableMetricPill: View {
                 .minimumScaleFactor(0.8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct SensorAvailabilityHUD: View {
+    let systemImage: String
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: systemImage)
+            .font(.custom("Outfit-SemiBold", size: 11, relativeTo: .caption))
+            .foregroundStyle(CameraeColor.captureForeground)
+            .padding(.horizontal, 16)
+            .frame(height: 44)
+            .background(CameraeColor.captureScrim.opacity(0.9), in: Capsule())
+            .overlay {
+                Capsule().stroke(CameraeColor.captureHairline, lineWidth: 1)
+            }
+            .accessibilityElement(children: .combine)
     }
 }
 

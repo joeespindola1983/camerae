@@ -91,10 +91,8 @@ struct CameraeNextCaptureSessionPresentation: Sendable {
     static func repeatable(
         frameCount: Int,
         exposure: String,
-        reference: String,
         lastExposure: String,
-        countdown: String,
-        gps: String,
+        remaining: String,
         isRunning: Bool,
         idleActionTitle: String = "Iniciar captura",
         idleActionSystemImage: String = "camera"
@@ -104,10 +102,8 @@ struct CameraeNextCaptureSessionPresentation: Sendable {
             metrics: [
                 .init(title: "Frames", value: "\(frameCount)"),
                 .init(title: "EV", value: exposure),
-                .init(title: "Ref", value: reference),
                 .init(title: "Última", value: lastExposure),
-                .init(title: "Início", value: countdown),
-                .init(title: "GPS", value: gps)
+                .init(title: "Restante", value: remaining)
             ],
             actionTitle: isRunning ? "Parar" : idleActionTitle,
             actionSystemImage: isRunning ? "stop.fill" : idleActionSystemImage,
@@ -194,29 +190,26 @@ struct CameraeCaptureMetricsGrid: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            metricRow(startingAt: 0)
-            metricRow(startingAt: 3)
+            ForEach(0..<rowCount, id: \.self) { row in
+                metricRow(startingAt: row * columnCount)
+            }
         }
         .frame(maxWidth: orientation.contentWidth)
         .frame(height: orientation == .portrait ? 72 : 64)
     }
 
+    private var columnCount: Int { metrics.count <= 4 ? 2 : 3 }
+    private var rowCount: Int { max(1, Int(ceil(Double(metrics.count) / Double(columnCount)))) }
+
     private func metricRow(startingAt index: Int) -> some View {
         HStack(spacing: 9) {
-            ForEach(index..<(index + 3), id: \.self) { metricIndex in
+            ForEach(index..<min(index + columnCount, metrics.count), id: \.self) { metricIndex in
                 CameraeCaptureMetricPill(
-                    metric: metric(at: metricIndex),
+                    metric: metrics[metricIndex],
                     size: orientation.metricSize
                 )
             }
         }
-    }
-
-    private func metric(at index: Int) -> CameraeCaptureMetric {
-        guard metrics.indices.contains(index) else {
-            return CameraeCaptureMetric(title: "—", value: "—")
-        }
-        return metrics[index]
     }
 }
 
@@ -270,6 +263,7 @@ struct CameraeCaptureSessionPanel<Preview: View>: View {
     var isBusy = false
     var isActionDisabled = false
     var showsLandscapePreview = true
+    var showsMetrics = true
     let action: () -> Void
     private let preview: Preview
 
@@ -283,6 +277,7 @@ struct CameraeCaptureSessionPanel<Preview: View>: View {
         isBusy: Bool = false,
         isActionDisabled: Bool = false,
         showsLandscapePreview: Bool = true,
+        showsMetrics: Bool = true,
         action: @escaping () -> Void,
         @ViewBuilder preview: () -> Preview
     ) {
@@ -295,13 +290,16 @@ struct CameraeCaptureSessionPanel<Preview: View>: View {
         self.isBusy = isBusy
         self.isActionDisabled = isActionDisabled
         self.showsLandscapePreview = showsLandscapePreview
+        self.showsMetrics = showsMetrics
         self.action = action
         self.preview = preview()
     }
 
     var body: some View {
         VStack(spacing: 12) {
-            CameraeCaptureMetricsGrid(metrics: metrics, orientation: orientation)
+            if showsMetrics {
+                CameraeCaptureMetricsGrid(metrics: metrics, orientation: orientation)
+            }
 
             if orientation == .landscape, showsLandscapePreview {
                 preview
@@ -344,7 +342,8 @@ struct CameraeCaptureSessionPanel<Preview: View>: View {
     }
 
     private var panelHeight: CGFloat {
-        switch (orientation, showsLandscapePreview) {
+        guard showsMetrics else { return orientation.actionHeight + 24 }
+        return switch (orientation, showsLandscapePreview) {
         case (.portrait, _): 160
         case (.landscape, true): 286
         case (.landscape, false): 148

@@ -40,6 +40,29 @@ struct SessionManifestCompatibilityTests {
         #expect(upgraded.schemaVersion == 5)
     }
 
+    @Test("camera zoom survives a manifest round trip")
+    func cameraZoomRoundTrip() throws {
+        let directory = URL(fileURLWithPath: "/tmp/session-zoom", isDirectory: true)
+        let session = SessionRecord(
+            id: UUID(),
+            projectID: UUID(),
+            module: .repeatable,
+            captureKind: .photo,
+            name: "session_zoom",
+            directoryURL: directory,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000),
+            cameraLens: "wide",
+            cameraZoomFactor: 2
+        )
+        let document = SessionManifestDocument(session: session, frameSummary: .empty)
+        let codec = SessionManifestCodec()
+
+        let decoded = try codec.decode(codec.encode(document), directoryURL: directory)
+
+        #expect(decoded.session.cameraLens == "wide")
+        #expect(decoded.session.cameraZoomFactor == 2)
+    }
+
     @Test("future session schemas are rejected without reinterpretation")
     func rejectsFutureSessionSchema() {
         let json = Self.legacyJSON.replacingOccurrences(
@@ -155,6 +178,25 @@ struct SessionCatalogComponentTests {
         #expect(summary?.videoSummary?.videoFileName == "timelapse.mp4")
         #expect(summary?.videoSummary?.clipFileName == "video.mov")
         #expect(summary?.astroSummary?.hasRenderedClip == true)
+    }
+
+    @Test("a rendered MP4 added after capture finalization is discovered on reload")
+    func finalizedSessionDiscoversRenderedMP4() async throws {
+        let library = try SessionTemporaryLibrary()
+        defer { library.remove() }
+        let catalog = SessionCatalog(project: library.project)
+        let session = try await catalog.createSession(captureKind: .timelapse)
+        try await catalog.beginCapture(sessionID: session.id)
+        _ = try await catalog.saveFrame(Data([1]), sessionID: session.id, index: 1)
+        _ = try await catalog.saveFrame(Data([2]), sessionID: session.id, index: 2)
+        try await catalog.finishCapture(sessionID: session.id)
+
+        _ = try await SessionCatalog(project: library.project).loadSummaries()
+        try Data([3, 4, 5]).write(to: session.directoryURL.appendingPathComponent("timelapse.mp4"))
+
+        let summary = try await SessionCatalog(project: library.project).loadSummaries().first
+
+        #expect(summary?.videoSummary?.videoFileName == "timelapse.mp4")
     }
 
     @Test("HEIC frames keep their format and survive inventory repair")

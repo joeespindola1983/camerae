@@ -46,6 +46,7 @@ public struct SessionRecord: Identifiable, Equatable, Hashable, Sendable {
     public let referenceGeoPose: SessionGeoPose?
     public let referenceOrientation: String?
     public let cameraLens: String?
+    public let cameraZoomFactor: Double?
 
     public init(
         id: UUID,
@@ -58,7 +59,8 @@ public struct SessionRecord: Identifiable, Equatable, Hashable, Sendable {
         referenceMotion: SessionMotion? = nil,
         referenceGeoPose: SessionGeoPose? = nil,
         referenceOrientation: String? = nil,
-        cameraLens: String? = nil
+        cameraLens: String? = nil,
+        cameraZoomFactor: Double? = nil
     ) {
         self.id = id
         self.projectID = projectID
@@ -71,6 +73,7 @@ public struct SessionRecord: Identifiable, Equatable, Hashable, Sendable {
         self.referenceGeoPose = referenceGeoPose
         self.referenceOrientation = referenceOrientation
         self.cameraLens = cameraLens
+        self.cameraZoomFactor = cameraZoomFactor
     }
 }
 

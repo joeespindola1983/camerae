@@ -20,7 +20,8 @@ public struct SessionManifestCodec: Sendable {
             referenceMotion: payload.referenceMotion,
             referenceGeoPose: payload.referenceGeoPose,
             referenceOrientation: payload.referenceOrientation,
-            cameraLens: payload.cameraLens
+            cameraLens: payload.cameraLens,
+            cameraZoomFactor: payload.cameraZoomFactor
         )
         return SessionManifestDocument(
             schemaVersion: schemaVersion,
@@ -48,6 +49,7 @@ public struct SessionManifestCodec: Sendable {
             referenceGeoPose: session.referenceGeoPose,
             referenceOrientation: session.referenceOrientation,
             cameraLens: session.cameraLens,
+            cameraZoomFactor: session.cameraZoomFactor,
             frameSummary: document.frameSummary,
             astroSummary: document.astroSummary,
             videoSummary: document.videoSummary,
@@ -83,6 +85,7 @@ public struct SessionManifestCodec: Sendable {
         let referenceGeoPose: SessionGeoPose?
         let referenceOrientation: String?
         let cameraLens: String?
+        let cameraZoomFactor: Double?
         let frameSummary: FrameSummary?
         let astroSummary: AstroSessionSummary?
         let videoSummary: VideoSessionSummary?

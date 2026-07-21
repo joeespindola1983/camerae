@@ -8,10 +8,8 @@ struct CameraeNextCapturePresentationTests {
         let repeatable = CameraeNextCaptureSessionPresentation.repeatable(
             frameCount: 12,
             exposure: "0 EV",
-            reference: "Praia",
             lastExposure: "1/60",
-            countdown: "3s",
-            gps: "OK",
+            remaining: "12:30",
             isRunning: false
         )
         let astro = CameraeNextCaptureSessionPresentation.astro(
@@ -25,7 +23,8 @@ struct CameraeNextCapturePresentationTests {
         )
 
         #expect(repeatable.theme == .repeatable)
-        #expect(repeatable.metrics.map(\.title) == ["Frames", "EV", "Ref", "Última", "Início", "GPS"])
+        #expect(repeatable.metrics.map(\.title) == ["Frames", "EV", "Última", "Restante"])
+        #expect(repeatable.metrics.map(\.value) == ["12", "0 EV", "1/60", "12:30"])
         #expect(repeatable.actionTitle == "Iniciar captura")
         #expect(!repeatable.showsLandscapePreview)
         #expect(astro.theme == .astro)
@@ -39,10 +38,8 @@ struct CameraeNextCapturePresentationTests {
         let repeatable = CameraeNextCaptureSessionPresentation.repeatable(
             frameCount: 1,
             exposure: "0 EV",
-            reference: "Ref",
             lastExposure: "—",
-            countdown: "—",
-            gps: "—",
+            remaining: "04:59",
             isRunning: true
         )
         let astro = CameraeNextCaptureSessionPresentation.astro(

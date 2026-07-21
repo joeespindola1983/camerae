@@ -1,5 +1,16 @@
 # Changelog
 
+## v8.2.0-qa.1
+
+- Completed the next-generation Repeatable project workspace with persistent Configuration and Captures sections, inline capture finalization, full-screen playback, sharing, and MP4 generation states.
+- Added project reference-image management with placeholder, import and camera capture actions, stable thumbnails, reference replacement, and camera/lens locking after the first compatible media or photographed reference.
+- Migrated the Repeatable capture HUD, information visibility, comparison timing, composition-grid selection, orientation handling, and capture completion behavior to the shared themed interface.
+- Added shared alignment configuration for Repeatable timelapses and recorded videos, including correction models, crop limits, persisted settings, review/progress presentations, and reference-frame requirements.
+- Moved timelapse alignment configuration to MP4 generation and added an explicit video alignment action while preserving tap-to-play behavior for recorded clips.
+- Expanded Astro processing and shared workflow states while preserving module-specific Repeatable and Astro colors, components, and conditional controls.
+- Hardened session manifests and catalogs for capture kinds, reference frames, rendered output discovery, empty-session cleanup, and restored project state.
+- Expanded TDD coverage across configuration, capture tools, grids, catalogs, operation states, composition, references, alignment, and session persistence.
+
 ## v8.1.0-qa.1
 
 - Added shared SwiftUI state components for Repeatable and Astro planning, camera availability, fallback, and reference/guide status using the module-specific design-system themes.

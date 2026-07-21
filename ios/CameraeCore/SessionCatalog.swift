@@ -111,7 +111,8 @@ public actor SessionCatalog {
                 var document = try read(directory: directory)
                 if document.frameSummary == nil ||
                     document.inventoryState == .dirty ||
-                    (document.frameSummary?.count ?? 0) > 0 && document.frameSummary?.captureDuration == nil {
+                    (document.frameSummary?.count ?? 0) > 0 && document.frameSummary?.captureDuration == nil ||
+                    renderedVideoArtifactsChanged(in: document) {
                     document = try repair(document)
                     try write(document)
                 }
@@ -123,6 +124,14 @@ public actor SessionCatalog {
             }
         }
         return summaries.sorted { $0.session.createdAt > $1.session.createdAt }
+    }
+
+    private func renderedVideoArtifactsChanged(in document: SessionManifestDocument) -> Bool {
+        let directory = document.session.directoryURL
+        let hasTimelapse = fileManager.fileExists(atPath: directory.appendingPathComponent("timelapse.mp4").path)
+        let hasClip = fileManager.fileExists(atPath: directory.appendingPathComponent("video.mov").path)
+        return hasTimelapse != (document.videoSummary?.videoFileName != nil) ||
+            hasClip != (document.videoSummary?.clipFileName != nil)
     }
 
     public func repair(sessionID: UUID) throws -> SessionSummary {

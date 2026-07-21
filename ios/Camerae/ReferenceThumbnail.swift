@@ -8,6 +8,7 @@ struct ReferenceThumbnail: View {
     var width: CGFloat? = 64
     var height: CGFloat = 48
     var maxPixelSize = 220
+    var usesNeutralImagePlaceholder = false
 
     @State private var image: UIImage?
 
@@ -18,11 +19,22 @@ struct ReferenceThumbnail: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                Image(systemName: systemImage)
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color.secondary.opacity(0.12))
+                if usesNeutralImagePlaceholder {
+                    Color(red: 229 / 255, green: 231 / 255, blue: 235 / 255)
+                        .overlay {
+                            Image(systemName: systemImage)
+                                .font(.system(size: 20, weight: .regular))
+                                .foregroundStyle(Color(.systemGray))
+                                .frame(width: 44, height: 44)
+                                .background(Color.white.opacity(0.82), in: Circle())
+                        }
+                } else {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 22, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .background(Color.secondary.opacity(0.12))
+                }
             }
         }
         .frame(maxWidth: width == nil ? .infinity : nil)

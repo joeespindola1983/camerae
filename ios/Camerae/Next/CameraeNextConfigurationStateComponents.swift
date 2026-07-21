@@ -137,6 +137,8 @@ enum CameraeNextCameraSetupState: Equatable, Sendable {
     case available
     case single
     case fallback
+    case locked
+    case lockedUnavailable
     case unavailable
 }
 
@@ -151,9 +153,23 @@ struct CameraeNextCameraSetupPresentation: Equatable, Sendable {
         module: CameraModule = .repeatable,
         availableLenses: [RepeatableCameraLens],
         selectedLens: RepeatableCameraLens,
-        preferredLens: RepeatableCameraLens
+        preferredLens: RepeatableCameraLens,
+        lockedLens: RepeatableCameraLens? = nil,
+        lockedZoomFactor: Double = 1
     ) {
-        if availableLenses.isEmpty {
+        if let lockedLens, !availableLenses.contains(lockedLens) {
+            state = .lockedUnavailable
+            canStart = false
+            title = "Câmera do projeto indisponível"
+            detail = "Conecte um aparelho com \(Self.cameraDescription(lockedLens, zoomFactor: lockedZoomFactor))"
+            status = "BLOQUEADA"
+        } else if let lockedLens {
+            state = .locked
+            canStart = true
+            title = "Câmera do projeto"
+            detail = Self.cameraDescription(lockedLens, zoomFactor: lockedZoomFactor)
+            status = "BLOQUEADA"
+        } else if availableLenses.isEmpty {
             state = .unavailable
             canStart = false
             title = "Nenhuma câmera compatível"
@@ -189,6 +205,17 @@ struct CameraeNextCameraSetupPresentation: Equatable, Sendable {
         case .telephoto: "Teleobjetiva · TELE"
         }
     }
+
+    private static func cameraDescription(
+        _ lens: RepeatableCameraLens,
+        zoomFactor: Double
+    ) -> String {
+        guard zoomFactor > 1.01 else { return lensDescription(lens) }
+        let zoom = zoomFactor.formatted(
+            .number.locale(Locale(identifier: "pt_BR")).precision(.fractionLength(0...1))
+        )
+        return "\(lensDescription(lens)) · zoom \(zoom)×"
+    }
 }
 
 enum CameraeNextReferenceState: Equatable, Sendable {
@@ -199,51 +226,65 @@ enum CameraeNextReferenceState: Equatable, Sendable {
 }
 
 struct CameraeNextReferencePresentation: Equatable, Sendable {
-    let sectionTitle: String
-    let iconLabel: String
-    let title: String
-    let detail: String
-    let status: String
+    let showsPlaceholder: Bool
+    let primaryActionTitle: String
+    let secondaryActionTitle: String
 
     init(module: CameraModule, state: CameraeNextReferenceState) {
-        let isAstro = module == .astrophotography
-        sectionTitle = isAstro ? "GUIA NOTURNO" : "REFERÊNCIA"
-        iconLabel = isAstro ? "AST" : "REF"
-
-        switch (isAstro, state) {
-        case (false, .active):
-            title = "Primeiro enquadramento"
-            detail = "Rotação e GPS salvos"
-            status = "ATIVA"
-        case (false, .missing):
-            title = "Nenhuma referência definida"
-            detail = "Capture ou escolha uma imagem para alinhar"
-            status = "AUSENTE"
-        case (false, .loading):
-            title = "Preparando referência"
-            detail = "Lendo imagem e metadados de orientação"
-            status = "CARREGANDO"
-        case (false, .unavailable):
-            title = "Referência não disponível"
-            detail = "O arquivo original foi movido ou removido"
-            status = "INDISPONÍVEL"
-        case (true, .active):
-            title = "Céu e horizonte"
-            detail = "Nível e orientação salvos"
-            status = "ATIVO"
-        case (true, .missing):
-            title = "Nenhum guia noturno definido"
-            detail = "Capture o céu e o horizonte para orientar a sessão"
-            status = "AUSENTE"
-        case (true, .loading):
-            title = "Preparando guia noturno"
-            detail = "Lendo nível e metadados de orientação"
-            status = "CARREGANDO"
-        case (true, .unavailable):
-            title = "Guia noturno indisponível"
-            detail = "O arquivo original foi movido ou removido"
-            status = "INDISPONÍVEL"
+        _ = module
+        switch state {
+        case .missing:
+            showsPlaceholder = true
+            primaryActionTitle = "Tirar foto"
+            secondaryActionTitle = "Importar"
+        case .active:
+            showsPlaceholder = false
+            primaryActionTitle = "Substituir"
+            secondaryActionTitle = "Remover"
+        case .loading:
+            showsPlaceholder = true
+            primaryActionTitle = "Aguarde"
+            secondaryActionTitle = "Cancelar"
+        case .unavailable:
+            showsPlaceholder = true
+            primaryActionTitle = "Escolher outra"
+            secondaryActionTitle = "Remover"
         }
+    }
+}
+
+struct CameraeNextProjectCameraPolicy: Equatable, Sendable {
+    let lockedLens: RepeatableCameraLens?
+    let lockedZoomFactor: Double
+
+    var isLocked: Bool { lockedLens != nil }
+
+    func accepts(lens: RepeatableCameraLens, zoomFactor: Double) -> Bool {
+        guard let lockedLens else { return true }
+        return lockedLens == lens && abs(lockedZoomFactor - max(zoomFactor, 1)) < 0.01
+    }
+
+    init(
+        summaries: [TimelapseSessionSummary],
+        legacyFallbackLens: RepeatableCameraLens = .wide
+    ) {
+        let firstCapture = summaries
+            .filter(\.containsCapturedMedia)
+            .min { $0.session.createdAt < $1.session.createdAt }
+        lockedLens = firstCapture.map { $0.session.cameraLens ?? legacyFallbackLens }
+        lockedZoomFactor = max(firstCapture?.session.cameraZoomFactor ?? 1, 1)
+    }
+}
+
+private extension TimelapseSessionSummary {
+    var containsCapturedMedia: Bool {
+        if captureKind == .photo, session.cameraLens == nil {
+            return false
+        }
+        return frameCount > 0 ||
+            videoURL != nil ||
+            videoClipURL != nil ||
+            isAstroProcessed
     }
 }
 
@@ -325,17 +366,63 @@ struct CameraeNextCameraSetupStateCard: View {
 
 struct CameraeNextReferenceStateCard: View {
     let presentation: CameraeNextReferencePresentation
+    let imageURL: URL?
     let theme: CameraeNextTheme
+    let primaryAction: () -> Void
+    let secondaryAction: () -> Void
 
     var body: some View {
-        CameraeNextStatusCard(
-            iconLabel: presentation.iconLabel,
-            sectionTitle: presentation.sectionTitle,
-            title: presentation.title,
-            detail: presentation.detail,
-            status: presentation.status,
-            theme: theme
-        )
+        CameraeNextCard(theme: theme) {
+            VStack(spacing: 10) {
+                ReferenceThumbnail(
+                    imageURL: presentation.showsPlaceholder ? nil : imageURL,
+                    systemImage: "photo",
+                    width: nil,
+                    height: 160,
+                    maxPixelSize: 900,
+                    usesNeutralImagePlaceholder: true
+                )
+
+                HStack(spacing: 8) {
+                    compactAction(
+                        title: presentation.primaryActionTitle,
+                        systemImage: "camera",
+                        isPrimary: true,
+                        action: primaryAction
+                    )
+                    compactAction(
+                        title: presentation.secondaryActionTitle,
+                        systemImage: presentation.secondaryActionTitle == "Remover" ? "trash" : "photo.on.rectangle",
+                        isPrimary: false,
+                        action: secondaryAction
+                    )
+                }
+            }
+        }
+    }
+
+    private func compactAction(
+        title: String,
+        systemImage: String,
+        isPrimary: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .font(.custom("Outfit-SemiBold", size: 13, relativeTo: .footnote))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+                .foregroundStyle(isPrimary ? Color.white : theme.text)
+                .frame(maxWidth: .infinity)
+                .frame(height: 44)
+                .background(isPrimary ? theme.accent : theme.surface, in: Capsule())
+                .overlay {
+                    if !isPrimary {
+                        Capsule().stroke(theme.border, lineWidth: 1)
+                    }
+                }
+        }
+        .buttonStyle(.plain)
     }
 }
 

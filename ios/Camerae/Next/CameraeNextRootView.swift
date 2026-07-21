@@ -210,36 +210,46 @@ struct CameraeNextProjectRuntimeView: View {
     @State private var isPresentingSessions = false
     @State private var videoSettings = WorkflowVideoSettings.repeatableDefault
     @State private var completedCapture: CameraeNextCompletedCapture?
+    @State private var repeatableWorkspace = CameraeNextRepeatableProjectWorkspaceState()
+    @State private var referenceRefreshID = 0
 
     var body: some View {
         Group {
             if project.module == .edit {
                 CameraeNextEditProjectView(project: project)
+            } else if project.module == .repeatable {
+                VStack(spacing: 0) {
+                    CameraeNextProjectTabs(
+                        selection: $repeatableWorkspace.section,
+                        theme: .init(workflow: .repeatable)
+                    )
+
+                    if repeatableWorkspace.section == .configuration {
+                        workflowConfiguration(isEmbeddedInProjectWorkspace: true)
+                    } else {
+                        CameraeNextSessionCatalogView(
+                            project: project,
+                            onStartNew: { repeatableWorkspace.startNewCapture() },
+                            isEmbedded: true,
+                            isFinalizingCapture: repeatableWorkspace.isFinalizingCapture,
+                            onCatalogLoaded: {
+                                guard repeatableWorkspace.isFinalizingCapture else { return }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                    repeatableWorkspace.catalogDidReload()
+                                }
+                            }
+                        )
+                    }
+                }
+                .background(CameraeNextTheme(workflow: .repeatable).background.ignoresSafeArea())
             } else {
-                CameraeNextWorkflowConfigurationView(
-                    project: project,
-                    onStart: { configuration in
-                        CameraeCaptureDiagnostics.event(
-                            "R01 configuration.startTapped",
-                            "module=\(configuration.module) kind=\(configuration.repeatableKind) lens=\(configuration.cameraLens.rawValue)"
-                        )
-                        captureConfiguration = configuration
-                        CameraeCaptureDiagnostics.event("R01.1 configuration.stateStored")
-                        videoSettings = configuration.videoSettings
-                        CameraeCaptureDiagnostics.event(
-                            "R01.2 videoSettings.stateStored",
-                            "summary=\(configuration.videoSettings.summary)"
-                        )
-                        isPresentingCapture = true
-                        CameraeCaptureDiagnostics.event("R01.3 capturePresentation.requested")
-                    },
-                    onShowSessions: { isPresentingSessions = true }
-                )
+                workflowConfiguration(isEmbeddedInProjectWorkspace: false)
             }
         }
         .task { await projectStore.markOpened(project) }
         .fullScreenCover(isPresented: $isPresentingCapture, onDismiss: {
             CameraeCaptureDiagnostics.event("R72 captureCover.dismissed")
+            referenceRefreshID += 1
         }) {
             let _ = CameraeCaptureDiagnostics.event(
                 "R01.5 captureCover.builder",
@@ -316,9 +326,44 @@ struct CameraeNextProjectRuntimeView: View {
         }
     }
 
+    private func workflowConfiguration(isEmbeddedInProjectWorkspace: Bool) -> some View {
+        CameraeNextWorkflowConfigurationView(
+            project: project,
+            onStart: { configuration in
+                CameraeCaptureDiagnostics.event(
+                    "R01 configuration.startTapped",
+                    "module=\(configuration.module) kind=\(configuration.repeatableKind) lens=\(configuration.cameraLens.rawValue)"
+                )
+                captureConfiguration = configuration
+                CameraeCaptureDiagnostics.event("R01.1 configuration.stateStored")
+                videoSettings = configuration.videoSettings
+                CameraeCaptureDiagnostics.event(
+                    "R01.2 videoSettings.stateStored",
+                    "summary=\(configuration.videoSettings.summary)"
+                )
+                isPresentingCapture = true
+                CameraeCaptureDiagnostics.event("R01.3 capturePresentation.requested")
+            },
+            onShowSessions: {
+                if project.module == .repeatable {
+                    repeatableWorkspace.showCaptures()
+                } else {
+                    isPresentingSessions = true
+                }
+            },
+            isEmbeddedInProjectWorkspace: isEmbeddedInProjectWorkspace,
+            referenceRefreshID: referenceRefreshID
+        )
+    }
+
     private func presentCompletion(module: CameraModule, session: TimelapseSession?) {
         CameraeCaptureDiagnostics.event("R71 capture.completed", "module=\(module)")
         isPresentingCapture = false
+        if CameraeNextCaptureCompletionRoute(module: module) == .projectCaptures {
+            repeatableWorkspace.captureDidFinish()
+            projectStore.reload()
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
             completedCapture = .init(module: module, session: session)
             projectStore.reload()

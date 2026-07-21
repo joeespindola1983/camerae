@@ -12,8 +12,9 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(configuration.repeatableKind == .timelapse)
         #expect(configuration.durationMinutes == 30)
         #expect(configuration.cameraLens == .wide)
+        #expect(configuration.cameraZoomFactor == 1)
         #expect(configuration.intervalSeconds == 5)
-        #expect(configuration.referenceOpacity == 0.45)
+        #expect(configuration.referenceOpacity == 0.5)
     }
 
     @Test("Astro starts from the manual session defaults")
@@ -24,6 +25,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(!configuration.usesAutomaticAstroExposure)
         #expect(configuration.durationMinutes == 30)
         #expect(configuration.cameraLens == .wide)
+        #expect(configuration.cameraZoomFactor == 1)
         #expect(configuration.astroExposureSeconds == 8)
         #expect(configuration.intervalSeconds == 8)
         #expect(configuration.astroCapturesPerFrame == 3)
@@ -50,10 +52,10 @@ struct CameraeNextWorkflowConfigurationTests {
         )
 
         #expect(presentation.navigationTitle == "Novo timelapse")
-        #expect(presentation.primaryActionTitle == "Abrir alinhamento")
+        #expect(presentation.primaryActionTitle == "Abrir câmera")
         #expect(presentation.captureSectionTitle == "CAPTURA")
         #expect(presentation.adjustmentsSectionTitle == "AJUSTES")
-        #expect(presentation.adjustmentTitles == ["EV", "Opacidade", "Intervalo"])
+        #expect(presentation.adjustmentTitles == ["EV", "Intervalo"])
         #expect(presentation.cameraPresentation == .selector)
     }
 
@@ -66,7 +68,7 @@ struct CameraeNextWorkflowConfigurationTests {
 
         #expect(videoPresentation.navigationTitle == "Novo vídeo")
         #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
-        #expect(videoPresentation.adjustmentTitles == ["EV", "Opacidade"])
+        #expect(videoPresentation.adjustmentTitles == ["EV"])
         #expect(videoPresentation.showsVideoSettings)
         #expect(!videoPresentation.showsInterval)
         #expect(video.estimatedFrameCount == video.videoDurationSeconds * video.videoSettings.fps)
@@ -190,9 +192,174 @@ struct CameraeNextWorkflowConfigurationTests {
 
     @Test("Reference card follows the actual project reference")
     func referenceState() {
-        #expect(CameraeNextReferencePresentation(module: .repeatable, state: .missing).title == "Nenhuma referência definida")
-        #expect(CameraeNextReferencePresentation(module: .astrophotography, state: .active).sectionTitle == "GUIA NOTURNO")
-        #expect(CameraeNextReferencePresentation(module: .astrophotography, state: .unavailable).status == "INDISPONÍVEL")
+        let missing = CameraeNextReferencePresentation(module: .repeatable, state: .missing)
+        let active = CameraeNextReferencePresentation(module: .astrophotography, state: .active)
+
+        #expect(missing.showsPlaceholder)
+        #expect(missing.primaryActionTitle == "Tirar foto")
+        #expect(missing.secondaryActionTitle == "Importar")
+        #expect(!active.showsPlaceholder)
+        #expect(active.primaryActionTitle == "Substituir")
+        #expect(active.secondaryActionTitle == "Remover")
+    }
+
+    @Test("an empty project keeps camera selection available")
+    func emptyProjectCameraSelection() {
+        let policy = CameraeNextProjectCameraPolicy(summaries: [])
+
+        #expect(!policy.isLocked)
+        #expect(policy.lockedLens == nil)
+    }
+
+    @Test("photo, timelapse, Astro and video media lock the project camera")
+    func everyCapturedMediaKindLocksCamera() {
+        let cases: [(RepeatableCaptureKind, CameraModule, Int, URL?, Bool)] = [
+            (.photo, .repeatable, 1, nil, false),
+            (.timelapse, .repeatable, 2, nil, false),
+            (.timelapse, .astrophotography, 1, nil, true),
+            (.video, .repeatable, 0, URL(fileURLWithPath: "/tmp/video.mov"), false)
+        ]
+
+        for (kind, module, frameCount, videoURL, isAstroProcessed) in cases {
+            let policy = CameraeNextProjectCameraPolicy(summaries: [
+                sessionSummary(
+                    kind: kind,
+                    module: module,
+                    frameCount: frameCount,
+                    videoClipURL: videoURL,
+                    isAstroProcessed: isAstroProcessed,
+                    lens: .telephoto
+                )
+            ])
+
+            #expect(policy.isLocked)
+            #expect(policy.lockedLens == .telephoto)
+        }
+    }
+
+    @Test("the first captured lens remains authoritative for later captures")
+    func firstCapturedLensWins() {
+        let first = sessionSummary(
+            kind: .photo,
+            frameCount: 1,
+            createdAt: Date(timeIntervalSince1970: 100),
+            lens: .ultraWide
+        )
+        let later = sessionSummary(
+            kind: .video,
+            frameCount: 0,
+            videoClipURL: URL(fileURLWithPath: "/tmp/video.mov"),
+            createdAt: Date(timeIntervalSince1970: 200),
+            lens: .wide
+        )
+
+        let policy = CameraeNextProjectCameraPolicy(summaries: [later, first])
+
+        #expect(policy.lockedLens == .ultraWide)
+    }
+
+    @Test("a photographed reference locks its detected lens and zoom")
+    func photographedReferenceLocksCameraAndZoom() {
+        let reference = sessionSummary(
+            kind: .photo,
+            frameCount: 1,
+            lens: .wide,
+            zoomFactor: 2
+        )
+
+        let policy = CameraeNextProjectCameraPolicy(summaries: [reference])
+        let presentation = CameraeNextCameraSetupPresentation(
+            availableLenses: [.wide],
+            selectedLens: .wide,
+            preferredLens: .wide,
+            lockedLens: policy.lockedLens,
+            lockedZoomFactor: policy.lockedZoomFactor
+        )
+
+        #expect(policy.lockedLens == .wide)
+        #expect(policy.lockedZoomFactor == 2)
+        #expect(policy.accepts(lens: .wide, zoomFactor: 2))
+        #expect(!policy.accepts(lens: .telephoto, zoomFactor: 2))
+        #expect(!policy.accepts(lens: .wide, zoomFactor: 1))
+        #expect(presentation.state == .locked)
+        #expect(presentation.detail.contains("zoom 2×"))
+    }
+
+    @Test("an imported reference does not choose a camera for the project")
+    func importedReferenceDoesNotLockCamera() {
+        let importedReference = sessionSummary(
+            kind: .photo,
+            frameCount: 1,
+            lens: nil
+        )
+
+        let policy = CameraeNextProjectCameraPolicy(summaries: [importedReference])
+
+        #expect(!policy.isLocked)
+    }
+
+    @Test("reference photo metadata identifies the physical lens and digital zoom")
+    func referencePhotoMetadata() {
+        let ultraWide = CameraeNextReferenceCameraMetadataResolver.resolve(
+            metadata: [
+                "{Exif}": [
+                    "LensModel": "iPhone back ultra wide camera 1.54mm f/2.4",
+                    "FocalLenIn35mmFilm": 13,
+                    "DigitalZoomRatio": 1
+                ]
+            ],
+            fallbackLens: .wide
+        )
+        let croppedWide = CameraeNextReferenceCameraMetadataResolver.resolve(
+            metadata: [
+                "{Exif}": [
+                    "LensModel": "iPhone back triple camera 6.765mm f/1.78",
+                    "FocalLenIn35mmFilm": 48,
+                    "DigitalZoomRatio": 2
+                ]
+            ],
+            fallbackLens: .ultraWide
+        )
+        let telephoto = CameraeNextReferenceCameraMetadataResolver.resolve(
+            metadata: [
+                "{Exif}": [
+                    "FocalLenIn35mmFilm": 77
+                ]
+            ],
+            fallbackLens: .wide
+        )
+
+        #expect(ultraWide.lens == .ultraWide)
+        #expect(ultraWide.zoomFactor == 1)
+        #expect(croppedWide.lens == .wide)
+        #expect(croppedWide.zoomFactor == 2)
+        #expect(telephoto.lens == .telephoto)
+        #expect(telephoto.zoomFactor == 1)
+    }
+
+    @Test("missing reference metadata keeps the selected camera safely")
+    func missingReferencePhotoMetadata() {
+        let selection = CameraeNextReferenceCameraMetadataResolver.resolve(
+            metadata: [:],
+            fallbackLens: .telephoto
+        )
+
+        #expect(selection.lens == .telephoto)
+        #expect(selection.zoomFactor == 1)
+    }
+
+    @Test("a locked lens never falls back silently when unavailable")
+    func unavailableLockedLensBlocksCapture() {
+        let presentation = CameraeNextCameraSetupPresentation(
+            availableLenses: [.wide],
+            selectedLens: .telephoto,
+            preferredLens: .wide,
+            lockedLens: .telephoto
+        )
+
+        #expect(presentation.state == .lockedUnavailable)
+        #expect(!presentation.canStart)
+        #expect(presentation.status == "BLOQUEADA")
     }
 
     @Test("Custom duration accepts the Figma hour-minute format")
@@ -212,5 +379,42 @@ struct CameraeNextWorkflowConfigurationTests {
 
         #expect(!automaticPresentation.isAstroExposureControlEnabled)
         #expect(manualPresentation.isAstroExposureControlEnabled)
+    }
+
+    private func sessionSummary(
+        kind: RepeatableCaptureKind,
+        module: CameraModule = .repeatable,
+        frameCount: Int,
+        videoClipURL: URL? = nil,
+        isAstroProcessed: Bool = false,
+        createdAt: Date = Date(),
+        lens: RepeatableCameraLens?,
+        zoomFactor: Double? = nil
+    ) -> TimelapseSessionSummary {
+        let session = TimelapseSession(
+            id: UUID(),
+            projectID: UUID(),
+            module: module,
+            captureKind: kind,
+            referenceMotion: nil,
+            referenceGeoPose: nil,
+            referenceOrientation: nil,
+            cameraLens: lens,
+            cameraZoomFactor: zoomFactor,
+            name: "fixture",
+            directoryURL: URL(fileURLWithPath: "/tmp/fixture-\(UUID().uuidString)"),
+            createdAt: createdAt
+        )
+        return TimelapseSessionSummary(
+            session: session,
+            captureKind: kind,
+            frameCount: frameCount,
+            captureDuration: nil,
+            referenceFrameURL: frameCount > 0 ? session.directoryURL.appendingPathComponent("frame_000001.jpg") : nil,
+            videoURL: nil,
+            videoClipURL: videoClipURL,
+            isAstroProcessed: isAstroProcessed,
+            hasRenderedOutput: videoClipURL != nil
+        )
     }
 }

@@ -682,7 +682,7 @@ struct AstroOriginalFrameItem: Identifiable, Equatable {
     var fileName: String { url.lastPathComponent }
 }
 
-private struct AstroFrameCurationView: View {
+struct AstroFrameCurationView: View {
     @ObservedObject var processor: AstroProcessingController
     @State private var selectedItem: AstroOriginalFrameItem?
     @State private var thumbnailSize = AstroFrameThumbnailSize.small

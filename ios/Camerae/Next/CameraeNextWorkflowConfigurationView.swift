@@ -1,6 +1,9 @@
 import CameraeCore
 import Foundation
+import ImageIO
+import PhotosUI
 import SwiftUI
+import UIKit
 
 struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
     var module: CameraModule
@@ -9,6 +12,7 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
     var videoDurationSeconds: Int
     var videoSettings: WorkflowVideoSettings
     var cameraLens: RepeatableCameraLens
+    var cameraZoomFactor: Double
     var sourceFormat: CaptureSourceFormat
     var exposureBias: Double
     var referenceOpacity: Double
@@ -24,9 +28,10 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
         videoDurationSeconds: 30,
         videoSettings: .repeatableDefault,
         cameraLens: .wide,
+        cameraZoomFactor: 1,
         sourceFormat: .heic,
         exposureBias: 0,
-        referenceOpacity: 0.45,
+        referenceOpacity: 0.5,
         intervalSeconds: 5,
         usesAutomaticAstroExposure: false,
         astroExposureSeconds: 8,
@@ -40,9 +45,10 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
         videoDurationSeconds: 30,
         videoSettings: .astroDefault,
         cameraLens: .wide,
+        cameraZoomFactor: 1,
         sourceFormat: .heic,
         exposureBias: 0,
-        referenceOpacity: 0.45,
+        referenceOpacity: 0.5,
         intervalSeconds: 8,
         usesAutomaticAstroExposure: false,
         astroExposureSeconds: 8,
@@ -106,12 +112,12 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
         let isAstro = configuration.module == .astrophotography
         let isVideo = !isAstro && configuration.repeatableKind == .video
         navigationTitle = isAstro ? "Novo astro" : (isVideo ? "Novo vídeo" : "Novo timelapse")
-        primaryActionTitle = isAstro ? "Abrir câmera" : "Abrir alinhamento"
+        primaryActionTitle = "Abrir câmera"
         captureSectionTitle = isAstro ? "SESSÃO" : "CAPTURA"
         adjustmentsSectionTitle = isAstro ? "CAPTURA ASTRO" : "AJUSTES"
         adjustmentTitles = isAstro
             ? ["Exposição", "Intervalo", "Capturas/frame"]
-            : (isVideo ? ["EV", "Opacidade"] : ["EV", "Opacidade", "Intervalo"])
+            : (isVideo ? ["EV"] : ["EV", "Intervalo"])
         durationLabels = isAstro
             ? ["15 min", "30 min", "1 h", "Personal."]
             : (isVideo ? ["30 s", "1 min", "2 min"] : ["15 min", "30 min", "1 h", "Custom"])
@@ -128,34 +134,56 @@ struct CameraeNextWorkflowConfigurationView: View {
     let project: CameraProject
     let onStart: (CameraeNextCaptureConfiguration) -> Void
     let onShowSessions: () -> Void
+    let isEmbeddedInProjectWorkspace: Bool
+    let referenceRefreshID: Int
 
     @State private var configuration: CameraeNextCaptureConfiguration
     @StateObject private var planning: CapturePlanningViewModel
     @State private var usesCustomDuration = false
     @State private var isShowingCustomDuration = false
+    @State private var referenceURL: URL?
+    @State private var importedReferenceItem: PhotosPickerItem?
+    @State private var isShowingReferenceImporter = false
+    @State private var isShowingReferenceCamera = false
+    @State private var isReferenceLoading = false
+    @State private var referenceErrorMessage: String?
 
     private let availableLenses: [RepeatableCameraLens]
     private let preferredLens: RepeatableCameraLens
+    private let referenceStore: TimelapseSessionStore
 
     init(
         project: CameraProject,
         onStart: @escaping (CameraeNextCaptureConfiguration) -> Void,
-        onShowSessions: @escaping () -> Void
+        onShowSessions: @escaping () -> Void,
+        isEmbeddedInProjectWorkspace: Bool = false,
+        referenceRefreshID: Int = 0
     ) {
         self.project = project
         self.onStart = onStart
         self.onShowSessions = onShowSessions
-        let preferredLens = RepeatableCameraLens.wide
+        self.isEmbeddedInProjectWorkspace = isEmbeddedInProjectWorkspace
+        self.referenceRefreshID = referenceRefreshID
+        let referenceStore = TimelapseSessionStore(project: project)
+        let cameraPolicy = CameraeNextProjectCameraPolicy(
+            summaries: referenceStore.sessionSummaries()
+        )
+        let preferredLens = cameraPolicy.lockedLens ?? RepeatableCameraLens.wide
         let availableLenses = RepeatableCameraLens.availableBackLenses()
         var initialConfiguration = project.module == .astrophotography
             ? CameraeNextCaptureConfiguration.astroDefault
             : CameraeNextCaptureConfiguration.repeatableDefault
-        if !availableLenses.contains(preferredLens), let fallback = availableLenses.first {
+        if let lockedLens = cameraPolicy.lockedLens {
+            initialConfiguration.cameraLens = lockedLens
+            initialConfiguration.cameraZoomFactor = cameraPolicy.lockedZoomFactor
+        } else if !availableLenses.contains(preferredLens), let fallback = availableLenses.first {
             initialConfiguration.cameraLens = fallback
         }
         self.availableLenses = availableLenses
         self.preferredLens = preferredLens
+        self.referenceStore = referenceStore
         _configuration = State(initialValue: initialConfiguration)
+        _referenceURL = State(initialValue: project.referenceFrameURL)
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
         ))
@@ -163,6 +191,9 @@ struct CameraeNextWorkflowConfigurationView: View {
 
     private var theme: CameraeNextTheme { .init(workflow: project.module.designTheme) }
     private var isAstro: Bool { project.module == .astrophotography }
+    private var cameraPolicy: CameraeNextProjectCameraPolicy {
+        .init(summaries: referenceStore.sessionSummaries())
+    }
     private var presentation: CameraeNextWorkflowConfigurationPresentation {
         .init(configuration: configuration)
     }
@@ -171,7 +202,9 @@ struct CameraeNextWorkflowConfigurationView: View {
             module: project.module,
             availableLenses: availableLenses,
             selectedLens: configuration.cameraLens,
-            preferredLens: preferredLens
+            preferredLens: preferredLens,
+            lockedLens: cameraPolicy.lockedLens,
+            lockedZoomFactor: cameraPolicy.lockedZoomFactor
         )
     }
     private var planningPresentation: CameraeNextCapturePlanningPresentation {
@@ -184,7 +217,8 @@ struct CameraeNextWorkflowConfigurationView: View {
         .init(module: project.module, state: referenceState)
     }
     private var referenceState: CameraeNextReferenceState {
-        guard let url = project.referenceFrameURL else { return .missing }
+        if isReferenceLoading { return .loading }
+        guard let url = referenceURL else { return .missing }
         return FileManager.default.fileExists(atPath: url.path) ? .active : .unavailable
     }
     private var canStart: Bool {
@@ -197,13 +231,13 @@ struct CameraeNextWorkflowConfigurationView: View {
 
             ScrollView {
                 VStack(spacing: 8) {
+                    referenceCard
                     modePicker
                     captureCard
                     cameraCard
                     adjustmentsCard
                     if presentation.showsVideoSettings { videoSettingsCard }
                     planningCard
-                    referenceCard
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -217,27 +251,25 @@ struct CameraeNextWorkflowConfigurationView: View {
                     isBusy: planning.isLoading,
                     isDisabled: !canStart
                 ) {
-                    var resolved = configuration
-                    if let format = planning.result?.resolvedPlan.sourceFormat {
-                        resolved.sourceFormat = format
-                    }
-                    onStart(resolved)
+                    openCamera()
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background(theme.background.opacity(0.96))
             }
         }
-        .navigationTitle(presentation.navigationTitle)
+        .navigationTitle(isEmbeddedInProjectWorkspace ? project.name : presentation.navigationTitle)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(theme.background.opacity(0.96), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button(action: onShowSessions) {
-                    Image(systemName: "rectangle.stack")
+            if !isEmbeddedInProjectWorkspace {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(action: onShowSessions) {
+                        Image(systemName: "rectangle.stack")
+                    }
+                    .accessibilityLabel("Abrir sessões existentes")
                 }
-                .accessibilityLabel("Abrir sessões existentes")
             }
         }
         .tint(theme.accent)
@@ -254,6 +286,58 @@ struct CameraeNextWorkflowConfigurationView: View {
                 onApply: { usesCustomDuration = true }
             )
         }
+        .photosPicker(
+            isPresented: $isShowingReferenceImporter,
+            selection: $importedReferenceItem,
+            matching: .images
+        )
+        .onChange(of: importedReferenceItem) { _, item in
+            guard let item else { return }
+            Task { await importReference(from: item) }
+        }
+        .fullScreenCover(isPresented: $isShowingReferenceCamera) {
+            CameraeNextReferenceCameraPicker(fallbackLens: configuration.cameraLens) { capture in
+                isShowingReferenceCamera = false
+                guard let capture else { return }
+                Task {
+                    do {
+                        let policy = cameraPolicy
+                        guard policy.accepts(
+                            lens: capture.selection.lens,
+                            zoomFactor: capture.selection.zoomFactor
+                        ) else {
+                            throw CameraeNextReferenceError.cameraMismatch(
+                                expectedLens: policy.lockedLens ?? configuration.cameraLens,
+                                expectedZoom: policy.lockedZoomFactor
+                            )
+                        }
+                        try await saveReference(
+                            capture.image,
+                            cameraLens: capture.selection.lens,
+                            cameraZoomFactor: capture.selection.zoomFactor
+                        )
+                        configuration.cameraLens = capture.selection.lens
+                        configuration.cameraZoomFactor = capture.selection.zoomFactor
+                    } catch {
+                        referenceErrorMessage = error.localizedDescription
+                    }
+                }
+            }
+            .ignoresSafeArea()
+        }
+        .alert(
+            "Imagem de referência",
+            isPresented: Binding(
+                get: { referenceErrorMessage != nil },
+                set: { if !$0 { referenceErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(referenceErrorMessage ?? "")
+        }
+        .onAppear(perform: synchronizeReference)
+        .onChange(of: referenceRefreshID) { _, _ in synchronizeReference() }
     }
 
     private var primaryActionTitle: String {
@@ -265,6 +349,14 @@ struct CameraeNextWorkflowConfigurationView: View {
         case .error: return "Planejamento indisponível"
         default: return presentation.primaryActionTitle
         }
+    }
+
+    private func openCamera() {
+        var resolved = configuration
+        if let format = planning.result?.resolvedPlan.sourceFormat {
+            resolved.sourceFormat = format
+        }
+        onStart(resolved)
     }
 
     private var modePicker: some View {
@@ -343,7 +435,13 @@ struct CameraeNextWorkflowConfigurationView: View {
     private var cameraCard: some View {
         if !isAstro, cameraSetupPresentation.state == .available {
             CameraeNextCameraSelector(
-                selection: $configuration.cameraLens,
+                selection: Binding(
+                    get: { configuration.cameraLens },
+                    set: {
+                        configuration.cameraLens = $0
+                        configuration.cameraZoomFactor = 1
+                    }
+                ),
                 theme: theme,
                 availableLenses: availableLenses
             )
@@ -389,9 +487,6 @@ struct CameraeNextWorkflowConfigurationView: View {
                 } else {
                     CameraeNextSliderRow(title: "EV", value: configuration.exposureBias.formatted(.number.precision(.fractionLength(1))), theme: theme) {
                         Slider(value: $configuration.exposureBias, in: -2...2, step: 0.1)
-                    }
-                    CameraeNextSliderRow(title: "Opacidade", value: configuration.referenceOpacity.formatted(.percent.precision(.fractionLength(0))), theme: theme) {
-                        Slider(value: $configuration.referenceOpacity, in: 0...1, step: 0.05)
                     }
                     if presentation.showsInterval {
                         CameraeNextSliderRow(title: "Intervalo", value: "\(Int(configuration.intervalSeconds))s", theme: theme) {
@@ -448,7 +543,84 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
 
     private var referenceCard: some View {
-        CameraeNextReferenceStateCard(presentation: referencePresentation, theme: theme)
+        CameraeNextReferenceStateCard(
+            presentation: referencePresentation,
+            imageURL: referenceURL,
+            theme: theme,
+            primaryAction: {
+                isShowingReferenceCamera = UIImagePickerController.isSourceTypeAvailable(.camera)
+                if !isShowingReferenceCamera {
+                    isShowingReferenceImporter = true
+                }
+            },
+            secondaryAction: {
+                if referenceURL == nil {
+                    isShowingReferenceImporter = true
+                } else {
+                    removeReference()
+                }
+            }
+        )
+    }
+
+    @MainActor
+    private func importReference(from item: PhotosPickerItem) async {
+        isReferenceLoading = true
+        defer {
+            isReferenceLoading = false
+            importedReferenceItem = nil
+        }
+        do {
+            guard
+                let data = try await item.loadTransferable(type: Data.self),
+                let image = UIImage(data: data)
+            else {
+                throw CameraeNextReferenceError.unreadableImage
+            }
+            try await saveReference(image, cameraLens: nil, cameraZoomFactor: nil)
+        } catch {
+            referenceErrorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func saveReference(
+        _ image: UIImage,
+        cameraLens: RepeatableCameraLens?,
+        cameraZoomFactor: Double?
+    ) async throws {
+        isReferenceLoading = true
+        defer { isReferenceLoading = false }
+        let session = try referenceStore.importReferenceImage(
+            image,
+            cameraLens: cameraLens,
+            cameraZoomFactor: cameraZoomFactor
+        )
+        referenceURL = referenceStore.firstFrameURL(in: session)
+    }
+
+    private func removeReference() {
+        guard let referenceURL else { return }
+        guard let summary = referenceStore.sessionSummaries().first(where: {
+            $0.referenceFrameURL?.standardizedFileURL == referenceURL.standardizedFileURL
+        }) else {
+            self.referenceURL = nil
+            return
+        }
+        guard summary.captureKind == .photo else {
+            referenceErrorMessage = "O primeiro frame pertence a uma captura e não será apagado. Importe ou fotografe outra referência para substituí-lo."
+            return
+        }
+        do {
+            try referenceStore.deleteSession(summary.session)
+            self.referenceURL = referenceStore.firstReferenceFrameURL()
+        } catch {
+            referenceErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func synchronizeReference() {
+        referenceURL = referenceStore.firstReferenceFrameURL()
     }
 
     private func refreshPreflight() async {
@@ -548,6 +720,131 @@ struct CameraeNextWorkflowConfigurationView: View {
             Text(value)
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(accent ? theme.accent : theme.text)
+        }
+    }
+}
+
+private enum CameraeNextReferenceError: LocalizedError {
+    case unreadableImage
+    case cameraMismatch(expectedLens: RepeatableCameraLens, expectedZoom: Double)
+
+    var errorDescription: String? {
+        switch self {
+        case .unreadableImage:
+            "Não foi possível ler a imagem selecionada."
+        case let .cameraMismatch(expectedLens, expectedZoom):
+            "Esta referência usa outra câmera. Tire a foto com \(expectedLens.title), zoom \(Self.zoomLabel(expectedZoom)), para manter o projeto alinhado."
+        }
+    }
+
+    private static func zoomLabel(_ value: Double) -> String {
+        value.formatted(
+            .number.locale(Locale(identifier: "pt_BR")).precision(.fractionLength(0...1))
+        ) + "×"
+    }
+}
+
+struct CameraeNextReferenceCameraSelection: Equatable, Sendable {
+    let lens: RepeatableCameraLens
+    let zoomFactor: Double
+}
+
+enum CameraeNextReferenceCameraMetadataResolver {
+    static func resolve(
+        metadata: [String: Any],
+        fallbackLens: RepeatableCameraLens
+    ) -> CameraeNextReferenceCameraSelection {
+        let exif = metadata[kCGImagePropertyExifDictionary as String] as? [String: Any] ?? metadata
+        let lensModel = (exif[kCGImagePropertyExifLensModel as String] as? String ?? "").lowercased()
+        let digitalZoom = max(number(exif[kCGImagePropertyExifDigitalZoomRatio as String]) ?? 1, 1)
+        let equivalentFocalLength = number(exif[kCGImagePropertyExifFocalLenIn35mmFilm as String])
+        let baseEquivalentFocalLength = equivalentFocalLength.map { $0 / digitalZoom }
+
+        let lens: RepeatableCameraLens
+        if lensModel.contains("ultra wide") || lensModel.contains("ultrawide") {
+            lens = .ultraWide
+        } else if lensModel.contains("telephoto") || lensModel.contains(" tele ") {
+            lens = .telephoto
+        } else if let focalLength = baseEquivalentFocalLength {
+            if focalLength <= 18 {
+                lens = .ultraWide
+            } else if focalLength >= 45 {
+                lens = .telephoto
+            } else {
+                lens = .wide
+            }
+        } else if lensModel.contains("wide") {
+            lens = .wide
+        } else {
+            lens = fallbackLens
+        }
+
+        return .init(lens: lens, zoomFactor: digitalZoom)
+    }
+
+    private static func number(_ value: Any?) -> Double? {
+        if let number = value as? NSNumber { return number.doubleValue }
+        if let string = value as? String { return Double(string) }
+        return nil
+    }
+}
+
+private struct CameraeNextCapturedReference {
+    let image: UIImage
+    let selection: CameraeNextReferenceCameraSelection
+}
+
+private struct CameraeNextReferenceCameraPicker: UIViewControllerRepresentable {
+    let fallbackLens: RepeatableCameraLens
+    let completion: (CameraeNextCapturedReference?) -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(fallbackLens: fallbackLens, completion: completion)
+    }
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let controller = UIImagePickerController()
+        controller.sourceType = .camera
+        controller.cameraCaptureMode = .photo
+        controller.cameraDevice = .rear
+        controller.delegate = context.coordinator
+        return controller
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        let fallbackLens: RepeatableCameraLens
+        let completion: (CameraeNextCapturedReference?) -> Void
+
+        init(
+            fallbackLens: RepeatableCameraLens,
+            completion: @escaping (CameraeNextCapturedReference?) -> Void
+        ) {
+            self.fallbackLens = fallbackLens
+            self.completion = completion
+        }
+
+        func imagePickerController(
+            _ picker: UIImagePickerController,
+            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
+        ) {
+            guard let image = info[.originalImage] as? UIImage else {
+                completion(nil)
+                return
+            }
+            let metadata = info[.mediaMetadata] as? [String: Any] ?? [:]
+            completion(.init(
+                image: image,
+                selection: CameraeNextReferenceCameraMetadataResolver.resolve(
+                    metadata: metadata,
+                    fallbackLens: fallbackLens
+                )
+            ))
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            completion(nil)
         }
     }
 }

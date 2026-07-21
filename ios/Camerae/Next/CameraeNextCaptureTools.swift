@@ -2,6 +2,7 @@ import SwiftUI
 
 enum CameraeNextCaptureHUDDefaults {
     static let showsRepeatablePosition = false
+    static let showsRepeatableMotion = false
     static let repeatableSelectedGroup: CameraeNextCaptureToolGroupID? = nil
 }
 
@@ -18,6 +19,8 @@ enum CameraeNextCaptureToolGroupID: String, CaseIterable, Identifiable, Sendable
     case information
 
     var id: Self { self }
+
+    var opensTray: Bool { self != .information }
 
     var title: String {
         switch self {
@@ -66,6 +69,68 @@ enum CameraeNextCaptureToolID: String, Identifiable, Sendable {
     case captureInformation
 
     var id: Self { self }
+
+    var systemImage: String? {
+        switch self {
+        case .referenceOpacity:
+            "circle.lefthalf.filled"
+        default:
+            nil
+        }
+    }
+}
+
+enum CameraeNextReferenceOpacityOption: Double, CaseIterable, Identifiable, Sendable {
+    case quarter = 0.25
+    case half = 0.5
+    case full = 1
+
+    var id: Self { self }
+    var opacity: Double { rawValue }
+
+    var label: String {
+        switch self {
+        case .quarter: "25"
+        case .half: "50"
+        case .full: "100"
+        }
+    }
+
+    static func nearest(to opacity: Double) -> Self {
+        allCases.min { abs($0.opacity - opacity) < abs($1.opacity - opacity) } ?? .half
+    }
+}
+
+enum CameraeNextReferenceBlinkInterval: Double, CaseIterable, Identifiable, Sendable {
+    case one = 1
+    case two = 2
+    case four = 4
+    case eight = 8
+
+    var id: Self { self }
+    var seconds: Double { rawValue }
+    var label: String { "\(Int(rawValue))s" }
+}
+
+enum CameraeNextMotionHUDPresentation: Equatable, Sendable {
+    case hidden
+    case alignment
+    case referenceUnavailable
+    case sensorUnavailable
+
+    init(isVisible: Bool, hasReferenceMotion: Bool, hasCurrentMotion: Bool) {
+        guard isVisible else {
+            self = .hidden
+            return
+        }
+        if !hasReferenceMotion {
+            self = .referenceUnavailable
+        } else if !hasCurrentMotion {
+            self = .sensorUnavailable
+        } else {
+            self = .alignment
+        }
+    }
 }
 
 struct CameraeNextCaptureTool: Identifiable, Equatable, Sendable {

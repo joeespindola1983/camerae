@@ -26,7 +26,7 @@ struct CameraView: View {
     @State private var sourceFormat = CaptureSourceFormat.heic
     @State private var capturePhase = AstroCapturePhase.setup
     @State private var isGridVisible = true
-    @State private var selectedGridStyle = CameraeNextGridStyle.default
+    @State private var selectedGridStyle = CameraeNextGridPreference.current()
     @State private var isShowingGridPicker = false
 
     init(
@@ -45,7 +45,12 @@ struct CameraView: View {
         self.onClose = onClose
         self.onCompletedSession = onCompletedSession
         self.usesNextInterface = nextConfiguration != nil
-        _camera = StateObject(wrappedValue: CameraController(project: project))
+        _camera = StateObject(wrappedValue: CameraController(
+            project: project,
+            captureMode: .astro,
+            initialRepeatableLens: nextConfiguration?.cameraLens,
+            initialCameraZoomFactor: nextConfiguration?.cameraZoomFactor ?? 1
+        ))
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
         ))

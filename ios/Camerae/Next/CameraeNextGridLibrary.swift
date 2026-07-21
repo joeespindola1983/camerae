@@ -1,5 +1,27 @@
 import SwiftUI
 
+enum CameraeNextGridPickerPresentation {
+    static let showsLeadingVisibilityToggle = false
+    static let closeTitle = "Fechar"
+    static let dismissesAfterSelection = true
+}
+
+enum CameraeNextGridPreference {
+    private static let key = "camerae.capture.defaultGridStyle"
+
+    static func current(in defaults: UserDefaults = .standard) -> CameraeNextGridStyle {
+        guard let rawValue = defaults.string(forKey: key),
+              let style = CameraeNextGridStyle(rawValue: rawValue) else {
+            return .default
+        }
+        return style
+    }
+
+    static func save(_ style: CameraeNextGridStyle, in defaults: UserDefaults = .standard) {
+        defaults.set(style.rawValue, forKey: key)
+    }
+}
+
 enum CameraeNextGridStyle: String, CaseIterable, Identifiable, Sendable {
     case ruleOfThirds
     case goldenRatio
@@ -164,13 +186,8 @@ struct CameraeNextGridPickerView: View {
             .navigationTitle("Grade de composição")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Toggle("Exibir", isOn: $isVisible)
-                        .labelsHidden()
-                        .accessibilityLabel("Exibir grade")
-                }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Concluir", action: dismiss.callAsFunction)
+                    Button(CameraeNextGridPickerPresentation.closeTitle, action: dismiss.callAsFunction)
                 }
             }
             .tint(theme.accent)
@@ -182,6 +199,8 @@ struct CameraeNextGridPickerView: View {
         Button {
             selection = style
             isVisible = true
+            CameraeNextGridPreference.save(style)
+            dismiss()
         } label: {
             VStack(alignment: .leading, spacing: 9) {
                 ZStack {
