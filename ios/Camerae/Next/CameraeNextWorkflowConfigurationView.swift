@@ -83,11 +83,11 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
             let fpsFactor = Double(videoSettings.fps) / 30
             let bytes = baseMegabitsPerSecond * fpsFactor * videoSettings.quality.bitRateMultiplier
                 * Double(videoDurationSeconds) * 1_000_000 / 8
-            return ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file) + " estimado"
+            return CameraeL10n.estimatedValue(ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file))
         }
         let bytesPerFrame = module == .astrophotography ? 18_000_000.0 : 4_000_000.0
         let gigabytes = Double(estimatedFrameCount) * bytesPerFrame / 1_000_000_000
-        return gigabytes.formatted(.number.precision(.fractionLength(1))) + " GB estimado"
+        return CameraeL10n.estimatedValue(gigabytes.formatted(.number.precision(.fractionLength(1))) + " GB")
     }
 }
 
@@ -404,7 +404,7 @@ struct CameraeNextWorkflowConfigurationView: View {
                 HStack {
                     summary(title: CameraeL10n.format, value: configuration.repeatableKind == .video ? "MP4" : (configuration.sourceFormat == .heic ? "HEIC" : "JPEG"))
                     Spacer()
-                    summary(title: CameraeL10n.estimate, value: "\(configuration.estimatedFrameCount) frames", accent: true)
+                    summary(title: CameraeL10n.estimate, value: CameraeL10n.frameCount(configuration.estimatedFrameCount), accent: true)
                 }
             }
         }

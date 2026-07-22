@@ -155,6 +155,30 @@ enum CameraeL10n {
     static var lensMain: String { text("workflow.camera.lens.main", "Principal") }
     static var lensTelephoto: String { text("workflow.camera.lens.telephoto", "Teleobjetiva") }
 
+    static func frameCount(_ count: Int) -> String {
+        format("workflow.summary.frames", defaultValue: "%lld frames", Int64(count))
+    }
+
+    static func estimatedValue(_ value: String) -> String {
+        format("workflow.summary.estimated", defaultValue: "%@ estimado", value)
+    }
+
+    static func requiredAvailable(required: String, available: String) -> String {
+        format("workflow.planning.capacity", defaultValue: "Necessário %@ · disponível %@", required, available)
+    }
+
+    static func captureSize(_ value: String) -> String {
+        format("workflow.planning.capture_size", defaultValue: "captura ~%@", value)
+    }
+
+    static func videoDuration(_ value: String) -> String {
+        format("workflow.planning.video_duration", defaultValue: "Vídeo %@", value)
+    }
+
+    static func framesVideo(count: UInt64, duration: String) -> String {
+        format("workflow.planning.frames_video", defaultValue: "%lld frames · vídeo %@", Int64(clamping: count), duration)
+    }
+
     static func connectCamera(_ description: String) -> String {
         format("workflow.camera.locked_unavailable.detail", defaultValue: "Conecte um aparelho com %@", description)
     }

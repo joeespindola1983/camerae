@@ -90,7 +90,7 @@ struct CapturePreflightPresentation: Equatable {
         guard let required = storage.requiredBytes, let available = storage.availableBytes else {
             return "A capacidade será monitorada durante a captura."
         }
-        return "Necessário \(bytes(required)) • disponível \(bytes(available))"
+        return CameraeL10n.requiredAvailable(required: bytes(required), available: bytes(available))
     }
 
     private static func bytes(_ value: UInt64) -> String {
@@ -105,11 +105,11 @@ struct CapturePreflightMetricsPresentation: Equatable {
     init(plan: CapturePlan, estimate: CaptureEstimate) {
         switch plan.workflow {
         case .repeatableVideo:
-            primary = "Vídeo \(Self.duration(plan.plannedDuration))"
-            secondary = "\(Self.resolution(plan.resolution)) • \(plan.captureFPS ?? 0) FPS • captura ~\(Self.bytes(estimate.captureBytes))"
+            primary = CameraeL10n.videoDuration(Self.duration(plan.plannedDuration))
+            secondary = "\(Self.resolution(plan.resolution)) • \(plan.captureFPS ?? 0) FPS • \(CameraeL10n.captureSize(Self.bytes(estimate.captureBytes)))"
         case .repeatableTimelapse, .astro:
-            primary = "\(estimate.expectedFrameCount) frames • vídeo \(Self.duration(estimate.renderedDuration ?? 0))"
-            secondary = "\(plan.sourceFormat.rawValue.uppercased()) • captura ~\(Self.bytes(estimate.captureBytes))"
+            primary = CameraeL10n.framesVideo(count: estimate.expectedFrameCount, duration: Self.duration(estimate.renderedDuration ?? 0))
+            secondary = "\(plan.sourceFormat.rawValue.uppercased()) • \(CameraeL10n.captureSize(Self.bytes(estimate.captureBytes)))"
         }
     }
 

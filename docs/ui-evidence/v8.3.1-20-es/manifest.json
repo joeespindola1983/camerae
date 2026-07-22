@@ -1,0 +1,48 @@
+{
+  "device" : "iPhone18,1",
+  "generatedAt" : "2026-07-22T16:36:01Z",
+  "locale" : "es",
+  "screens" : [
+    {
+      "filename" : "01-home.png",
+      "title" : "Início"
+    },
+    {
+      "filename" : "02-repeatable-projetos.png",
+      "title" : "Repeatable · Projetos"
+    },
+    {
+      "filename" : "03-repeatable-novo-projeto.png",
+      "title" : "Repeatable · Novo projeto"
+    },
+    {
+      "filename" : "04-repeatable-configuracao-timelapse.png",
+      "title" : "Repeatable · Configuração Timelapse"
+    },
+    {
+      "filename" : "05-repeatable-configuracao-video.png",
+      "title" : "Repeatable · Configuração Vídeo"
+    },
+    {
+      "filename" : "06-repeatable-capturas.png",
+      "title" : "Repeatable · Capturas"
+    },
+    {
+      "filename" : "07-astro-projetos.png",
+      "title" : "Astro · Projetos"
+    },
+    {
+      "filename" : "08-astro-novo-projeto.png",
+      "title" : "Astro · Novo projeto"
+    },
+    {
+      "filename" : "09-astro-configuracao.png",
+      "title" : "Astro · Configuração"
+    },
+    {
+      "filename" : "10-editor-projetos.png",
+      "title" : "Editor · Projetos"
+    }
+  ],
+  "title" : "Camerae 8.3.1 (20) · Evidências de UI · iPhone · es"
+}

@@ -51,6 +51,9 @@ validate_catalog("Localizable", [
     "workflow.reference.import",
     "workflow.action.open_camera",
     "workflow.camera.unavailable.title",
+    "workflow.camera.status.unavailable",
+    "workflow.summary.frames",
+    "workflow.planning.capacity",
     "workflow.video.resolution",
     "workflow.video.quality",
 ])

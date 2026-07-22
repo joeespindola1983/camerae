@@ -2,6 +2,18 @@
 
 Galerias versionadas das telas principais, geradas pelo release gate no iOS Simulator.
 
+- [v8.3.1-20-ru](v8.3.1-20-ru/index.html)
+- [v8.3.1-20-ipad-ru](v8.3.1-20-ipad-ru/index.html)
+- [v8.3.1-20-ipad-fr](v8.3.1-20-ipad-fr/index.html)
+- [v8.3.1-20-ipad-es](v8.3.1-20-ipad-es/index.html)
+- [v8.3.1-20-ipad-en](v8.3.1-20-ipad-en/index.html)
+- [v8.3.1-20-ipad-de](v8.3.1-20-ipad-de/index.html)
+- [v8.3.1-20-ipad](v8.3.1-20-ipad/index.html)
+- [v8.3.1-20-fr](v8.3.1-20-fr/index.html)
+- [v8.3.1-20-es](v8.3.1-20-es/index.html)
+- [v8.3.1-20-en](v8.3.1-20-en/index.html)
+- [v8.3.1-20-de](v8.3.1-20-de/index.html)
+- [v8.3.1-20](v8.3.1-20/index.html)
 - [v8.3.0-19-ru](v8.3.0-19-ru/index.html)
 - [v8.3.0-19-ipad-ru](v8.3.0-19-ipad-ru/index.html)
 - [v8.3.0-19-ipad-fr](v8.3.0-19-ipad-fr/index.html)
