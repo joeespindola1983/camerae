@@ -51,11 +51,11 @@ struct CameraeNextWorkflowConfigurationTests {
             configuration: .repeatableDefault
         )
 
-        #expect(presentation.navigationTitle == "Novo timelapse")
-        #expect(presentation.primaryActionTitle == "Abrir câmera")
-        #expect(presentation.captureSectionTitle == "CAPTURA")
-        #expect(presentation.adjustmentsSectionTitle == "AJUSTES")
-        #expect(presentation.adjustmentTitles == ["EV", "Intervalo"])
+        #expect(presentation.navigationTitle == CameraeL10n.newTimelapse)
+        #expect(presentation.primaryActionTitle == CameraeL10n.openCamera)
+        #expect(presentation.captureSectionTitle == CameraeL10n.captureSection)
+        #expect(presentation.adjustmentsSectionTitle == CameraeL10n.adjustmentsSection)
+        #expect(presentation.adjustmentTitles == ["EV", CameraeL10n.interval])
         #expect(presentation.cameraPresentation == .selector)
     }
 
@@ -66,14 +66,14 @@ struct CameraeNextWorkflowConfigurationTests {
         let videoPresentation = CameraeNextWorkflowConfigurationPresentation(configuration: video)
         let timelapsePresentation = CameraeNextWorkflowConfigurationPresentation(configuration: .repeatableDefault)
 
-        #expect(videoPresentation.navigationTitle == "Novo vídeo")
+        #expect(videoPresentation.navigationTitle == CameraeL10n.newVideo)
         #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
         #expect(videoPresentation.adjustmentTitles == ["EV"])
         #expect(videoPresentation.showsVideoSettings)
         #expect(!videoPresentation.showsInterval)
         #expect(video.estimatedFrameCount == video.videoDurationSeconds * video.videoSettings.fps)
 
-        #expect(timelapsePresentation.navigationTitle == "Novo timelapse")
+        #expect(timelapsePresentation.navigationTitle == CameraeL10n.newTimelapse)
         #expect(!timelapsePresentation.showsVideoSettings)
         #expect(timelapsePresentation.showsInterval)
     }
@@ -84,11 +84,11 @@ struct CameraeNextWorkflowConfigurationTests {
             configuration: .astroDefault
         )
 
-        #expect(presentation.navigationTitle == "Novo astro")
-        #expect(presentation.primaryActionTitle == "Abrir câmera")
-        #expect(presentation.captureSectionTitle == "SESSÃO")
-        #expect(presentation.adjustmentsSectionTitle == "CAPTURA ASTRO")
-        #expect(presentation.adjustmentTitles == ["Exposição", "Intervalo", "Capturas/frame"])
+        #expect(presentation.navigationTitle == CameraeL10n.newAstro)
+        #expect(presentation.primaryActionTitle == CameraeL10n.openCamera)
+        #expect(presentation.captureSectionTitle == CameraeL10n.sessionSection)
+        #expect(presentation.adjustmentsSectionTitle == CameraeL10n.astroCaptureSection)
+        #expect(presentation.adjustmentTitles == [CameraeL10n.exposure, CameraeL10n.interval, CameraeL10n.capturesPerFrame])
         #expect(presentation.cameraPresentation == .lockedStatus(lens: "Wide", zoom: "1×"))
     }
 
@@ -96,7 +96,7 @@ struct CameraeNextWorkflowConfigurationTests {
     func durationLabels() {
         #expect(
             CameraeNextWorkflowConfigurationPresentation(configuration: .repeatableDefault)
-                .durationLabels == ["15 min", "30 min", "1 h", "Custom"]
+                .durationLabels == ["15 min", "30 min", "1 h", CameraeL10n.customDurationShort]
         )
         #expect(
             CameraeNextWorkflowConfigurationPresentation(configuration: .astroDefault)
