@@ -83,6 +83,10 @@ if ! rg -q -- '--archive-tracked' "$SCRIPT"; then
   echo "Release gate must archive UI evidence in the tracked gallery" >&2
   exit 1
 fi
+if ! rg -q 'ITSAppUsesNonExemptEncryption: false' "$IOS_DIR/project.yml"; then
+  echo "The App Store build must declare that it uses no non-exempt encryption" >&2
+  exit 1
+fi
 
 evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --plan)"
 expect_contains "$evidence_plan" "scheme: CameraeUI"
