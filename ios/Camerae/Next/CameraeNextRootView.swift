@@ -97,10 +97,11 @@ struct CameraeNextHomeView: View {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
                     .stroke(CameraeColor.borderStrong.opacity(0.5), lineWidth: 1)
             }
+            .accessibilityIdentifier(CameraeAccessibility.openModule(module))
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Abrir \(module.title)")
-        .accessibilityValue("\(projectStore.projects(for: module).count) projetos")
+        .accessibilityLabel(CameraeL10n.openModule(module.title))
+        .accessibilityValue(CameraeL10n.projectCount(projectStore.projects(for: module).count))
     }
 }
 
@@ -140,7 +141,7 @@ struct CameraeNextProjectListView: View {
                                         Text(project.name)
                                             .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
                                             .foregroundStyle(theme.text)
-                                        Text(ProjectRowSummary(project: project).detail ?? "Montagem")
+                                        Text(ProjectRowSummary(project: project).detail ?? CameraeL10n.moduleEdit)
                                             .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                                             .foregroundStyle(theme.muted)
                                     }
@@ -157,7 +158,7 @@ struct CameraeNextProjectListView: View {
                         ContentUnavailableView(
                             "Nenhuma montagem",
                             systemImage: "film.stack",
-                            description: Text("Crie um projeto para combinar seus vídeos.")
+                            description: Text(CameraeL10n.newProjectMessage(for: .edit))
                         )
                         .foregroundStyle(theme.text)
                         .padding(.top, 80)
@@ -166,7 +167,7 @@ struct CameraeNextProjectListView: View {
                 .padding(16)
             }
         }
-        .navigationTitle("Editor")
+        .navigationTitle(CameraeL10n.moduleEdit)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button { isCreatingProject = true } label: { Image(systemName: "plus") }
@@ -192,10 +193,10 @@ struct CameraeNextProjectListView: View {
                 }
             }
         }
-        .alert("Erro", isPresented: Binding(
+        .alert(CameraeL10n.error, isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
-        )) { Button("OK", role: .cancel) {} } message: { Text(errorMessage ?? "") }
+        )) { Button(CameraeL10n.okay, role: .cancel) {} } message: { Text(errorMessage ?? "") }
         .onAppear { projectStore.reload() }
     }
 }

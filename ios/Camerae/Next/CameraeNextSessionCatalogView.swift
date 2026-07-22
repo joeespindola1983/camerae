@@ -7,8 +7,8 @@ enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
 
     var title: String {
         switch self {
-        case .configuration: "Configurar"
-        case .captures: "Capturas"
+        case .configuration: CameraeL10n.configure
+        case .captures: CameraeL10n.captures
         }
     }
 }
@@ -359,7 +359,7 @@ struct CameraeNextSessionCatalogView: View {
 
     private var captureListHeader: some View {
         HStack {
-            Text("CAPTURAS")
+            Text(CameraeL10n.captures.uppercased())
                 .foregroundStyle(theme.muted)
             Spacer()
             Text("\(catalog.sessions.count + (isFinalizingCapture ? 1 : 0)) SESSÕES")

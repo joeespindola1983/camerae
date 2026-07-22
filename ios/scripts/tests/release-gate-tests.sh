@@ -4,6 +4,8 @@ set -euo pipefail
 SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/release-gate.sh"
 IOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT_DIR="$(cd "$IOS_DIR/.." && pwd)"
+VERSION="$(awk -F '"' '/MARKETING_VERSION:/ { print $2; exit }' "$IOS_DIR/project.yml")"
+BUILD="$(awk -F '"' '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' "$IOS_DIR/project.yml")"
 
 expect_contains() {
   local output="$1"
@@ -19,8 +21,8 @@ check_plan="$($SCRIPT check --plan)"
 expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
-expect_contains "$check_plan" "tests: architecture, Swift, Camerae Processing, Camerae Vision"
-expect_contains "$check_plan" "visual evidence: principal SwiftUI screens captured and archived under docs/ui-evidence"
+expect_contains "$check_plan" "tests: localization, architecture, Swift, Camerae Processing, Camerae Vision"
+expect_contains "$check_plan" "visual evidence: six locales on iPhone and iPad, archived under docs/ui-evidence"
 expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
 
 firebase_plan="$($SCRIPT firebase --plan --publish)"
@@ -73,6 +75,10 @@ if ! rg -q 'generate-ui-evidence\.sh' "$SCRIPT"; then
   echo "Release gate must generate simulator UI evidence" >&2
   exit 1
 fi
+if ! rg -q 'localization-tests\.sh' "$SCRIPT"; then
+  echo "Release gate must validate localization catalogs" >&2
+  exit 1
+fi
 if ! rg -q -- '--archive-tracked' "$SCRIPT"; then
   echo "Release gate must archive UI evidence in the tracked gallery" >&2
   exit 1
@@ -82,8 +88,44 @@ evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --plan)"
 expect_contains "$evidence_plan" "scheme: CameraeUI"
 expect_contains "$evidence_plan" "test: CameraeUIEvidenceTests/testGenerateReleaseEvidence"
 expect_contains "$evidence_plan" "artifacts: PNG, manifest.json, index.html"
+expect_contains "$evidence_plan" "device profile: iphone"
+
+ipad_evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --device ipad --plan)"
+expect_contains "$ipad_evidence_plan" "device profile: ipad"
+expect_contains "$ipad_evidence_plan" "name=iPad Pro 13-inch (M5)"
+expect_contains "$ipad_evidence_plan" "v$VERSION-$BUILD-ipad"
 
 tracked_evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --archive-tracked --plan)"
 expect_contains "$tracked_evidence_plan" "tracked gallery:"
+
+german_evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --locale de --plan)"
+expect_contains "$german_evidence_plan" "locale: de (de_DE)"
+expect_contains "$german_evidence_plan" "v$VERSION-$BUILD-de"
+
+all_locales_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --all-locales --plan)"
+for locale in pt-BR es en fr de ru; do
+  expect_contains "$all_locales_plan" "locale: $locale"
+done
+
+all_devices_and_locales_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --all-devices --all-locales --plan)"
+if [[ "$(rg -c '^device profile: iphone$' <<<"$all_devices_and_locales_plan")" -ne 6 ]]; then
+  echo "The complete UI evidence matrix must contain six iPhone galleries" >&2
+  exit 1
+fi
+if [[ "$(rg -c '^device profile: ipad$' <<<"$all_devices_and_locales_plan")" -ne 6 ]]; then
+  echo "The complete UI evidence matrix must contain six iPad galleries" >&2
+  exit 1
+fi
+for locale in pt-BR es en fr de ru; do
+  if [[ "$(rg -c "^locale: $locale " <<<"$all_devices_and_locales_plan")" -ne 2 ]]; then
+    echo "The complete UI evidence matrix must contain iPhone and iPad for $locale" >&2
+    exit 1
+  fi
+done
+
+if [[ "$(rg -c -- '--device (iphone|ipad)' "$SCRIPT")" -lt 2 ]] || [[ "$(rg -c -- '--all-locales' "$SCRIPT")" -lt 2 ]]; then
+  echo "Release gate must capture both iPhone and iPad UI evidence" >&2
+  exit 1
+fi
 
 echo "Release gate contract tests passed"

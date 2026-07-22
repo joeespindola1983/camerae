@@ -228,7 +228,7 @@ struct CameraeNextCameraSelector: View {
     var body: some View {
         CameraeNextCard(theme: theme) {
             VStack(alignment: .leading, spacing: 10) {
-                Text("Câmera")
+                Text(CameraeL10n.cameraSection.capitalized)
                     .font(.custom("Outfit-Medium", size: 15, relativeTo: .body))
                     .foregroundStyle(theme.text)
 
@@ -291,7 +291,7 @@ struct CameraeNextCameraStatus: View {
                 .frame(width: 38, height: 38)
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("Câmera em uso")
+                Text(CameraeL10n.cameraInUse)
                     .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
                 Text("\(lens) · \(zoom)")
@@ -310,6 +310,6 @@ struct CameraeNextCameraStatus: View {
         .frame(height: 72)
         .background(theme.card, in: RoundedRectangle(cornerRadius: CameraeRadius.large, style: .continuous))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Câmera em uso, \(lens), \(zoom), bloqueada")
+        .accessibilityLabel("\(CameraeL10n.cameraInUse), \(lens), \(zoom)")
     }
 }

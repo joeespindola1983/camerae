@@ -278,7 +278,7 @@ struct ProjectListTheme {
     let module: CameraModule
 
     var isAstro: Bool { module == .astrophotography }
-    var title: String { isAstro ? "Astro" : "Repeatable" }
+    var title: String { CameraeL10n.moduleTitle(module) }
     var caption: String { isAstro ? "ASTRO · LISTA" : "REPEATABLE · LISTA" }
     var systemImage: String { isAstro ? "sparkles" : "sun.max.fill" }
     var showsStars: Bool { isAstro }
@@ -331,7 +331,7 @@ struct ProjectListHeroCard: View {
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
                 ProjectListThumbnail(imageURL: project.referenceFrameURL, label: nil, height: 137, cornerRadius: 0, theme: theme)
-                Text("ÚLTIMO ABERTO")
+                Text(CameraeL10n.lastOpened)
                     .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
                     .tracking(0.64)
                     .foregroundStyle(.white)
@@ -369,7 +369,8 @@ struct ProjectListHeroCard: View {
         .overlay { RoundedRectangle(cornerRadius: 20, style: .continuous).stroke(theme.border, lineWidth: 1) }
         .shadow(color: theme.accent.opacity(0.10), radius: 24, y: 8)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Último projeto aberto, \(project.name)")
+        .accessibilityLabel(CameraeL10n.lastOpenedProject(project.name))
+        .accessibilityIdentifier(CameraeAccessibility.openProject(project.id))
     }
 
     private func metric(_ image: String, _ value: String) -> some View {
@@ -398,7 +399,7 @@ struct ProjectListRow: View {
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
                 HStack {
-                    Text(completed ? "CONCLUÍDO" : "EM ANDAMENTO")
+                    Text(completed ? CameraeL10n.statusCompleted : CameraeL10n.statusInProgress)
                         .foregroundStyle(completed ? Color.green : theme.accent)
                     Spacer()
                     Text(project.updatedAt.formatted(date: .abbreviated, time: .shortened))
@@ -416,7 +417,8 @@ struct ProjectListRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(theme.border, lineWidth: 1) }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Abrir projeto \(project.name)")
+        .accessibilityLabel(CameraeL10n.openProject(project.name))
+        .accessibilityIdentifier(CameraeAccessibility.openProject(project.id))
     }
 }
 
@@ -451,7 +453,7 @@ private struct ProjectListStatusBadge: View {
     let completed: Bool
     let theme: ProjectListTheme
     var body: some View {
-        Text(completed ? "CONCLUÍDO" : "EM ANDAMENTO")
+        Text(completed ? CameraeL10n.statusCompleted : CameraeL10n.statusInProgress)
             .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
             .foregroundStyle(completed ? Color.green : theme.accent)
             .padding(.horizontal, 10)
@@ -468,10 +470,13 @@ struct ProjectListEmptyHero: View {
             Image(systemName: theme.systemImage)
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(theme.accent)
-            Text("Comece seu primeiro projeto")
+            Text(CameraeL10n.startFirstProject)
                 .font(.custom("Outfit-SemiBold", size: 17, relativeTo: .headline))
                 .foregroundStyle(theme.text)
-            Button("Novo projeto", systemImage: "plus", action: createAction)
+            Button(action: createAction) {
+                Label(CameraeL10n.newProject, systemImage: "plus")
+                    .accessibilityIdentifier(CameraeAccessibility.createFirstProject)
+            }
                 .buttonStyle(.borderedProminent)
         }
         .frame(maxWidth: .infinity)

@@ -48,9 +48,13 @@ Before a release, generate a browsable gallery of the principal SwiftUI screens 
 ```bash
 cd ios
 ./scripts/generate-ui-evidence.sh
+./scripts/generate-ui-evidence.sh --device ipad
+./scripts/generate-ui-evidence.sh --locale de
+./scripts/generate-ui-evidence.sh --all-locales
+./scripts/generate-ui-evidence.sh --all-devices --all-locales --archive-tracked
 ```
 
-Artifacts are written to `ios/build/ui-evidence/v<version>-<build>/`. During the release gate, the browsable PNG/HTML gallery is also archived under `docs/ui-evidence/v<version>-<build>/` and committed after publication, preserving the visual history without keeping IPA, ZIP, or Xcode build artifacts. The UI evidence flow uses deterministic empty projects and does not open the camera or run media processing.
+Artifacts are written to `ios/build/ui-evidence/v<version>-<build>/` for the pt-BR iPhone baseline and receive device/language suffixes such as `-ipad`, `-de`, and `-ipad-ru`. `--all-devices --all-locales` generates the complete matrix of 12 galleries for pt-BR, Spanish, English, French, German, and Russian. During the release gate, the browsable PNG/HTML galleries are archived under `docs/ui-evidence/` and committed after publication, preserving the visual history without keeping IPA, ZIP, or Xcode build artifacts. The UI evidence flow uses deterministic empty projects and does not open the camera or run media processing.
 
 See `docs/GITFLOW.md` for branch, CI, and release details.
 

@@ -1,6 +1,7 @@
 {
   "device" : "iPhone18,1",
-  "generatedAt" : "2026-07-22T01:15:12Z",
+  "generatedAt" : "2026-07-22T15:28:24Z",
+  "locale" : "pt-BR",
   "screens" : [
     {
       "filename" : "01-home.png",
@@ -43,5 +44,5 @@
       "title" : "Editor · Projetos"
     }
   ],
-  "title" : "Camerae 8.3.0 (19) · Evidências de UI"
+  "title" : "Camerae 8.3.0 (19) · Evidências de UI · iPhone · pt-BR"
 }

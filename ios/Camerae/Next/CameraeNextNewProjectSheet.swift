@@ -9,21 +9,31 @@ struct CameraeNextNewProjectPresentation: Equatable, Sendable {
     init(module: CameraModule) {
         switch module {
         case .repeatable:
-            title = "Novo projeto Repeatable"
-            message = "Crie um espaço para repetir o mesmo enquadramento ao longo do tempo."
+            title = CameraeL10n.newProjectTitle(for: module)
+            message = CameraeL10n.newProjectMessage(for: module)
             systemImage = "repeat"
             theme = .repeatable
         case .astrophotography:
-            title = "Novo projeto Astro"
-            message = "Organize uma sessão noturna e processe suas imagens em um único projeto."
+            title = CameraeL10n.newProjectTitle(for: module)
+            message = CameraeL10n.newProjectMessage(for: module)
             systemImage = "sparkles"
             theme = .astro
         case .edit:
-            title = "Nova montagem"
-            message = "Combine e alinhe os vídeos produzidos no Camerae."
+            title = CameraeL10n.newProjectTitle(for: module)
+            message = CameraeL10n.newProjectMessage(for: module)
             systemImage = "film.stack"
             theme = .editor
         }
+    }
+}
+
+struct CameraeNextNewProjectLayout: Equatable, Sendable {
+    let preferredSheetHeight: CGFloat?
+    let contentMaxWidth: CGFloat
+
+    init(isPad: Bool) {
+        preferredSheetHeight = isPad ? 620 : nil
+        contentMaxWidth = 420
     }
 }
 
@@ -38,72 +48,89 @@ struct CameraeNextNewProjectSheet: View {
 
     private var presentation: CameraeNextNewProjectPresentation { .init(module: module) }
     private var theme: CameraeNextTheme { .init(workflow: presentation.theme) }
+    private var isPad: Bool { UIDevice.current.userInterfaceIdiom == .pad }
+    private var layout: CameraeNextNewProjectLayout { .init(isPad: isPad) }
+    private var supportedDetents: Set<PresentationDetent> {
+        if let height = layout.preferredSheetHeight {
+            return [.height(height)]
+        }
+        return [.medium, .large]
+    }
 
     var body: some View {
         NavigationStack {
             ZStack {
                 theme.background.ignoresSafeArea()
 
-                VStack(spacing: 18) {
-                    Spacer(minLength: 8)
+                GeometryReader { geometry in
+                    ScrollView {
+                        VStack(spacing: 18) {
+                            Spacer(minLength: 8)
 
-                    Image(systemName: presentation.systemImage)
-                        .font(.system(size: 30, weight: .medium))
-                        .foregroundStyle(theme.accent)
-                        .frame(width: 72, height: 72)
-                        .background(theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            Image(systemName: presentation.systemImage)
+                                .font(.system(size: 30, weight: .medium))
+                                .foregroundStyle(theme.accent)
+                                .frame(width: 72, height: 72)
+                                .background(theme.accent.opacity(0.14), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
 
-                    VStack(spacing: 6) {
-                        Text(presentation.title)
-                            .font(.custom("Outfit-SemiBold", size: 22, relativeTo: .title2))
-                            .foregroundStyle(theme.text)
-                        Text(presentation.message)
-                            .font(.custom("Outfit-Regular", size: 13, relativeTo: .subheadline))
-                            .foregroundStyle(theme.muted)
-                            .multilineTextAlignment(.center)
-                            .frame(maxWidth: 330)
-                    }
+                            VStack(spacing: 6) {
+                                Text(presentation.title)
+                                    .font(.custom("Outfit-SemiBold", size: 22, relativeTo: .title2))
+                                    .foregroundStyle(theme.text)
+                                    .accessibilityIdentifier(CameraeAccessibility.newProjectTitle)
+                                Text(presentation.message)
+                                    .font(.custom("Outfit-Regular", size: 13, relativeTo: .subheadline))
+                                    .foregroundStyle(theme.muted)
+                                    .multilineTextAlignment(.center)
+                                    .frame(maxWidth: 330)
+                            }
 
-                    CameraeNextCard(theme: theme) {
-                        VStack(alignment: .leading, spacing: 8) {
-                            CameraeNextSectionLabel(title: "Nome do projeto", theme: theme)
-                            TextField(defaultName, text: $name)
-                                .focused($isNameFocused)
-                                .textInputAutocapitalization(.words)
-                                .submitLabel(.done)
-                                .font(.custom("Outfit-Regular", size: 16, relativeTo: .body))
-                                .foregroundStyle(theme.text)
-                                .padding(.horizontal, 14)
-                                .frame(height: 52)
-                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                                .overlay {
-                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                        .stroke(isNameFocused ? theme.accent : theme.border, lineWidth: 1)
+                            CameraeNextCard(theme: theme) {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    CameraeNextSectionLabel(title: CameraeL10n.projectName, theme: theme)
+                                    TextField(defaultName, text: $name)
+                                        .focused($isNameFocused)
+                                        .textInputAutocapitalization(.words)
+                                        .submitLabel(.done)
+                                        .font(.custom("Outfit-Regular", size: 16, relativeTo: .body))
+                                        .foregroundStyle(theme.text)
+                                        .padding(.horizontal, 14)
+                                        .frame(height: 52)
+                                        .background(theme.surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                        .overlay {
+                                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                                .stroke(isNameFocused ? theme.accent : theme.border, lineWidth: 1)
+                                        }
+                                    Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                         ? CameraeL10n.defaultNameWillBeUsed(defaultName)
+                                         : CameraeL10n.nextCaptureDetails)
+                                        .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
+                                        .foregroundStyle(theme.muted)
                                 }
-                            Text(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-                                 ? "Será usado: \(defaultName)"
-                                 : "Você poderá alterar os detalhes de captura na próxima tela.")
-                                .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
-                                .foregroundStyle(theme.muted)
+                            }
+
+                            CameraeNextActionButton(
+                                title: CameraeL10n.createProject,
+                                systemImage: "arrow.right",
+                                theme: theme,
+                                action: createAction
+                            )
+                            .accessibilityIdentifier(CameraeAccessibility.createProject)
+
+                            Spacer(minLength: 8)
                         }
+                        .frame(maxWidth: layout.contentMaxWidth)
+                        .frame(minHeight: geometry.size.height)
+                        .padding(.horizontal, 20)
+                        .frame(maxWidth: .infinity)
                     }
-
-                    CameraeNextActionButton(
-                        title: "Criar projeto",
-                        systemImage: "arrow.right",
-                        theme: theme,
-                        action: createAction
-                    )
-
-                    Spacer(minLength: 8)
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollDismissesKeyboard(.interactively)
                 }
-                .frame(maxWidth: 420)
-                .padding(20)
-                .frame(maxWidth: .infinity)
             }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancelar") { dismiss() }
+                    Button(CameraeL10n.cancel) { dismiss() }
                 }
             }
             .toolbarBackground(theme.background.opacity(0.96), for: .navigationBar)
@@ -112,6 +139,6 @@ struct CameraeNextNewProjectSheet: View {
         .tint(theme.accent)
         .preferredColorScheme(theme.colorScheme)
         .presentationDragIndicator(.visible)
-        .presentationDetents([.medium, .large])
+        .presentationDetents(supportedDetents)
     }
 }

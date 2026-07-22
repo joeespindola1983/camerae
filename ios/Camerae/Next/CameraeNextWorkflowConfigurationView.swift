@@ -111,16 +111,16 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
     init(configuration: CameraeNextCaptureConfiguration) {
         let isAstro = configuration.module == .astrophotography
         let isVideo = !isAstro && configuration.repeatableKind == .video
-        navigationTitle = isAstro ? "Novo astro" : (isVideo ? "Novo vídeo" : "Novo timelapse")
-        primaryActionTitle = "Abrir câmera"
-        captureSectionTitle = isAstro ? "SESSÃO" : "CAPTURA"
-        adjustmentsSectionTitle = isAstro ? "CAPTURA ASTRO" : "AJUSTES"
+        navigationTitle = isAstro ? CameraeL10n.newAstro : (isVideo ? CameraeL10n.newVideo : CameraeL10n.newTimelapse)
+        primaryActionTitle = CameraeL10n.openCamera
+        captureSectionTitle = isAstro ? CameraeL10n.sessionSection : CameraeL10n.captureSection
+        adjustmentsSectionTitle = isAstro ? CameraeL10n.astroCaptureSection : CameraeL10n.adjustmentsSection
         adjustmentTitles = isAstro
-            ? ["Exposição", "Intervalo", "Capturas/frame"]
-            : (isVideo ? ["EV"] : ["EV", "Intervalo"])
+            ? [CameraeL10n.exposure, CameraeL10n.interval, CameraeL10n.capturesPerFrame]
+            : (isVideo ? ["EV"] : ["EV", CameraeL10n.interval])
         durationLabels = isAstro
-            ? ["15 min", "30 min", "1 h", "Personal."]
-            : (isVideo ? ["30 s", "1 min", "2 min"] : ["15 min", "30 min", "1 h", "Custom"])
+            ? ["15 min", "30 min", "1 h", CameraeL10n.customDurationShort]
+            : (isVideo ? ["30 s", "1 min", "2 min"] : ["15 min", "30 min", "1 h", CameraeL10n.customDurationShort])
         cameraPresentation = isAstro
             ? .lockedStatus(lens: "Wide", zoom: "1×")
             : .selector
@@ -268,7 +268,7 @@ struct CameraeNextWorkflowConfigurationView: View {
                     Button(action: onShowSessions) {
                         Image(systemName: "rectangle.stack")
                     }
-                    .accessibilityLabel("Abrir sessões existentes")
+                    .accessibilityLabel(CameraeL10n.openExistingSessions)
                 }
             }
         }
@@ -326,7 +326,7 @@ struct CameraeNextWorkflowConfigurationView: View {
             .ignoresSafeArea()
         }
         .alert(
-            "Imagem de referência",
+            CameraeL10n.referenceImage,
             isPresented: Binding(
                 get: { referenceErrorMessage != nil },
                 set: { if !$0 { referenceErrorMessage = nil } }
@@ -342,11 +342,11 @@ struct CameraeNextWorkflowConfigurationView: View {
 
     private var primaryActionTitle: String {
         if cameraSetupPresentation.state == .unavailable {
-            return "Câmera indisponível"
+            return CameraeL10n.cameraUnavailable
         }
         switch planningPresentation.state {
-        case .blocked: return "Libere espaço para continuar"
-        case .error: return "Planejamento indisponível"
+        case .blocked: return CameraeL10n.freeSpaceToContinue
+        case .error: return CameraeL10n.planningUnavailable
         default: return presentation.primaryActionTitle
         }
     }
@@ -402,9 +402,9 @@ struct CameraeNextWorkflowConfigurationView: View {
                 )
 
                 HStack {
-                    summary(title: "FORMATO", value: configuration.repeatableKind == .video ? "MP4" : (configuration.sourceFormat == .heic ? "HEIC" : "JPEG"))
+                    summary(title: CameraeL10n.format, value: configuration.repeatableKind == .video ? "MP4" : (configuration.sourceFormat == .heic ? "HEIC" : "JPEG"))
                     Spacer()
-                    summary(title: "ESTIMATIVA", value: "\(configuration.estimatedFrameCount) frames", accent: true)
+                    summary(title: CameraeL10n.estimate, value: "\(configuration.estimatedFrameCount) frames", accent: true)
                 }
             }
         }
@@ -460,9 +460,9 @@ struct CameraeNextWorkflowConfigurationView: View {
 
                 if isAstro {
                     CameraeNextSliderRow(
-                        title: "Exposição",
+                        title: CameraeL10n.exposure,
                         value: configuration.usesAutomaticAstroExposure
-                            ? "Automática"
+                            ? CameraeL10n.automatic
                             : "\(Int(configuration.astroExposureSeconds))s",
                         theme: theme
                     ) {
@@ -471,14 +471,14 @@ struct CameraeNextWorkflowConfigurationView: View {
                     }
                     .opacity(presentation.isAstroExposureControlEnabled ? 1 : 0.58)
                     CameraeNextSliderRow(
-                        title: "Intervalo",
+                        title: CameraeL10n.interval,
                         value: "\(Int(configuration.intervalSeconds))s",
                         theme: theme
                     ) {
                         Slider(value: $configuration.intervalSeconds, in: 1...120, step: 1)
                     }
                     CameraeNextSliderRow(
-                        title: "Capturas/frame",
+                        title: CameraeL10n.capturesPerFrame,
                         value: "\(configuration.astroCapturesPerFrame)",
                         theme: theme
                     ) {
@@ -489,7 +489,7 @@ struct CameraeNextWorkflowConfigurationView: View {
                         Slider(value: $configuration.exposureBias, in: -2...2, step: 0.1)
                     }
                     if presentation.showsInterval {
-                        CameraeNextSliderRow(title: "Intervalo", value: "\(Int(configuration.intervalSeconds))s", theme: theme) {
+                        CameraeNextSliderRow(title: CameraeL10n.interval, value: "\(Int(configuration.intervalSeconds))s", theme: theme) {
                             Slider(value: $configuration.intervalSeconds, in: 1...120, step: 1)
                         }
                     }
@@ -501,10 +501,10 @@ struct CameraeNextWorkflowConfigurationView: View {
     private var videoSettingsCard: some View {
         CameraeNextCard(theme: theme) {
             VStack(spacing: 10) {
-                CameraeNextSectionLabel(title: "VÍDEO", theme: theme)
+                CameraeNextSectionLabel(title: CameraeL10n.videoSection, theme: theme)
 
-                CameraeNextSettingRow(title: "Resolução", helper: "Tamanho do arquivo final", theme: theme) {
-                    Picker("Resolução", selection: $configuration.videoSettings.resolution) {
+                CameraeNextSettingRow(title: CameraeL10n.resolution, helper: CameraeL10n.resolutionHelper, theme: theme) {
+                    Picker(CameraeL10n.resolution, selection: $configuration.videoSettings.resolution) {
                         ForEach(WorkflowVideoResolution.allCases) { resolution in
                             Text(resolution.label).tag(resolution)
                         }
@@ -519,8 +519,8 @@ struct CameraeNextWorkflowConfigurationView: View {
                     height: 34
                 )
 
-                CameraeNextSettingRow(title: "Qualidade", helper: "Compressão do MP4", theme: theme) {
-                    Picker("Qualidade", selection: $configuration.videoSettings.quality) {
+                CameraeNextSettingRow(title: CameraeL10n.quality, helper: CameraeL10n.qualityHelper, theme: theme) {
+                    Picker(CameraeL10n.quality, selection: $configuration.videoSettings.quality) {
                         ForEach(WorkflowVideoQuality.allCases) { quality in
                             Text(quality.label).tag(quality)
                         }
@@ -739,7 +739,7 @@ private enum CameraeNextReferenceError: LocalizedError {
 
     private static func zoomLabel(_ value: Double) -> String {
         value.formatted(
-            .number.locale(Locale(identifier: "pt_BR")).precision(.fractionLength(0...1))
+            .number.locale(.current).precision(.fractionLength(0...1))
         ) + "×"
     }
 }

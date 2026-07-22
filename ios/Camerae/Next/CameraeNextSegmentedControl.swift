@@ -57,13 +57,13 @@ enum CameraeNextCaptureModeOption: String, Hashable, Sendable {
     case automatic
     case manual
 
-    static let repeatableItems = [
-        CameraeNextSegmentItem(value: Self.video, label: "Vídeo"),
-        CameraeNextSegmentItem(value: Self.timelapse, label: "Timelapse")
-    ]
+    static var repeatableItems: [CameraeNextSegmentItem<Self>] { [
+        CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video),
+        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse)
+    ] }
 
-    static let astroItems = [
-        CameraeNextSegmentItem(value: Self.automatic, label: "Automática"),
-        CameraeNextSegmentItem(value: Self.manual, label: "Manual")
-    ]
+    static var astroItems: [CameraeNextSegmentItem<Self>] { [
+        CameraeNextSegmentItem(value: Self.automatic, label: CameraeL10n.automatic),
+        CameraeNextSegmentItem(value: Self.manual, label: CameraeL10n.manual)
+    ] }
 }

@@ -1,0 +1,36 @@
+{
+  "sourceLanguage" : "pt-BR",
+  "strings" : {
+    "NSCameraUsageDescription" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Camerae verwendet die Kamera, um Zeitraffer aufzunehmen und Fotos an einem Referenzbild auszurichten." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Camerae uses the camera to capture time-lapses and align photos with a reference image." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Camerae usa la cámara para capturar timelapses y alinear fotos con una imagen de referencia." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Camerae utilise l’appareil photo pour capturer des timelapses et aligner des photos sur une image de référence." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Camerae usa a câmera para capturar timelapses e alinhar fotos com uma imagem de referência." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Camerae использует камеру для интервальной съёмки и выравнивания фотографий по эталонному изображению." } }
+      }
+    },
+    "NSLocationTemporaryUsageDescriptionDictionary.RepeatableAlignment" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Camerae verwendet den genauen Standort, um wiederholte Aufnahmen am selben Punkt auszurichten." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Camerae uses precise location to align repeated captures from the same position." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Camerae usa la ubicación precisa para alinear capturas repetidas desde el mismo punto." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Camerae utilise votre position précise pour aligner des captures répétées depuis le même point." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Camerae usa a localização precisa para alinhar capturas repetidas no mesmo ponto." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Camerae использует точную геопозицию для выравнивания повторных снимков из одной точки." } }
+      }
+    },
+    "NSLocationWhenInUseUsageDescription" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Camerae verwendet Ihren Standort, um denselben Bildausschnitt am selben Ort zu wiederholen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Camerae uses your location to help repeat the same framing in the same place." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Camerae usa tu ubicación para ayudarte a repetir el mismo encuadre en el mismo lugar." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Camerae utilise votre position pour reproduire le même cadrage au même endroit." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Camerae usa sua localização para ajudar a repetir o enquadramento no mesmo local." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Camerae использует геопозицию, чтобы повторить тот же кадр в том же месте." } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

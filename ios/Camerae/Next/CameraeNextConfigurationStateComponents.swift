@@ -42,39 +42,39 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
 
         switch state {
         case .evaluating:
-            status = "CALCULANDO"
-            title = "Calculando espaço e bateria"
-            detail = "Estimativa será atualizada antes da captura"
+            status = CameraeL10n.calculating
+            title = CameraeL10n.calculatingResources
+            detail = CameraeL10n.calculatingResourcesDetail
             progress = 0.34
         case .ready:
-            status = "PRONTO"
-            title = "Captura viável"
+            status = CameraeL10n.ready
+            title = CameraeL10n.captureViable
             detail = Self.join(metricsDetail, preflight.detail)
             progress = 1
         case .warning:
-            status = "ATENÇÃO"
-            title = "Margem de espaço reduzida"
+            status = CameraeL10n.attention
+            title = CameraeL10n.reducedSpaceMargin
             detail = preflight.detail
             progress = 0.76
         case .blocked:
-            status = "BLOQUEADO"
-            title = "Espaço insuficiente"
+            status = CameraeL10n.blocked
+            title = CameraeL10n.insufficientSpace
             detail = preflight.detail
             progress = 0.96
         case .error:
-            status = "ERRO"
-            title = "Planejamento indisponível"
+            status = CameraeL10n.error.uppercased()
+            title = CameraeL10n.planningUnavailable
             detail = preflight.detail
             progress = nil
         case .adjusted:
-            status = "AJUSTADO"
-            title = "Formato ajustado por compatibilidade"
-            detail = Self.join("HEIC indisponível · captura será salva em JPEG", metricsDetail)
+            status = CameraeL10n.adjusted
+            title = CameraeL10n.formatAdjusted
+            detail = Self.join(CameraeL10n.formatAdjustedDetail, metricsDetail)
             progress = 1
         case .externalPower:
-            status = "ENERGIA"
-            title = "Alimentação externa recomendada"
-            detail = Self.join("Sessão longa · conecte o carregador", metricsDetail)
+            status = CameraeL10n.power
+            title = CameraeL10n.externalPowerRecommended
+            detail = Self.join(CameraeL10n.externalPowerDetail, metricsDetail)
             progress = 1
         }
     }
@@ -95,9 +95,9 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
     static let evaluating = Self(
         state: .evaluating,
         canStart: false,
-        status: "CALCULANDO",
-        title: "Calculando espaço e bateria",
-        detail: "Estimativa será atualizada antes da captura",
+        status: CameraeL10n.calculating,
+        title: CameraeL10n.calculatingResources,
+        detail: CameraeL10n.calculatingResourcesDetail,
         progress: 0.34
     )
 
@@ -105,9 +105,9 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
         Self(
             state: .error,
             canStart: false,
-            status: "ERRO",
-            title: "Planejamento indisponível",
-            detail: message ?? "Não foi possível verificar espaço e bateria",
+            status: CameraeL10n.error.uppercased(),
+            title: CameraeL10n.planningUnavailable,
+            detail: message ?? CameraeL10n.planningCheckFailed,
             progress: nil
         )
     }
@@ -160,49 +160,49 @@ struct CameraeNextCameraSetupPresentation: Equatable, Sendable {
         if let lockedLens, !availableLenses.contains(lockedLens) {
             state = .lockedUnavailable
             canStart = false
-            title = "Câmera do projeto indisponível"
-            detail = "Conecte um aparelho com \(Self.cameraDescription(lockedLens, zoomFactor: lockedZoomFactor))"
-            status = "BLOQUEADA"
+            title = CameraeL10n.cameraProjectUnavailable
+            detail = CameraeL10n.connectCamera(Self.cameraDescription(lockedLens, zoomFactor: lockedZoomFactor))
+            status = CameraeL10n.cameraLockedStatus
         } else if let lockedLens {
             state = .locked
             canStart = true
-            title = "Câmera do projeto"
+            title = CameraeL10n.cameraProject
             detail = Self.cameraDescription(lockedLens, zoomFactor: lockedZoomFactor)
-            status = "BLOQUEADA"
+            status = CameraeL10n.cameraLockedStatus
         } else if availableLenses.isEmpty {
             state = .unavailable
             canStart = false
-            title = "Nenhuma câmera compatível"
-            detail = "Revise as permissões ou use outro aparelho"
-            status = "INDISPONÍVEL"
+            title = CameraeL10n.noCompatibleCamera
+            detail = CameraeL10n.noCompatibleCameraDetail
+            status = CameraeL10n.cameraUnavailableStatus
         } else if !availableLenses.contains(preferredLens) {
             state = .fallback
             canStart = true
-            title = "Câmera substituída"
-            detail = "\(preferredLens.title) indisponível · usando \(Self.lensDescription(selectedLens))"
-            status = "AJUSTADA"
+            title = CameraeL10n.cameraReplaced
+            detail = CameraeL10n.unavailableUsing(preferredLens.title, Self.lensDescription(selectedLens))
+            status = CameraeL10n.cameraAdjustedStatus
         } else if availableLenses.count == 1 {
             state = .single
             canStart = true
-            title = "Apenas Principal disponível"
-            detail = "As outras lentes não estão presentes neste aparelho"
-            status = "ÚNICA"
+            title = CameraeL10n.onlyMainCamera
+            detail = CameraeL10n.onlyMainCameraDetail
+            status = CameraeL10n.cameraSingleStatus
         } else {
             state = .available
             canStart = true
-            title = module == .astrophotography ? "Câmera em uso" : "Câmeras detectadas"
+            title = module == .astrophotography ? CameraeL10n.cameraInUse : CameraeL10n.camerasDetected
             detail = module == .astrophotography
                 ? Self.lensDescription(selectedLens)
-                : "Ultra-wide · Principal · Teleobjetiva"
-            status = "DISPONÍVEL"
+                : "\(CameraeL10n.lensUltraWide) · \(CameraeL10n.lensMain) · \(CameraeL10n.lensTelephoto)"
+            status = CameraeL10n.cameraAvailableStatus
         }
     }
 
     private static func lensDescription(_ lens: RepeatableCameraLens) -> String {
         switch lens {
-        case .ultraWide: "Ultra-wide · 0,5×"
-        case .wide: "Principal · 1×"
-        case .telephoto: "Teleobjetiva · TELE"
+        case .ultraWide: "\(CameraeL10n.lensUltraWide) · 0,5×"
+        case .wide: "\(CameraeL10n.lensMain) · 1×"
+        case .telephoto: "\(CameraeL10n.lensTelephoto) · TELE"
         }
     }
 
@@ -212,7 +212,7 @@ struct CameraeNextCameraSetupPresentation: Equatable, Sendable {
     ) -> String {
         guard zoomFactor > 1.01 else { return lensDescription(lens) }
         let zoom = zoomFactor.formatted(
-            .number.locale(Locale(identifier: "pt_BR")).precision(.fractionLength(0...1))
+            .number.locale(.current).precision(.fractionLength(0...1))
         )
         return "\(lensDescription(lens)) · zoom \(zoom)×"
     }
@@ -235,20 +235,20 @@ struct CameraeNextReferencePresentation: Equatable, Sendable {
         switch state {
         case .missing:
             showsPlaceholder = true
-            primaryActionTitle = "Tirar foto"
-            secondaryActionTitle = "Importar"
+            primaryActionTitle = CameraeL10n.takePhoto
+            secondaryActionTitle = CameraeL10n.importPhoto
         case .active:
             showsPlaceholder = false
-            primaryActionTitle = "Substituir"
-            secondaryActionTitle = "Remover"
+            primaryActionTitle = CameraeL10n.replace
+            secondaryActionTitle = CameraeL10n.remove
         case .loading:
             showsPlaceholder = true
-            primaryActionTitle = "Aguarde"
-            secondaryActionTitle = "Cancelar"
+            primaryActionTitle = CameraeL10n.wait
+            secondaryActionTitle = CameraeL10n.cancel
         case .unavailable:
             showsPlaceholder = true
-            primaryActionTitle = "Escolher outra"
-            secondaryActionTitle = "Remover"
+            primaryActionTitle = CameraeL10n.chooseAnother
+            secondaryActionTitle = CameraeL10n.remove
         }
     }
 }
@@ -325,7 +325,7 @@ struct CameraeNextCapturePlanningCard: View {
         CameraeNextCard(theme: theme) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    CameraeNextSectionLabel(title: "Planejamento", theme: theme)
+                    CameraeNextSectionLabel(title: CameraeL10n.planningSection, theme: theme)
                     Text(presentation.status)
                         .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
                         .foregroundStyle(theme.accent)
@@ -355,7 +355,7 @@ struct CameraeNextCameraSetupStateCard: View {
     var body: some View {
         CameraeNextStatusCard(
             iconLabel: "CAM",
-            sectionTitle: "CÂMERA",
+            sectionTitle: CameraeL10n.cameraSection,
             title: presentation.title,
             detail: presentation.detail,
             status: presentation.status,
@@ -392,7 +392,7 @@ struct CameraeNextReferenceStateCard: View {
                     )
                     compactAction(
                         title: presentation.secondaryActionTitle,
-                        systemImage: presentation.secondaryActionTitle == "Remover" ? "trash" : "photo.on.rectangle",
+                        systemImage: presentation.secondaryActionTitle == CameraeL10n.remove ? "trash" : "photo.on.rectangle",
                         isPrimary: false,
                         action: secondaryAction
                     )
@@ -498,18 +498,18 @@ struct CameraeNextCustomDurationSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(isAstro ? "Duração da sessão" : "Duração personalizada")
+                Text(isAstro ? CameraeL10n.sessionDuration : CameraeL10n.customDuration)
                     .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
                     .foregroundStyle(theme.text)
                 Text(isAstro
-                     ? "Defina o tempo total disponível para capturas Astro."
-                     : "Defina por quanto tempo a captura ficará ativa.")
+                     ? CameraeL10n.sessionDurationMessage
+                     : CameraeL10n.customDurationMessage)
                     .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
             }
 
             VStack(alignment: .leading, spacing: 6) {
-                Text("Duração")
+                Text(CameraeL10n.duration)
                     .font(.custom("Outfit-SemiBold", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
                 TextField("02 h 30 min", text: $draft)
@@ -524,7 +524,7 @@ struct CameraeNextCustomDurationSheet: View {
                         RoundedRectangle(cornerRadius: CameraeRadius.medium, style: .continuous)
                             .stroke(parsedMinutes == nil ? Color.red : theme.accent, lineWidth: 2)
                     }
-                    .accessibilityLabel("Duração em horas e minutos")
+                    .accessibilityLabel(CameraeL10n.duration)
             }
 
             HStack(spacing: 8) {
@@ -545,10 +545,10 @@ struct CameraeNextCustomDurationSheet: View {
             }
 
             HStack(spacing: 10) {
-                sheetButton("Cancelar", background: theme.surface, foreground: theme.text) {
+                sheetButton(CameraeL10n.cancel, background: theme.surface, foreground: theme.text) {
                     dismiss()
                 }
-                sheetButton("Aplicar", background: theme.accent, foreground: .white) {
+                sheetButton(CameraeL10n.apply, background: theme.accent, foreground: .white) {
                     guard let parsedMinutes else { return }
                     minutes = parsedMinutes
                     onApply()

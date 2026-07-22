@@ -79,8 +79,8 @@ print_plan() {
   esac
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
-  echo "tests: architecture, Swift, Camerae Processing, Camerae Vision"
-  echo "visual evidence: principal SwiftUI screens captured and archived under docs/ui-evidence"
+  echo "tests: localization, architecture, Swift, Camerae Processing, Camerae Vision"
+  echo "visual evidence: six locales on iPhone and iPad, archived under docs/ui-evidence"
   echo "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
   echo "build: unsigned device build before signed archive"
 }
@@ -112,7 +112,7 @@ require_command() {
 }
 
 [[ "$(uname -s)" == "Darwin" ]] || fail "iOS releases must run on macOS"
-for command in git rg pod xcodebuild cmake ctest security; do
+for command in git rg pod xcodebuild cmake ctest security python3; do
   require_command "$command"
 done
 
@@ -165,6 +165,9 @@ step "Verify pinned OpenCV XCFramework"
 step "Check architecture boundaries"
 (cd "$IOS_DIR" && ./scripts/check-architecture.sh)
 
+step "Validate localization catalogs"
+(cd "$IOS_DIR" && ./scripts/tests/localization-tests.sh)
+
 step "Run Swift component and integration tests"
 (cd "$IOS_DIR" && xcodebuild \
   -workspace Camerae.xcworkspace \
@@ -175,7 +178,8 @@ step "Run Swift component and integration tests"
   test)
 
 step "Generate simulator UI evidence"
-(cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --destination "$TEST_DESTINATION" --archive-tracked)
+(cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --device iphone --destination "$TEST_DESTINATION" --all-locales --archive-tracked)
+(cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --device ipad --all-locales --archive-tracked)
 
 step "Run C++ Camerae Processing and Camerae Vision tests"
 cmake -S "$ROOT_DIR/processing" -B "$ROOT_DIR/.build/release-gate-processing" -DBUILD_TESTING=ON

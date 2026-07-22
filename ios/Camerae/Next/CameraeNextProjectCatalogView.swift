@@ -9,9 +9,9 @@ enum CameraeNextProjectCatalogFilter: String, CaseIterable, Identifiable, Sendab
 
     var title: String {
         switch self {
-        case .recent: "Recentes"
-        case .inProgress: "Em andamento"
-        case .completed: "Concluídos"
+        case .recent: CameraeL10n.recent
+        case .inProgress: CameraeL10n.inProgress
+        case .completed: CameraeL10n.completed
         }
     }
 
@@ -127,7 +127,7 @@ struct CameraeNextProjectCatalogView: View {
                     }
 
                     HStack {
-                        Text("PROJETOS")
+                        Text(CameraeL10n.projectsSection)
                             .tracking(1.6)
                         Spacer()
                         Text("\(catalog.projectCount)")
@@ -155,7 +155,7 @@ struct CameraeNextProjectCatalogView: View {
                                     Button {
                                         setArchived(project, true)
                                     } label: {
-                                        Label("Arquivar", systemImage: "archivebox")
+                                        Label(CameraeL10n.archive, systemImage: "archivebox")
                                     }
                                     .tint(theme.accent)
                                 }
@@ -188,7 +188,7 @@ struct CameraeNextProjectCatalogView: View {
 
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
-                    Picker("Filtrar projetos", selection: $filter) {
+                    Picker(CameraeL10n.filterProjects, selection: $filter) {
                         ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
                             Label(option.title, systemImage: option.systemImage).tag(option)
                         }
@@ -196,13 +196,14 @@ struct CameraeNextProjectCatalogView: View {
                 } label: {
                     Image(systemName: "line.3.horizontal.decrease")
                 }
-                .accessibilityLabel("Filtrar projetos")
+                .accessibilityLabel(CameraeL10n.filterProjects)
 
                 Button(action: beginCreatingProject) {
                     Image(systemName: "plus")
                 }
                 .buttonStyle(.borderedProminent)
-                .accessibilityLabel("Novo projeto \(theme.title)")
+                .accessibilityLabel(CameraeL10n.newProject(theme.title))
+                .accessibilityIdentifier(CameraeAccessibility.newProject(module))
             }
         }
         .tint(theme.accent)
@@ -215,21 +216,21 @@ struct CameraeNextProjectCatalogView: View {
                 createAction: createProject
             )
         }
-        .alert("Erro", isPresented: Binding(
+        .alert(CameraeL10n.error, isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
         )) {
-            Button("OK", role: .cancel) {}
+            Button(CameraeL10n.okay, role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
         }
-        .alert("Projeto temporário vazio", isPresented: Binding(
+        .alert(CameraeL10n.emptyTemporaryProject, isPresented: Binding(
             get: { emptyProjectToRemove != nil },
             set: { if !$0 { emptyProjectToRemove = nil } }
         )) {
-            Button("Remover projeto", role: .destructive, action: removeEmptyTemporaryProject)
+            Button(CameraeL10n.removeProject, role: .destructive, action: removeEmptyTemporaryProject)
         } message: {
-            Text("Nenhuma captura foi criada. Este projeto temporário será removido para manter sua lista organizada.")
+            Text(CameraeL10n.emptyTemporaryProjectMessage)
         }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
@@ -256,7 +257,7 @@ struct CameraeNextProjectCatalogView: View {
         VStack(spacing: 8) {
             Image(systemName: "rectangle.stack")
                 .font(.title2)
-            Text(catalog.projectCount == 0 ? "Nenhum projeto ainda" : "Nenhum projeto neste filtro")
+            Text(catalog.projectCount == 0 ? CameraeL10n.noProjectsYet : CameraeL10n.noProjectsInFilter)
                 .font(.custom("Outfit-Medium", size: 15, relativeTo: .subheadline))
         }
         .foregroundStyle(theme.muted)

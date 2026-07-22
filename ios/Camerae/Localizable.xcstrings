@@ -1,0 +1,468 @@
+{
+  "sourceLanguage" : "pt-BR",
+  "strings" : {
+    "workflow.camera.lens.main" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Hauptkamera"}},"en":{"stringUnit":{"state":"translated","value":"Main"}},"es":{"stringUnit":{"state":"translated","value":"Principal"}},"fr":{"stringUnit":{"state":"translated","value":"Principale"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Principal"}},"ru":{"stringUnit":{"state":"translated","value":"Основная"}}}},
+    "workflow.camera.lens.telephoto" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Teleobjektiv"}},"en":{"stringUnit":{"state":"translated","value":"Telephoto"}},"es":{"stringUnit":{"state":"translated","value":"Teleobjetivo"}},"fr":{"stringUnit":{"state":"translated","value":"Téléobjectif"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Teleobjetiva"}},"ru":{"stringUnit":{"state":"translated","value":"Телеобъектив"}}}},
+    "workflow.camera.lens.ultrawide" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ultraweitwinkel"}},"en":{"stringUnit":{"state":"translated","value":"Ultra wide"}},"es":{"stringUnit":{"state":"translated","value":"Ultra gran angular"}},"fr":{"stringUnit":{"state":"translated","value":"Ultra grand-angle"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Ultra-wide"}},"ru":{"stringUnit":{"state":"translated","value":"Сверхширокоугольная"}}}},
+    "workflow.camera.locked.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Projektkamera"}},"en":{"stringUnit":{"state":"translated","value":"Project camera"}},"es":{"stringUnit":{"state":"translated","value":"Cámara del proyecto"}},"fr":{"stringUnit":{"state":"translated","value":"Appareil du projet"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Câmera do projeto"}},"ru":{"stringUnit":{"state":"translated","value":"Камера проекта"}}}},
+    "workflow.camera.locked_unavailable.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Projektkamera nicht verfügbar"}},"en":{"stringUnit":{"state":"translated","value":"Project camera unavailable"}},"es":{"stringUnit":{"state":"translated","value":"Cámara del proyecto no disponible"}},"fr":{"stringUnit":{"state":"translated","value":"Appareil du projet indisponible"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Câmera do projeto indisponível"}},"ru":{"stringUnit":{"state":"translated","value":"Камера проекта недоступна"}}}},
+    "workflow.camera.fallback.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kamera ersetzt"}},"en":{"stringUnit":{"state":"translated","value":"Camera replaced"}},"es":{"stringUnit":{"state":"translated","value":"Cámara sustituida"}},"fr":{"stringUnit":{"state":"translated","value":"Appareil remplacé"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Câmera substituída"}},"ru":{"stringUnit":{"state":"translated","value":"Камера заменена"}}}},
+    "workflow.camera.single.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nur Hauptkamera verfügbar"}},"en":{"stringUnit":{"state":"translated","value":"Only Main available"}},"es":{"stringUnit":{"state":"translated","value":"Solo Principal disponible"}},"fr":{"stringUnit":{"state":"translated","value":"Principale uniquement"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Apenas Principal disponível"}},"ru":{"stringUnit":{"state":"translated","value":"Доступна только основная"}}}},
+    "workflow.camera.single.detail" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Andere Objektive sind auf diesem Gerät nicht vorhanden"}},"en":{"stringUnit":{"state":"translated","value":"Other lenses are not present on this device"}},"es":{"stringUnit":{"state":"translated","value":"Las otras lentes no están en este dispositivo"}},"fr":{"stringUnit":{"state":"translated","value":"Les autres objectifs sont absents"}},"pt-BR":{"stringUnit":{"state":"translated","value":"As outras lentes não estão presentes neste aparelho"}},"ru":{"stringUnit":{"state":"translated","value":"Других объективов нет"}}}},
+    "workflow.camera.status.locked" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"GESPERRT"}},"en":{"stringUnit":{"state":"translated","value":"LOCKED"}},"es":{"stringUnit":{"state":"translated","value":"BLOQUEADA"}},"fr":{"stringUnit":{"state":"translated","value":"VERROUILLÉ"}},"pt-BR":{"stringUnit":{"state":"translated","value":"BLOQUEADA"}},"ru":{"stringUnit":{"state":"translated","value":"ЗАБЛОКИРОВАНА"}}}},
+    "workflow.camera.status.adjusted" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"ANGEPASST"}},"en":{"stringUnit":{"state":"translated","value":"ADJUSTED"}},"es":{"stringUnit":{"state":"translated","value":"AJUSTADA"}},"fr":{"stringUnit":{"state":"translated","value":"AJUSTÉ"}},"pt-BR":{"stringUnit":{"state":"translated","value":"AJUSTADA"}},"ru":{"stringUnit":{"state":"translated","value":"ИЗМЕНЕНА"}}}},
+    "workflow.camera.status.single" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"EINZIG"}},"en":{"stringUnit":{"state":"translated","value":"ONLY"}},"es":{"stringUnit":{"state":"translated","value":"ÚNICA"}},"fr":{"stringUnit":{"state":"translated","value":"UNIQUE"}},"pt-BR":{"stringUnit":{"state":"translated","value":"ÚNICA"}},"ru":{"stringUnit":{"state":"translated","value":"ЕДИНСТВЕННАЯ"}}}},
+    "workflow.planning.status.calculating" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"BERECHNUNG"}},"en":{"stringUnit":{"state":"translated","value":"CALCULATING"}},"es":{"stringUnit":{"state":"translated","value":"CALCULANDO"}},"fr":{"stringUnit":{"state":"translated","value":"CALCUL"}},"pt-BR":{"stringUnit":{"state":"translated","value":"CALCULANDO"}},"ru":{"stringUnit":{"state":"translated","value":"РАСЧЁТ"}}}},
+    "workflow.planning.status.ready" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"BEREIT"}},"en":{"stringUnit":{"state":"translated","value":"READY"}},"es":{"stringUnit":{"state":"translated","value":"LISTO"}},"fr":{"stringUnit":{"state":"translated","value":"PRÊT"}},"pt-BR":{"stringUnit":{"state":"translated","value":"PRONTO"}},"ru":{"stringUnit":{"state":"translated","value":"ГОТОВО"}}}},
+    "workflow.planning.status.warning" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"ACHTUNG"}},"en":{"stringUnit":{"state":"translated","value":"ATTENTION"}},"es":{"stringUnit":{"state":"translated","value":"ATENCIÓN"}},"fr":{"stringUnit":{"state":"translated","value":"ATTENTION"}},"pt-BR":{"stringUnit":{"state":"translated","value":"ATENÇÃO"}},"ru":{"stringUnit":{"state":"translated","value":"ВНИМАНИЕ"}}}},
+    "workflow.planning.status.blocked" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"BLOCKIERT"}},"en":{"stringUnit":{"state":"translated","value":"BLOCKED"}},"es":{"stringUnit":{"state":"translated","value":"BLOQUEADO"}},"fr":{"stringUnit":{"state":"translated","value":"BLOQUÉ"}},"pt-BR":{"stringUnit":{"state":"translated","value":"BLOQUEADO"}},"ru":{"stringUnit":{"state":"translated","value":"ЗАБЛОКИРОВАНО"}}}},
+    "workflow.planning.status.adjusted" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"ANGEPASST"}},"en":{"stringUnit":{"state":"translated","value":"ADJUSTED"}},"es":{"stringUnit":{"state":"translated","value":"AJUSTADO"}},"fr":{"stringUnit":{"state":"translated","value":"AJUSTÉ"}},"pt-BR":{"stringUnit":{"state":"translated","value":"AJUSTADO"}},"ru":{"stringUnit":{"state":"translated","value":"ИЗМЕНЕНО"}}}},
+    "workflow.planning.status.power" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"STROM"}},"en":{"stringUnit":{"state":"translated","value":"POWER"}},"es":{"stringUnit":{"state":"translated","value":"ENERGÍA"}},"fr":{"stringUnit":{"state":"translated","value":"ÉNERGIE"}},"pt-BR":{"stringUnit":{"state":"translated","value":"ENERGIA"}},"ru":{"stringUnit":{"state":"translated","value":"ПИТАНИЕ"}}}},
+    "workflow.planning.calculating.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Speicher und Batterie werden berechnet"}},"en":{"stringUnit":{"state":"translated","value":"Calculating storage and battery"}},"es":{"stringUnit":{"state":"translated","value":"Calculando espacio y batería"}},"fr":{"stringUnit":{"state":"translated","value":"Calcul de l’espace et de la batterie"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Calculando espaço e bateria"}},"ru":{"stringUnit":{"state":"translated","value":"Расчёт памяти и батареи"}}}},
+    "workflow.planning.calculating.detail" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Schätzung wird vor der Aufnahme aktualisiert"}},"en":{"stringUnit":{"state":"translated","value":"Estimate will update before capture"}},"es":{"stringUnit":{"state":"translated","value":"La estimación se actualizará antes de capturar"}},"fr":{"stringUnit":{"state":"translated","value":"L’estimation sera actualisée avant la capture"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Estimativa será atualizada antes da captura"}},"ru":{"stringUnit":{"state":"translated","value":"Оценка обновится перед съёмкой"}}}},
+    "workflow.planning.ready.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahme möglich"}},"en":{"stringUnit":{"state":"translated","value":"Capture is viable"}},"es":{"stringUnit":{"state":"translated","value":"Captura viable"}},"fr":{"stringUnit":{"state":"translated","value":"Capture possible"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Captura viável"}},"ru":{"stringUnit":{"state":"translated","value":"Съёмка возможна"}}}},
+    "workflow.planning.warning.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wenig Speicherreserve"}},"en":{"stringUnit":{"state":"translated","value":"Low storage margin"}},"es":{"stringUnit":{"state":"translated","value":"Margen de espacio reducido"}},"fr":{"stringUnit":{"state":"translated","value":"Marge d’espace réduite"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Margem de espaço reduzida"}},"ru":{"stringUnit":{"state":"translated","value":"Мало свободного места"}}}},
+    "workflow.planning.blocked.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nicht genügend Speicher"}},"en":{"stringUnit":{"state":"translated","value":"Insufficient storage"}},"es":{"stringUnit":{"state":"translated","value":"Espacio insuficiente"}},"fr":{"stringUnit":{"state":"translated","value":"Espace insuffisant"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Espaço insuficiente"}},"ru":{"stringUnit":{"state":"translated","value":"Недостаточно места"}}}},
+    "workflow.planning.adjusted.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Format für Kompatibilität angepasst"}},"en":{"stringUnit":{"state":"translated","value":"Format adjusted for compatibility"}},"es":{"stringUnit":{"state":"translated","value":"Formato ajustado por compatibilidad"}},"fr":{"stringUnit":{"state":"translated","value":"Format ajusté pour compatibilité"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Formato ajustado por compatibilidade"}},"ru":{"stringUnit":{"state":"translated","value":"Формат изменён для совместимости"}}}},
+    "workflow.planning.adjusted.detail" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"HEIC nicht verfügbar · JPEG wird verwendet"}},"en":{"stringUnit":{"state":"translated","value":"HEIC unavailable · using JPEG"}},"es":{"stringUnit":{"state":"translated","value":"HEIC no disponible · se usará JPEG"}},"fr":{"stringUnit":{"state":"translated","value":"HEIC indisponible · JPEG sera utilisé"}},"pt-BR":{"stringUnit":{"state":"translated","value":"HEIC indisponível · captura será salva em JPEG"}},"ru":{"stringUnit":{"state":"translated","value":"HEIC недоступен · используется JPEG"}}}},
+    "workflow.planning.power.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Externe Stromversorgung empfohlen"}},"en":{"stringUnit":{"state":"translated","value":"External power recommended"}},"es":{"stringUnit":{"state":"translated","value":"Se recomienda alimentación externa"}},"fr":{"stringUnit":{"state":"translated","value":"Alimentation externe recommandée"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Alimentação externa recomendada"}},"ru":{"stringUnit":{"state":"translated","value":"Рекомендуется внешнее питание"}}}},
+    "workflow.planning.power.detail" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lange Sitzung · Ladegerät anschließen"}},"en":{"stringUnit":{"state":"translated","value":"Long session · connect charger"}},"es":{"stringUnit":{"state":"translated","value":"Sesión larga · conecta el cargador"}},"fr":{"stringUnit":{"state":"translated","value":"Session longue · branchez le chargeur"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Sessão longa · conecte o carregador"}},"ru":{"stringUnit":{"state":"translated","value":"Долгая сессия · подключите зарядку"}}}},
+    "workflow.planning.error.detail" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Speicher und Batterie konnten nicht geprüft werden"}},"en":{"stringUnit":{"state":"translated","value":"Could not check storage and battery"}},"es":{"stringUnit":{"state":"translated","value":"No se pudo comprobar espacio y batería"}},"fr":{"stringUnit":{"state":"translated","value":"Impossible de vérifier l’espace et la batterie"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Não foi possível verificar espaço e bateria"}},"ru":{"stringUnit":{"state":"translated","value":"Не удалось проверить память и батарею"}}}},
+    "workflow.duration.custom.message" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahmedauer festlegen."}},"en":{"stringUnit":{"state":"translated","value":"Set how long capture remains active."}},"es":{"stringUnit":{"state":"translated","value":"Define cuánto tiempo estará activa la captura."}},"fr":{"stringUnit":{"state":"translated","value":"Définissez la durée de la capture."}},"pt-BR":{"stringUnit":{"state":"translated","value":"Defina por quanto tempo a captura ficará ativa."}},"ru":{"stringUnit":{"state":"translated","value":"Задайте длительность съёмки."}}}},
+    "workflow.duration.session.message" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gesamtzeit für Astro-Aufnahmen festlegen."}},"en":{"stringUnit":{"state":"translated","value":"Set total time for Astro captures."}},"es":{"stringUnit":{"state":"translated","value":"Define el tiempo total para capturas Astro."}},"fr":{"stringUnit":{"state":"translated","value":"Définissez la durée totale des captures Astro."}},"pt-BR":{"stringUnit":{"state":"translated","value":"Defina o tempo total disponível para capturas Astro."}},"ru":{"stringUnit":{"state":"translated","value":"Задайте время астросъёмки."}}}},
+    "workflow.summary.format" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"FORMAT"}},"en":{"stringUnit":{"state":"translated","value":"FORMAT"}},"es":{"stringUnit":{"state":"translated","value":"FORMATO"}},"fr":{"stringUnit":{"state":"translated","value":"FORMAT"}},"pt-BR":{"stringUnit":{"state":"translated","value":"FORMATO"}},"ru":{"stringUnit":{"state":"translated","value":"ФОРМАТ"}}}},
+    "workflow.summary.estimate" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"SCHÄTZUNG"}},"en":{"stringUnit":{"state":"translated","value":"ESTIMATE"}},"es":{"stringUnit":{"state":"translated","value":"ESTIMACIÓN"}},"fr":{"stringUnit":{"state":"translated","value":"ESTIMATION"}},"pt-BR":{"stringUnit":{"state":"translated","value":"ESTIMATIVA"}},"ru":{"stringUnit":{"state":"translated","value":"ОЦЕНКА"}}}},
+    "workflow.adjustment.exposure" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Belichtung"}},"en":{"stringUnit":{"state":"translated","value":"Exposure"}},"es":{"stringUnit":{"state":"translated","value":"Exposición"}},"fr":{"stringUnit":{"state":"translated","value":"Exposition"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Exposição"}},"ru":{"stringUnit":{"state":"translated","value":"Экспозиция"}}}},
+    "workflow.adjustment.interval" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Intervall"}},"en":{"stringUnit":{"state":"translated","value":"Interval"}},"es":{"stringUnit":{"state":"translated","value":"Intervalo"}},"fr":{"stringUnit":{"state":"translated","value":"Intervalle"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Intervalo"}},"ru":{"stringUnit":{"state":"translated","value":"Интервал"}}}},
+    "workflow.adjustment.captures_per_frame" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahmen/Frame"}},"en":{"stringUnit":{"state":"translated","value":"Captures/frame"}},"es":{"stringUnit":{"state":"translated","value":"Capturas/fotograma"}},"fr":{"stringUnit":{"state":"translated","value":"Captures/image"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Capturas/frame"}},"ru":{"stringUnit":{"state":"translated","value":"Снимков/кадр"}}}},
+    "workflow.video.resolution.helper" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Größe der finalen Datei"}},"en":{"stringUnit":{"state":"translated","value":"Final file size"}},"es":{"stringUnit":{"state":"translated","value":"Tamaño del archivo final"}},"fr":{"stringUnit":{"state":"translated","value":"Taille du fichier final"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Tamanho do arquivo final"}},"ru":{"stringUnit":{"state":"translated","value":"Размер итогового файла"}}}},
+    "workflow.video.quality.helper" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"MP4-Komprimierung"}},"en":{"stringUnit":{"state":"translated","value":"MP4 compression"}},"es":{"stringUnit":{"state":"translated","value":"Compresión MP4"}},"fr":{"stringUnit":{"state":"translated","value":"Compression MP4"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Compressão do MP4"}},"ru":{"stringUnit":{"state":"translated","value":"Сжатие MP4"}}}},
+    "workflow.video.quality.standard" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Standard"}},"en":{"stringUnit":{"state":"translated","value":"Standard"}},"es":{"stringUnit":{"state":"translated","value":"Estándar"}},"fr":{"stringUnit":{"state":"translated","value":"Standard"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Padrão"}},"ru":{"stringUnit":{"state":"translated","value":"Стандартное"}}}},
+    "workflow.video.quality.high" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Hoch"}},"en":{"stringUnit":{"state":"translated","value":"High"}},"es":{"stringUnit":{"state":"translated","value":"Alta"}},"fr":{"stringUnit":{"state":"translated","value":"Élevée"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Alta"}},"ru":{"stringUnit":{"state":"translated","value":"Высокое"}}}},
+    "workflow.video.quality.maximum" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Maximal"}},"en":{"stringUnit":{"state":"translated","value":"Maximum"}},"es":{"stringUnit":{"state":"translated","value":"Máxima"}},"fr":{"stringUnit":{"state":"translated","value":"Maximale"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Máxima"}},"ru":{"stringUnit":{"state":"translated","value":"Максимальное"}}}},
+    "workflow.video.resolution.preview" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Vorschau"}},"en":{"stringUnit":{"state":"translated","value":"Preview"}},"es":{"stringUnit":{"state":"translated","value":"Vista previa"}},"fr":{"stringUnit":{"state":"translated","value":"Aperçu"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Prévia"}},"ru":{"stringUnit":{"state":"translated","value":"Предпросмотр"}}}},
+    "workflow.duration" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Dauer"}},"en":{"stringUnit":{"state":"translated","value":"Duration"}},"es":{"stringUnit":{"state":"translated","value":"Duración"}},"fr":{"stringUnit":{"state":"translated","value":"Durée"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Duração"}},"ru":{"stringUnit":{"state":"translated","value":"Длительность"}}}},
+    "workflow.duration.custom" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Benutzerdefinierte Dauer"}},"en":{"stringUnit":{"state":"translated","value":"Custom duration"}},"es":{"stringUnit":{"state":"translated","value":"Duración personalizada"}},"fr":{"stringUnit":{"state":"translated","value":"Durée personnalisée"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Duração personalizada"}},"ru":{"stringUnit":{"state":"translated","value":"Своя длительность"}}}},
+    "workflow.duration.custom.short" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Benutzerdef."}},"en":{"stringUnit":{"state":"translated","value":"Custom"}},"es":{"stringUnit":{"state":"translated","value":"Personal."}},"fr":{"stringUnit":{"state":"translated","value":"Personnalisée"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Personal."}},"ru":{"stringUnit":{"state":"translated","value":"Своя"}}}},
+    "workflow.duration.session" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Sitzungsdauer"}},"en":{"stringUnit":{"state":"translated","value":"Session duration"}},"es":{"stringUnit":{"state":"translated","value":"Duración de la sesión"}},"fr":{"stringUnit":{"state":"translated","value":"Durée de la session"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Duração da sessão"}},"ru":{"stringUnit":{"state":"translated","value":"Длительность сессии"}}}},
+    "workflow.reference.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Referenzbild"}},"en":{"stringUnit":{"state":"translated","value":"Reference image"}},"es":{"stringUnit":{"state":"translated","value":"Imagen de referencia"}},"fr":{"stringUnit":{"state":"translated","value":"Image de référence"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Imagem de referência"}},"ru":{"stringUnit":{"state":"translated","value":"Эталонное изображение"}}}},
+    "workflow.reference.replace" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ersetzen"}},"en":{"stringUnit":{"state":"translated","value":"Replace"}},"es":{"stringUnit":{"state":"translated","value":"Reemplazar"}},"fr":{"stringUnit":{"state":"translated","value":"Remplacer"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Substituir"}},"ru":{"stringUnit":{"state":"translated","value":"Заменить"}}}},
+    "workflow.reference.remove" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Entfernen"}},"en":{"stringUnit":{"state":"translated","value":"Remove"}},"es":{"stringUnit":{"state":"translated","value":"Eliminar"}},"fr":{"stringUnit":{"state":"translated","value":"Supprimer"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Remover"}},"ru":{"stringUnit":{"state":"translated","value":"Удалить"}}}},
+    "workflow.reference.wait" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Bitte warten"}},"en":{"stringUnit":{"state":"translated","value":"Please wait"}},"es":{"stringUnit":{"state":"translated","value":"Espera"}},"fr":{"stringUnit":{"state":"translated","value":"Veuillez patienter"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Aguarde"}},"ru":{"stringUnit":{"state":"translated","value":"Подождите"}}}},
+    "workflow.reference.choose_another" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Andere auswählen"}},"en":{"stringUnit":{"state":"translated","value":"Choose another"}},"es":{"stringUnit":{"state":"translated","value":"Elegir otra"}},"fr":{"stringUnit":{"state":"translated","value":"En choisir une autre"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Escolher outra"}},"ru":{"stringUnit":{"state":"translated","value":"Выбрать другую"}}}},
+    "workflow.action.camera_unavailable" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kamera nicht verfügbar"}},"en":{"stringUnit":{"state":"translated","value":"Camera unavailable"}},"es":{"stringUnit":{"state":"translated","value":"Cámara no disponible"}},"fr":{"stringUnit":{"state":"translated","value":"Appareil photo indisponible"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Câmera indisponível"}},"ru":{"stringUnit":{"state":"translated","value":"Камера недоступна"}}}},
+    "workflow.action.free_space" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Speicherplatz freigeben"}},"en":{"stringUnit":{"state":"translated","value":"Free space to continue"}},"es":{"stringUnit":{"state":"translated","value":"Libera espacio para continuar"}},"fr":{"stringUnit":{"state":"translated","value":"Libérez de l’espace"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Libere espaço para continuar"}},"ru":{"stringUnit":{"state":"translated","value":"Освободите место"}}}},
+    "workflow.action.planning_unavailable" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Planung nicht verfügbar"}},"en":{"stringUnit":{"state":"translated","value":"Planning unavailable"}},"es":{"stringUnit":{"state":"translated","value":"Planificación no disponible"}},"fr":{"stringUnit":{"state":"translated","value":"Planification indisponible"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Planejamento indisponível"}},"ru":{"stringUnit":{"state":"translated","value":"Планирование недоступно"}}}},
+    "workflow.sessions.open" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Vorhandene Sitzungen öffnen"}},"en":{"stringUnit":{"state":"translated","value":"Open existing sessions"}},"es":{"stringUnit":{"state":"translated","value":"Abrir sesiones existentes"}},"fr":{"stringUnit":{"state":"translated","value":"Ouvrir les sessions existantes"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Abrir sessões existentes"}},"ru":{"stringUnit":{"state":"translated","value":"Открыть существующие сессии"}}}},
+    "workflow.camera.unavailable.detail" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Berechtigungen prüfen oder anderes Gerät verwenden"}},"en":{"stringUnit":{"state":"translated","value":"Review permissions or use another device"}},"es":{"stringUnit":{"state":"translated","value":"Revisa los permisos o usa otro dispositivo"}},"fr":{"stringUnit":{"state":"translated","value":"Vérifiez les autorisations ou utilisez un autre appareil"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Revise as permissões ou use outro aparelho"}},"ru":{"stringUnit":{"state":"translated","value":"Проверьте разрешения или используйте другое устройство"}}}},
+    "workflow.camera.in_use" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verwendete Kamera"}},"en":{"stringUnit":{"state":"translated","value":"Camera in use"}},"es":{"stringUnit":{"state":"translated","value":"Cámara en uso"}},"fr":{"stringUnit":{"state":"translated","value":"Appareil utilisé"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Câmera em uso"}},"ru":{"stringUnit":{"state":"translated","value":"Текущая камера"}}}},
+    "workflow.camera.detected" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Erkannte Kameras"}},"en":{"stringUnit":{"state":"translated","value":"Detected cameras"}},"es":{"stringUnit":{"state":"translated","value":"Cámaras detectadas"}},"fr":{"stringUnit":{"state":"translated","value":"Appareils détectés"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Câmeras detectadas"}},"ru":{"stringUnit":{"state":"translated","value":"Обнаруженные камеры"}}}},
+    "common.apply" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Anwenden"}},"en":{"stringUnit":{"state":"translated","value":"Apply"}},"es":{"stringUnit":{"state":"translated","value":"Aplicar"}},"fr":{"stringUnit":{"state":"translated","value":"Appliquer"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Aplicar"}},"ru":{"stringUnit":{"state":"translated","value":"Применить"}}}},
+    "home.module.repeatable" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wiederholbar"}},"en":{"stringUnit":{"state":"translated","value":"Repeatable"}},"es":{"stringUnit":{"state":"translated","value":"Repetible"}},"fr":{"stringUnit":{"state":"translated","value":"Répétable"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Repetível"}},"ru":{"stringUnit":{"state":"translated","value":"Повтор"}}}},
+    "home.module.astro" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Astrofotografie"}},"en":{"stringUnit":{"state":"translated","value":"Astrophotography"}},"es":{"stringUnit":{"state":"translated","value":"Astrofotografía"}},"fr":{"stringUnit":{"state":"translated","value":"Astrophotographie"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Astrofotografia"}},"ru":{"stringUnit":{"state":"translated","value":"Астрофото"}}}},
+    "home.module.edit" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Bearbeiten"}},"en":{"stringUnit":{"state":"translated","value":"Edit"}},"es":{"stringUnit":{"state":"translated","value":"Editar"}},"fr":{"stringUnit":{"state":"translated","value":"Modifier"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Editar"}},"ru":{"stringUnit":{"state":"translated","value":"Монтаж"}}}},
+    "workflow.tab.configure" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Konfigurieren"}},"en":{"stringUnit":{"state":"translated","value":"Configure"}},"es":{"stringUnit":{"state":"translated","value":"Configurar"}},"fr":{"stringUnit":{"state":"translated","value":"Configurer"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Configurar"}},"ru":{"stringUnit":{"state":"translated","value":"Настройки"}}}},
+    "workflow.tab.captures" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahmen"}},"en":{"stringUnit":{"state":"translated","value":"Captures"}},"es":{"stringUnit":{"state":"translated","value":"Capturas"}},"fr":{"stringUnit":{"state":"translated","value":"Captures"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Capturas"}},"ru":{"stringUnit":{"state":"translated","value":"Съёмки"}}}},
+    "workflow.mode.video" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Video"}},"en":{"stringUnit":{"state":"translated","value":"Video"}},"es":{"stringUnit":{"state":"translated","value":"Vídeo"}},"fr":{"stringUnit":{"state":"translated","value":"Vidéo"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Vídeo"}},"ru":{"stringUnit":{"state":"translated","value":"Видео"}}}},
+    "workflow.mode.timelapse" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Zeitraffer"}},"en":{"stringUnit":{"state":"translated","value":"Timelapse"}},"es":{"stringUnit":{"state":"translated","value":"Timelapse"}},"fr":{"stringUnit":{"state":"translated","value":"Timelapse"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Timelapse"}},"ru":{"stringUnit":{"state":"translated","value":"Таймлапс"}}}},
+    "workflow.mode.automatic" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatisch"}},"en":{"stringUnit":{"state":"translated","value":"Automatic"}},"es":{"stringUnit":{"state":"translated","value":"Automático"}},"fr":{"stringUnit":{"state":"translated","value":"Automatique"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Automática"}},"ru":{"stringUnit":{"state":"translated","value":"Авто"}}}},
+    "workflow.mode.manual" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Manuell"}},"en":{"stringUnit":{"state":"translated","value":"Manual"}},"es":{"stringUnit":{"state":"translated","value":"Manual"}},"fr":{"stringUnit":{"state":"translated","value":"Manuel"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Manual"}},"ru":{"stringUnit":{"state":"translated","value":"Вручную"}}}},
+    "workflow.title.new_astro" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Neue Astrofotografie"}},"en":{"stringUnit":{"state":"translated","value":"New astrophotography"}},"es":{"stringUnit":{"state":"translated","value":"Nueva astrofotografía"}},"fr":{"stringUnit":{"state":"translated","value":"Nouvelle astrophotographie"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Nova astrofotografia"}},"ru":{"stringUnit":{"state":"translated","value":"Новая астрофотография"}}}},
+    "workflow.title.new_video" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Neues Video"}},"en":{"stringUnit":{"state":"translated","value":"New video"}},"es":{"stringUnit":{"state":"translated","value":"Nuevo vídeo"}},"fr":{"stringUnit":{"state":"translated","value":"Nouvelle vidéo"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Novo vídeo"}},"ru":{"stringUnit":{"state":"translated","value":"Новое видео"}}}},
+    "workflow.title.new_timelapse" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Neuer Zeitraffer"}},"en":{"stringUnit":{"state":"translated","value":"New timelapse"}},"es":{"stringUnit":{"state":"translated","value":"Nuevo timelapse"}},"fr":{"stringUnit":{"state":"translated","value":"Nouveau timelapse"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Novo timelapse"}},"ru":{"stringUnit":{"state":"translated","value":"Новый таймлапс"}}}},
+    "workflow.section.capture" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"AUFNAHME"}},"en":{"stringUnit":{"state":"translated","value":"CAPTURE"}},"es":{"stringUnit":{"state":"translated","value":"CAPTURA"}},"fr":{"stringUnit":{"state":"translated","value":"CAPTURE"}},"pt-BR":{"stringUnit":{"state":"translated","value":"CAPTURA"}},"ru":{"stringUnit":{"state":"translated","value":"СЪЁМКА"}}}},
+    "workflow.section.session" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"SITZUNG"}},"en":{"stringUnit":{"state":"translated","value":"SESSION"}},"es":{"stringUnit":{"state":"translated","value":"SESIÓN"}},"fr":{"stringUnit":{"state":"translated","value":"SESSION"}},"pt-BR":{"stringUnit":{"state":"translated","value":"SESSÃO"}},"ru":{"stringUnit":{"state":"translated","value":"СЕССИЯ"}}}},
+    "workflow.section.adjustments" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"EINSTELLUNGEN"}},"en":{"stringUnit":{"state":"translated","value":"ADJUSTMENTS"}},"es":{"stringUnit":{"state":"translated","value":"AJUSTES"}},"fr":{"stringUnit":{"state":"translated","value":"RÉGLAGES"}},"pt-BR":{"stringUnit":{"state":"translated","value":"AJUSTES"}},"ru":{"stringUnit":{"state":"translated","value":"ПАРАМЕТРЫ"}}}},
+    "workflow.section.astro_capture" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"ASTRO-AUFNAHME"}},"en":{"stringUnit":{"state":"translated","value":"ASTRO CAPTURE"}},"es":{"stringUnit":{"state":"translated","value":"CAPTURA ASTRO"}},"fr":{"stringUnit":{"state":"translated","value":"CAPTURE ASTRO"}},"pt-BR":{"stringUnit":{"state":"translated","value":"CAPTURA ASTRO"}},"ru":{"stringUnit":{"state":"translated","value":"АСТРОСЪЁМКА"}}}},
+    "workflow.section.video" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"VIDEO"}},"en":{"stringUnit":{"state":"translated","value":"VIDEO"}},"es":{"stringUnit":{"state":"translated","value":"VÍDEO"}},"fr":{"stringUnit":{"state":"translated","value":"VIDÉO"}},"pt-BR":{"stringUnit":{"state":"translated","value":"VÍDEO"}},"ru":{"stringUnit":{"state":"translated","value":"ВИДЕО"}}}},
+    "workflow.section.camera" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"KAMERA"}},"en":{"stringUnit":{"state":"translated","value":"CAMERA"}},"es":{"stringUnit":{"state":"translated","value":"CÁMARA"}},"fr":{"stringUnit":{"state":"translated","value":"APPAREIL PHOTO"}},"pt-BR":{"stringUnit":{"state":"translated","value":"CÂMERA"}},"ru":{"stringUnit":{"state":"translated","value":"КАМЕРА"}}}},
+    "workflow.section.planning" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"PLANUNG"}},"en":{"stringUnit":{"state":"translated","value":"PLANNING"}},"es":{"stringUnit":{"state":"translated","value":"PLANIFICACIÓN"}},"fr":{"stringUnit":{"state":"translated","value":"PLANIFICATION"}},"pt-BR":{"stringUnit":{"state":"translated","value":"PLANEJAMENTO"}},"ru":{"stringUnit":{"state":"translated","value":"ПЛАНИРОВАНИЕ"}}}},
+    "workflow.reference.take_photo" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Foto aufnehmen"}},"en":{"stringUnit":{"state":"translated","value":"Take photo"}},"es":{"stringUnit":{"state":"translated","value":"Tomar foto"}},"fr":{"stringUnit":{"state":"translated","value":"Prendre une photo"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Tirar foto"}},"ru":{"stringUnit":{"state":"translated","value":"Снять фото"}}}},
+    "workflow.reference.import" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Importieren"}},"en":{"stringUnit":{"state":"translated","value":"Import"}},"es":{"stringUnit":{"state":"translated","value":"Importar"}},"fr":{"stringUnit":{"state":"translated","value":"Importer"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Importar"}},"ru":{"stringUnit":{"state":"translated","value":"Импорт"}}}},
+    "workflow.action.open_camera" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kamera öffnen"}},"en":{"stringUnit":{"state":"translated","value":"Open camera"}},"es":{"stringUnit":{"state":"translated","value":"Abrir cámara"}},"fr":{"stringUnit":{"state":"translated","value":"Ouvrir l’appareil photo"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Abrir câmera"}},"ru":{"stringUnit":{"state":"translated","value":"Открыть камеру"}}}},
+    "workflow.camera.unavailable.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine kompatible Kamera"}},"en":{"stringUnit":{"state":"translated","value":"No compatible camera"}},"es":{"stringUnit":{"state":"translated","value":"No hay cámara compatible"}},"fr":{"stringUnit":{"state":"translated","value":"Aucun appareil compatible"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Nenhuma câmera compatível"}},"ru":{"stringUnit":{"state":"translated","value":"Нет совместимой камеры"}}}},
+    "workflow.video.resolution" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Auflösung"}},"en":{"stringUnit":{"state":"translated","value":"Resolution"}},"es":{"stringUnit":{"state":"translated","value":"Resolución"}},"fr":{"stringUnit":{"state":"translated","value":"Résolution"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Resolução"}},"ru":{"stringUnit":{"state":"translated","value":"Разрешение"}}}},
+    "workflow.video.quality" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Qualität"}},"en":{"stringUnit":{"state":"translated","value":"Quality"}},"es":{"stringUnit":{"state":"translated","value":"Calidad"}},"fr":{"stringUnit":{"state":"translated","value":"Qualité"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Qualidade"}},"ru":{"stringUnit":{"state":"translated","value":"Качество"}}}},
+    "common.cancel" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abbrechen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cancel" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Cancelar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Annuler" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Cancelar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Отмена" } }
+      }
+    },
+    "common.error" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fehler" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Error" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Error" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Erreur" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Erro" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Ошибка" } }
+      }
+    },
+    "common.ok" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "OK" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "ОК" } }
+      }
+    },
+    "home.module.open" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ öffnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Abrir %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ouvrir %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Abrir %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыть %@" } }
+      }
+    },
+    "home.projects.count" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekte: %lld" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Projects: %lld" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Proyectos: %lld" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Projets : %lld" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Projetos: %lld" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проекты: %lld" } }
+      }
+    },
+    "project.archive" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Archivieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Archive" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Archivar" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Archiver" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Arquivar" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В архив" } }
+      }
+    },
+    "project.create" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekt erstellen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Crear proyecto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créer le projet" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Criar projeto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создать проект" } }
+      }
+    },
+    "project.empty.action" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Starten Sie Ihr erstes Projekt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start your first project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Crea tu primer proyecto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créez votre premier projet" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Comece seu primeiro projeto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создайте свой первый проект" } }
+      }
+    },
+    "project.empty.all" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch keine Projekte" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No projects yet" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún no hay proyectos" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun projet pour le moment" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nenhum projeto ainda" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Проектов пока нет" } }
+      }
+    },
+    "project.empty.filter" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Keine Projekte in diesem Filter" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No projects in this filter" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No hay proyectos en este filtro" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun projet avec ce filtre" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nenhum projeto neste filtro" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Нет проектов для этого фильтра" } }
+      }
+    },
+    "project.filter" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekte filtern" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Filter projects" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Filtrar proyectos" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Filtrer les projets" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Filtrar projetos" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Фильтр проектов" } }
+      }
+    },
+    "project.filter.completed" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abgeschlossen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Completed" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Finalizados" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Terminés" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Concluídos" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Завершённые" } }
+      }
+    },
+    "project.filter.in_progress" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "In Bearbeitung" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "In progress" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "En curso" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "En cours" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Em andamento" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В процессе" } }
+      }
+    },
+    "project.filter.recent" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zuletzt verwendet" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recent" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Recientes" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Récents" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Recentes" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Недавние" } }
+      }
+    },
+    "project.last_opened" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "ZULETZT GEÖFFNET" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "LAST OPENED" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "ÚLTIMO ABIERTO" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "DERNIÈRE OUVERTURE" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "ÚLTIMO ABERTO" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "ПОСЛЕДНИЙ ОТКРЫТЫЙ" } }
+      }
+    },
+    "project.last_opened.named" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Zuletzt geöffnetes Projekt: %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Last opened project, %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Último proyecto abierto, %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Dernier projet ouvert, %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Último projeto aberto, %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Последний открытый проект: %@" } }
+      }
+    },
+    "project.name" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projektname" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Project name" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nombre del proyecto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nom du projet" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nome do projeto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Название проекта" } }
+      }
+    },
+    "project.new" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Projekt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo proyecto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau projet" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Novo projeto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый проект" } }
+      }
+    },
+    "project.new.astro.message" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Organisieren Sie eine Nachtsitzung und verarbeiten Sie Ihre Bilder in einem einzigen Projekt." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Organize a night session and process your images in a single project." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Organiza una sesión nocturna y procesa tus imágenes en un único proyecto." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Organisez une session nocturne et traitez vos images dans un seul projet." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Organize uma sessão noturna e processe suas imagens em um único projeto." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Организуйте ночную съёмку и обработайте изображения в одном проекте." } }
+      }
+    },
+    "project.new.astro.title" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Astro-Projekt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Astro project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo proyecto Astro" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau projet Astro" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Novo projeto Astro" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый проект Astro" } }
+      }
+    },
+    "project.new.capture_details" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Aufnahmedetails können Sie im nächsten Bildschirm ändern." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "You can change the capture details on the next screen." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Podrás cambiar los detalles de captura en la siguiente pantalla." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Vous pourrez modifier les détails de capture à l’écran suivant." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Você poderá alterar os detalhes de captura na próxima tela." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Параметры съёмки можно изменить на следующем экране." } }
+      }
+    },
+    "project.new.default_name" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verwendet wird: %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Will be used: %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Se usará: %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nom utilisé : %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Será usado: %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Будет использовано: %@" } }
+      }
+    },
+    "project.new.edit.message" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kombinieren und richten Sie die in Camerae erstellten Videos aus." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Combine and align videos created in Camerae." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Combina y alinea los vídeos creados en Camerae." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Combinez et alignez les vidéos créées dans Camerae." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Combine e alinhe os vídeos produzidos no Camerae." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Объединяйте и выравнивайте видео, созданные в Camerae." } }
+      }
+    },
+    "project.new.edit.title" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neue Montage" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New edit" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo montaje" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau montage" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nova montagem" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый монтаж" } }
+      }
+    },
+    "project.new.module" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues %@-Projekt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New %@ project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo proyecto %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau projet %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Novo projeto %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый проект %@" } }
+      }
+    },
+    "project.new.repeatable.message" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Erstellen Sie einen Bereich, um denselben Bildausschnitt im Laufe der Zeit zu wiederholen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Create a space to repeat the same framing over time." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Crea un espacio para repetir el mismo encuadre a lo largo del tiempo." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créez un espace pour reproduire le même cadrage au fil du temps." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Crie um espaço para repetir o mesmo enquadramento ao longo do tempo." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создайте проект, чтобы повторять один и тот же кадр с течением времени." } }
+      }
+    },
+    "project.new.repeatable.title" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neues Repeatable-Projekt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New Repeatable project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nuevo proyecto Repeatable" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouveau projet Repeatable" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Novo projeto Repeatable" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новый проект Repeatable" } }
+      }
+    },
+    "project.created_at" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Erstellt %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Created %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Creado %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Créé %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Criado %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Создан %@" } }
+      }
+    },
+    "project.detail.capture" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aufnahmen: %lld · Frames: %lld" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Captures: %lld · Frames: %lld" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Capturas: %lld · Fotogramas: %lld" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Captures : %lld · Images : %lld" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Capturas: %lld · Frames: %lld" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Съёмки: %lld · Кадры: %lld" } }
+      }
+    },
+    "project.detail.edit" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Clips: %lld" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clips: %lld" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Clips: %lld" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Clips : %lld" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Clipes: %lld" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Клипы: %lld" } }
+      }
+    },
+    "project.opened_at" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Geöffnet %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Opened %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Abierto %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ouvert %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Aberto %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыт %@" } }
+      }
+    },
+    "project.open" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekt %@ öffnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Open project %@" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Abrir proyecto %@" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Ouvrir le projet %@" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Abrir projeto %@" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Открыть проект %@" } }
+      }
+    },
+    "project.remove" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Projekt entfernen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Remove project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Eliminar proyecto" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Supprimer le projet" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Remover projeto" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Удалить проект" } }
+      }
+    },
+    "project.section" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "PROJEKTE" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "PROJECTS" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "PROYECTOS" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "PROJETS" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "PROJETOS" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "ПРОЕКТЫ" } }
+      }
+    },
+    "project.status.completed" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "ABGESCHLOSSEN" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "COMPLETED" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "FINALIZADO" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "TERMINÉ" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "CONCLUÍDO" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "ЗАВЕРШЁН" } }
+      }
+    },
+    "project.status.in_progress" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "IN BEARBEITUNG" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "IN PROGRESS" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "EN CURSO" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "EN COURS" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "EM ANDAMENTO" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "В ПРОЦЕССЕ" } }
+      }
+    },
+    "project.temporary.empty.message" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Es wurde keine Aufnahme erstellt. Dieses temporäre Projekt wird entfernt, damit Ihre Liste übersichtlich bleibt." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No capture was created. This temporary project will be removed to keep your list organized." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "No se creó ninguna captura. Este proyecto temporal se eliminará para mantener organizada tu lista." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucune capture n’a été créée. Ce projet temporaire sera supprimé pour garder votre liste organisée." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nenhuma captura foi criada. Este projeto temporário será removido para manter sua lista organizada." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снимки не были созданы. Временный проект будет удалён, чтобы не загромождать список." } }
+      }
+    },
+    "project.temporary.empty.title" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Leeres temporäres Projekt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Empty temporary project" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Proyecto temporal vacío" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Projet temporaire vide" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Projeto temporário vazio" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Пустой временный проект" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

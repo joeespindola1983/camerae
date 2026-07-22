@@ -16,7 +16,7 @@ enum WorkflowVideoResolution: String, CaseIterable, Identifiable, Codable, Hasha
         case .fourK:
             return "4K"
         case .preview:
-            return "Preview"
+            return CameraeL10n.preview
         }
     }
 
@@ -42,11 +42,11 @@ enum WorkflowVideoQuality: String, CaseIterable, Identifiable, Codable, Hashable
     var label: String {
         switch self {
         case .standard:
-            return "Padrao"
+            return CameraeL10n.qualityStandard
         case .high:
-            return "Alta"
+            return CameraeL10n.qualityHigh
         case .max:
-            return "Max"
+            return CameraeL10n.qualityMaximum
         }
     }
 

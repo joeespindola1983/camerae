@@ -469,18 +469,21 @@ struct ProjectRowSummary {
 
     var subtitle: String {
         if let lastOpenedAt = project.lastOpenedAt {
-            return "Aberto \(lastOpenedAt.formatted(date: .abbreviated, time: .shortened))"
+            return CameraeL10n.openedAt(lastOpenedAt.formatted(date: .abbreviated, time: .shortened))
         }
 
-        return "Criado \(project.createdAt.formatted(date: .abbreviated, time: .shortened))"
+        return CameraeL10n.createdAt(project.createdAt.formatted(date: .abbreviated, time: .shortened))
     }
 
     var detail: String? {
         guard let summary = project.summary else { return nil }
         if project.module == .edit {
-            return "\(summary.mediaCount) clips" + storageSuffix(summary.totalKnownBytes)
+            return CameraeL10n.editProjectDetail(clipCount: summary.mediaCount) + storageSuffix(summary.totalKnownBytes)
         }
-        return "\(summary.sessionCount) capturas · \(summary.mediaCount) frames" + storageSuffix(summary.totalKnownBytes)
+        return CameraeL10n.captureProjectDetail(
+            sessionCount: summary.sessionCount,
+            frameCount: summary.mediaCount
+        ) + storageSuffix(summary.totalKnownBytes)
     }
 
     private func storageSuffix(_ bytes: UInt64?) -> String {

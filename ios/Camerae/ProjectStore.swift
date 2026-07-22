@@ -9,11 +9,7 @@ enum CameraModule: String, CaseIterable, Identifiable, Codable, Hashable {
     var id: String { rawValue }
 
     var title: String {
-        switch self {
-        case .astrophotography: return "Astrophotography"
-        case .repeatable: return "Repeatable"
-        case .edit: return "Edit"
-        }
+        CameraeL10n.moduleTitle(self)
     }
 
     var subtitle: String {

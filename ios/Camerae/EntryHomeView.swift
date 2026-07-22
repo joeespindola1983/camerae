@@ -58,8 +58,9 @@ struct EntryHomeView: View {
             )
         }
         .buttonStyle(EntryCardButtonStyle())
-        .accessibilityLabel("Abrir \(module.title)")
-        .accessibilityValue("\(projectStore.projects(for: module).count) projetos")
+        .accessibilityLabel(CameraeL10n.openModule(module.title))
+        .accessibilityValue(CameraeL10n.projectCount(projectStore.projects(for: module).count))
+        .accessibilityIdentifier(CameraeAccessibility.openModule(module))
     }
 }
 
