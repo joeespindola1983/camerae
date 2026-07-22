@@ -80,6 +80,7 @@ print_plan() {
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
   echo "tests: architecture, Swift, Camerae Processing, Camerae Vision"
+  echo "visual evidence: principal SwiftUI screens captured and archived under docs/ui-evidence"
   echo "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
   echo "build: unsigned device build before signed archive"
 }
@@ -172,6 +173,9 @@ step "Run Swift component and integration tests"
   -derivedDataPath "$ROOT_DIR/.build/release-gate-tests" \
   CODE_SIGNING_ALLOWED=NO \
   test)
+
+step "Generate simulator UI evidence"
+(cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --destination "$TEST_DESTINATION" --archive-tracked)
 
 step "Run C++ Camerae Processing and Camerae Vision tests"
 cmake -S "$ROOT_DIR/processing" -B "$ROOT_DIR/.build/release-gate-processing" -DBUILD_TESTING=ON

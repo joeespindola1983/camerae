@@ -50,6 +50,14 @@ struct CameraeNextProjectCatalogTests {
         #expect(!CameraeNextTemporaryProjectPolicy.shouldOfferRemoval(hasCapturedMedia: true))
     }
 
+    @Test("project catalogs keep the design-system screen inset in both workflows")
+    func sharedScreenInset() {
+        #expect(CameraeNextProjectCatalogLayout(module: .repeatable).horizontalContentInset == 16)
+        #expect(CameraeNextProjectCatalogLayout(module: .astrophotography).horizontalContentInset == 16)
+        #expect(CameraeNextProjectCatalogLayout(module: .repeatable).contentWidth(containerWidth: 393) == 361)
+        #expect(CameraeNextProjectCatalogLayout(module: .astrophotography).contentWidth(containerWidth: 393) == 361)
+    }
+
     private func makeProject(
         name: String,
         module: CameraModule,

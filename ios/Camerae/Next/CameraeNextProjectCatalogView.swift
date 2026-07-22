@@ -62,6 +62,21 @@ enum CameraeNextTemporaryProjectPolicy {
     }
 }
 
+struct CameraeNextProjectCatalogLayout: Equatable {
+    let horizontalContentInset: CGFloat
+
+    init(module: CameraModule) {
+        switch module {
+        case .repeatable, .astrophotography, .edit:
+            horizontalContentInset = 16
+        }
+    }
+
+    func contentWidth(containerWidth: CGFloat) -> CGFloat {
+        max(0, containerWidth - (horizontalContentInset * 2))
+    }
+}
+
 struct CameraeNextProjectCatalogView: View {
     @EnvironmentObject private var projectStore: ProjectStore
 
@@ -76,6 +91,7 @@ struct CameraeNextProjectCatalogView: View {
     @State private var emptyProjectToRemove: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
+    private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
     private var catalog: CameraeNextProjectCatalogModel {
         .init(projects: projectStore.projects, module: module, filter: filter)
     }
@@ -122,10 +138,12 @@ struct CameraeNextProjectCatalogView: View {
                     .frame(height: 28)
                     .padding(.top, 20)
 
-                    filterBar.padding(.top, 4)
+                    filterBar
+                        .padding(.top, 4)
 
                     if catalog.remainingProjects.isEmpty {
-                        emptyFilteredState.padding(.top, 26)
+                        emptyFilteredState
+                            .padding(.top, 26)
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(catalog.remainingProjects) { project in
@@ -153,8 +171,8 @@ struct CameraeNextProjectCatalogView: View {
                         .padding(.top, 28)
                         .padding(.bottom, 18)
                 }
-                .padding(.horizontal, 16)
             }
+            .frame(width: layout.contentWidth(containerWidth: UIScreen.main.bounds.width))
             .scrollIndicators(.hidden)
         }
         .navigationBarTitleDisplayMode(.inline)
@@ -221,18 +239,17 @@ struct CameraeNextProjectCatalogView: View {
     }
 
     private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
-                    Button(option.title) { filter = option }
-                        .font(.custom("Outfit-Regular", size: 10, relativeTo: .caption2))
-                        .foregroundStyle(filter == option ? .white : theme.text)
-                        .padding(.horizontal, 12)
-                        .frame(height: 30)
-                        .background(filter == option ? theme.accent : theme.surface, in: Capsule())
-                }
+        HStack(spacing: 8) {
+            ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
+                Button(option.title) { filter = option }
+                    .font(.custom("Outfit-Regular", size: 10, relativeTo: .caption2))
+                    .foregroundStyle(filter == option ? .white : theme.text)
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background(filter == option ? theme.accent : theme.surface, in: Capsule())
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyFilteredState: some View {

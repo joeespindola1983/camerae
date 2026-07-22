@@ -20,6 +20,7 @@ expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
 expect_contains "$check_plan" "tests: architecture, Swift, Camerae Processing, Camerae Vision"
+expect_contains "$check_plan" "visual evidence: principal SwiftUI screens captured and archived under docs/ui-evidence"
 expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
 
 firebase_plan="$($SCRIPT firebase --plan --publish)"
@@ -68,5 +69,21 @@ if ! rg -q 'CameraeVisionTests' "$IOS_DIR/project.yml"; then
   echo "Camerae scheme must include the CameraeVision bridge tests" >&2
   exit 1
 fi
+if ! rg -q 'generate-ui-evidence\.sh' "$SCRIPT"; then
+  echo "Release gate must generate simulator UI evidence" >&2
+  exit 1
+fi
+if ! rg -q -- '--archive-tracked' "$SCRIPT"; then
+  echo "Release gate must archive UI evidence in the tracked gallery" >&2
+  exit 1
+fi
+
+evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --plan)"
+expect_contains "$evidence_plan" "scheme: CameraeUI"
+expect_contains "$evidence_plan" "test: CameraeUIEvidenceTests/testGenerateReleaseEvidence"
+expect_contains "$evidence_plan" "artifacts: PNG, manifest.json, index.html"
+
+tracked_evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --archive-tracked --plan)"
+expect_contains "$tracked_evidence_plan" "tracked gallery:"
 
 echo "Release gate contract tests passed"
