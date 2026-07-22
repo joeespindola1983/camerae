@@ -149,7 +149,8 @@ echo "Source: $branch @ $(git rev-parse --short HEAD), Camerae $version ($build)
 step "Validate local signing"
 identities="$(security find-identity -v -p codesigning 2>/dev/null || true)"
 if [[ "$MODE" == "appstore" ]]; then
-  [[ "$identities" == *"Apple Distribution"* ]] || fail "no valid Apple Distribution identity exists in the local keychain"
+  [[ "$identities" == *"Apple Distribution"* || "$identities" == *"iPhone Distribution"* ]] \
+    || fail "no valid Apple Distribution or iPhone Distribution identity exists in the local keychain"
 elif [[ "$MODE" == "firebase" ]]; then
   if [[ "$identities" != *"Apple Development"* && "$identities" != *"Apple Distribution"* ]]; then
     fail "no valid Apple signing identity exists in the local keychain"

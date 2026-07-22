@@ -87,6 +87,10 @@ if ! rg -q 'ITSAppUsesNonExemptEncryption: false' "$IOS_DIR/project.yml"; then
   echo "The App Store build must declare that it uses no non-exempt encryption" >&2
   exit 1
 fi
+if ! rg -q 'Apple Distribution.*iPhone Distribution' "$SCRIPT"; then
+  echo "The App Store gate must accept modern and legacy Apple distribution identities" >&2
+  exit 1
+fi
 
 evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --plan)"
 expect_contains "$evidence_plan" "scheme: CameraeUI"
