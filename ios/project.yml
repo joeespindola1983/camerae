@@ -96,6 +96,11 @@ targets:
         NSLocationWhenInUseUsageDescription: Camerae usa sua posicao para ajudar a repetir o enquadramento no mesmo local.
         NSLocationTemporaryUsageDescriptionDictionary:
           RepeatableAlignment: Camerae usa localizacao precisa para alinhar capturas repetidas no mesmo ponto.
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
         UIRequiredDeviceCapabilities:
           - arm64
     settings:

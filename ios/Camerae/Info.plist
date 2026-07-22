@@ -31,6 +31,13 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Camerae usa sua posicao para ajudar a repetir o enquadramento no mesmo local.</string>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+		<string>UIInterfaceOrientationPortraitUpsideDown</string>
+		<string>UIInterfaceOrientationLandscapeLeft</string>
+		<string>UIInterfaceOrientationLandscapeRight</string>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Outfit-Variable.ttf</string>

@@ -91,6 +91,10 @@ if ! rg -q 'Apple Distribution.*iPhone Distribution' "$SCRIPT"; then
   echo "The App Store gate must accept modern and legacy Apple distribution identities" >&2
   exit 1
 fi
+if [[ "$(rg -c 'UIInterfaceOrientation(LandscapeLeft|LandscapeRight|Portrait|PortraitUpsideDown)' "$IOS_DIR/project.yml")" -lt 4 ]]; then
+  echo "The App Store bundle must declare all iPad multitasking orientations" >&2
+  exit 1
+fi
 
 evidence_plan="$($IOS_DIR/scripts/generate-ui-evidence.sh --plan)"
 expect_contains "$evidence_plan" "scheme: CameraeUI"
