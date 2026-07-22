@@ -28,6 +28,7 @@ struct CameraView: View {
     @State private var isGridVisible = true
     @State private var selectedGridStyle = CameraeNextGridPreference.current()
     @State private var isShowingGridPicker = false
+    @State private var captureDisplaySize = CGSize.zero
 
     init(
         project: CameraProject,
@@ -89,7 +90,11 @@ struct CameraView: View {
         }
         .toolbar(capturePhase == .capture ? .hidden : .visible, for: .navigationBar)
         .onAppear {
-            AppOrientationLock.shared.restorePortrait()
+            if capturePhase == .capture {
+                AppOrientationLock.shared.unlock()
+            } else {
+                AppOrientationLock.shared.restorePortrait()
+            }
         }
         .onDisappear {
             camera.stop()
@@ -122,6 +127,7 @@ struct CameraView: View {
         }
         .onChange(of: camera.completedSession) { _, session in
             guard let session else { return }
+            AppOrientationLock.shared.restorePortrait()
             if let onCompletedSession {
                 onCompletedSession(session)
             } else {
@@ -231,6 +237,8 @@ struct CameraView: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
+                .onAppear { captureDisplaySize = proxy.size }
+                .onChange(of: proxy.size) { _, size in captureDisplaySize = size }
             }
 
             if isExportingOriginalFrames {
@@ -362,20 +370,7 @@ struct CameraView: View {
             AstroBatchPreview(url: camera.astroPreviewURL)
 
             Button {
-                Task {
-                    guard let plan = planning.result?.resolvedPlan else { return }
-                    if let preflight = planning.result {
-                        camera.configureCapturePreflight(preflight)
-                    }
-                    camera.setCaptureSourceFormat(plan.sourceFormat)
-                    await camera.toggleAstroBatchCapture(
-                        timelapseInterval: timelapseIntervalSeconds,
-                        astroInterval: astroIntervalSeconds,
-                        batchSize: Int(astroBatchSize),
-                        usesAutomaticExposure: usesAutomaticAstroExposure,
-                        plan: plan
-                    )
-                }
+                Task { await toggleAstroCapture() }
             } label: {
                 Label(
                     camera.isTimelapseRunning ? "Parar" : "Iniciar lotes astro",
@@ -418,24 +413,36 @@ struct CameraView: View {
             isActionDisabled: !camera.isTimelapseRunning && !canStartCapture,
             showsLandscapePreview: presentation.showsLandscapePreview,
             action: {
-                Task {
-                    guard let plan = planning.result?.resolvedPlan else { return }
-                    if let preflight = planning.result {
-                        camera.configureCapturePreflight(preflight)
-                    }
-                    camera.setCaptureSourceFormat(plan.sourceFormat)
-                    await camera.toggleAstroBatchCapture(
-                        timelapseInterval: timelapseIntervalSeconds,
-                        astroInterval: astroIntervalSeconds,
-                        batchSize: Int(astroBatchSize),
-                        usesAutomaticExposure: usesAutomaticAstroExposure,
-                        plan: plan
-                    )
-                }
+                Task { await toggleAstroCapture() }
             }
         ) {
             AstroBatchPreview(url: camera.astroPreviewURL)
         }
+    }
+
+    @MainActor
+    private func toggleAstroCapture() async {
+        guard let plan = planning.result?.resolvedPlan else { return }
+        let captureOrientation = CaptureDisplayOrientation.activeInterfaceOrientation(
+            fallbackDisplaySize: captureDisplaySize
+        )
+        camera.setPendingReferenceOrientation(captureOrientation)
+        AppOrientationLock.shared.lock(to: captureOrientation)
+        CameraeCaptureDiagnostics.event(
+            "A20 capture.orientation.locked",
+            "orientation=\(captureOrientation.rawValue) size=\(captureDisplaySize.debugDescription)"
+        )
+        if let preflight = planning.result {
+            camera.configureCapturePreflight(preflight)
+        }
+        camera.setCaptureSourceFormat(plan.sourceFormat)
+        await camera.toggleAstroBatchCapture(
+            timelapseInterval: timelapseIntervalSeconds,
+            astroInterval: astroIntervalSeconds,
+            batchSize: Int(astroBatchSize),
+            usesAutomaticExposure: usesAutomaticAstroExposure,
+            plan: plan
+        )
     }
 
     private var plannedDuration: TimeInterval {

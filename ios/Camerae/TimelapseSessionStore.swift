@@ -871,7 +871,16 @@ final class TimelapseSessionStore {
     ) async throws -> URL {
         let frames = frameURLs(in: session)
         let outputURL = videoURL(for: session)
-        try await TimelapseVideoRenderer().render(frames: frames, outputURL: outputURL, settings: settings)
+        CameraeCaptureDiagnostics.event(
+            "V20 timelapse.render.orientation",
+            "session=\(session.id.uuidString) orientation=\(session.referenceOrientation?.rawValue ?? "exif") frames=\(frames.count)"
+        )
+        try await TimelapseVideoRenderer().render(
+            frames: frames,
+            outputURL: outputURL,
+            settings: settings,
+            captureOrientation: session.referenceOrientation
+        )
         return outputURL
     }
 
@@ -1119,6 +1128,32 @@ enum CaptureDisplayOrientation: String, Codable, Equatable, Hashable {
             return 180
         case .landscapeRight:
             return 0
+        }
+    }
+
+    init(displaySize: CGSize) {
+        self = displaySize.width > displaySize.height ? .landscapeRight : .portrait
+    }
+
+    @MainActor
+    static func activeInterfaceOrientation(fallbackDisplaySize: CGSize) -> Self {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        let interfaceOrientation = scenes.first { $0.activationState == .foregroundActive }?.interfaceOrientation
+            ?? scenes.first?.interfaceOrientation
+
+        switch interfaceOrientation {
+        case .portrait:
+            return .portrait
+        case .portraitUpsideDown:
+            return .portraitUpsideDown
+        case .landscapeLeft:
+            return .landscapeLeft
+        case .landscapeRight:
+            return .landscapeRight
+        case .unknown, .none:
+            return Self(displaySize: fallbackDisplaySize)
+        @unknown default:
+            return Self(displaySize: fallbackDisplaySize)
         }
     }
 }

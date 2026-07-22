@@ -153,7 +153,7 @@ struct RepeatableCameraView: View {
         .onChange(of: camera.completedSession) {
             loadReference()
             if camera.completedSession != nil {
-                AppOrientationLock.shared.unlock()
+                AppOrientationLock.shared.restorePortrait()
                 onCompletedTimelapse()
             }
         }
@@ -581,7 +581,7 @@ struct RepeatableCameraView: View {
     private var nextCaptureBackButton: some View {
         Button {
             guard !isCaptureActive else { return }
-            AppOrientationLock.shared.unlock()
+            AppOrientationLock.shared.restorePortrait()
             onClose()
         } label: {
             Image(systemName: "chevron.left")
@@ -1329,7 +1329,16 @@ struct RepeatableCameraView: View {
     }
 
     private func performPrimaryCaptureAction() async {
-        camera.setPendingReferenceOrientation(currentAlignmentOrientation)
+        let captureOrientation = CaptureDisplayOrientation.activeInterfaceOrientation(
+            fallbackDisplaySize: alignmentDisplaySize
+        )
+        currentAlignmentOrientation = captureOrientation
+        camera.setPendingReferenceOrientation(captureOrientation)
+        AppOrientationLock.shared.lock(to: captureOrientation)
+        CameraeCaptureDiagnostics.event(
+            "R20 capture.orientation.locked",
+            "orientation=\(captureOrientation.rawValue) size=\(alignmentDisplaySize.debugDescription)"
+        )
         switch selectedCaptureKind {
         case .timelapse:
             guard let plan = planning.result?.resolvedPlan else { return }
@@ -2007,10 +2016,6 @@ private struct VisualRotationHUD: View {
 }
 
 private extension CaptureDisplayOrientation {
-    init(displaySize: CGSize) {
-        self = displaySize.width > displaySize.height ? .landscapeRight : .portrait
-    }
-
     init(image: UIImage) {
         if image.size.width > image.size.height {
             self = .landscapeRight

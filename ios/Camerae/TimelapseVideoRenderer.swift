@@ -10,10 +10,17 @@ struct TimelapseVideoRenderer {
         frames: [URL],
         outputURL: URL,
         settings: WorkflowVideoSettings,
+        captureOrientation: CaptureDisplayOrientation? = nil,
         progress: (@Sendable (Int, Int) async -> Void)? = nil
     ) async throws {
         try await Task.detached(priority: .userInitiated) {
-            try await renderVideo(frames: frames, outputURL: outputURL, settings: settings, progress: progress)
+            try await renderVideo(
+                frames: frames,
+                outputURL: outputURL,
+                settings: settings,
+                captureOrientation: captureOrientation,
+                progress: progress
+            )
         }.value
     }
 }
@@ -22,6 +29,7 @@ private func renderVideo(
     frames: [URL],
     outputURL: URL,
     settings: WorkflowVideoSettings,
+    captureOrientation: CaptureDisplayOrientation?,
     progress: (@Sendable (Int, Int) async -> Void)?
 ) async throws {
     guard let firstFrame = frames.first else {
@@ -34,7 +42,11 @@ private func renderVideo(
     try? fileManager.removeItem(at: temporaryURL)
     defer { try? fileManager.removeItem(at: temporaryURL) }
 
-    let renderSize = try renderSize(for: firstFrame, resolution: settings.resolution)
+    let renderSize = try TimelapseRenderGeometry.renderSize(
+        for: firstFrame,
+        captureOrientation: captureOrientation,
+        resolution: settings.resolution
+    )
     let fps = max(settings.fps, 1)
     let writer = try AVAssetWriter(outputURL: temporaryURL, fileType: .mp4)
     let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
@@ -143,24 +155,60 @@ private func renderVideo(
     }
 }
 
-private func renderSize(for frameURL: URL, resolution: WorkflowVideoResolution) throws -> CGSize {
-    guard
-        let source = CGImageSourceCreateWithURL(frameURL as CFURL, nil),
-        let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
-        let pixelWidth = properties[kCGImagePropertyPixelWidth] as? CGFloat,
-        let pixelHeight = properties[kCGImagePropertyPixelHeight] as? CGFloat
-    else {
-        throw VideoRenderError.noFrames
+enum TimelapseRenderGeometry {
+    static func renderSize(
+        for frameURL: URL,
+        captureOrientation: CaptureDisplayOrientation?,
+        resolution: WorkflowVideoResolution
+    ) throws -> CGSize {
+        guard
+            let source = CGImageSourceCreateWithURL(frameURL as CFURL, nil),
+            let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+            let pixelWidth = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+            let pixelHeight = properties[kCGImagePropertyPixelHeight] as? CGFloat
+        else {
+            throw VideoRenderError.noFrames
+        }
+
+        let rawOrientation = properties[kCGImagePropertyOrientation] as? UInt32
+        return renderSize(
+            pixelSize: CGSize(width: pixelWidth, height: pixelHeight),
+            imageOrientation: rawOrientation.flatMap(CGImagePropertyOrientation.init(rawValue:)),
+            captureOrientation: captureOrientation,
+            resolution: resolution
+        )
     }
 
-    guard let maxPixelSize = resolution.maxPixelSize else {
-        return evenSize(width: pixelWidth, height: pixelHeight)
-    }
+    static func renderSize(
+        pixelSize: CGSize,
+        imageOrientation: CGImagePropertyOrientation?,
+        captureOrientation: CaptureDisplayOrientation?,
+        resolution: WorkflowVideoResolution
+    ) -> CGSize {
+        let exifSwapsAxes: Bool
+        switch imageOrientation {
+        case .left, .leftMirrored, .right, .rightMirrored:
+            exifSwapsAxes = true
+        default:
+            exifSwapsAxes = false
+        }
 
-    let isPortrait = pixelHeight >= pixelWidth
-    let targetWidth = isPortrait ? min(maxPixelSize.width, maxPixelSize.height) : max(maxPixelSize.width, maxPixelSize.height)
-    let targetHeight = isPortrait ? max(maxPixelSize.width, maxPixelSize.height) : min(maxPixelSize.width, maxPixelSize.height)
-    return evenSize(width: targetWidth, height: targetHeight)
+        let displaySize = exifSwapsAxes
+            ? CGSize(width: pixelSize.height, height: pixelSize.width)
+            : pixelSize
+        let isPortrait = captureOrientation.map { !$0.isLandscape }
+            ?? (displaySize.height >= displaySize.width)
+
+        guard let maxPixelSize = resolution.maxPixelSize else {
+            return isPortrait
+                ? evenSize(width: min(displaySize.width, displaySize.height), height: max(displaySize.width, displaySize.height))
+                : evenSize(width: max(displaySize.width, displaySize.height), height: min(displaySize.width, displaySize.height))
+        }
+
+        let targetWidth = isPortrait ? min(maxPixelSize.width, maxPixelSize.height) : max(maxPixelSize.width, maxPixelSize.height)
+        let targetHeight = isPortrait ? max(maxPixelSize.width, maxPixelSize.height) : min(maxPixelSize.width, maxPixelSize.height)
+        return evenSize(width: targetWidth, height: targetHeight)
+    }
 }
 
 private func evenSize(width: CGFloat, height: CGFloat) -> CGSize {
@@ -177,7 +225,7 @@ private func bitRate(for size: CGSize, fps: Int, quality: WorkflowVideoQuality) 
 
 private func makePixelBuffer(from frameURL: URL, size: CGSize, pool: CVPixelBufferPool) -> CVPixelBuffer? {
     guard let image = UIImage(contentsOfFile: frameURL.path),
-          let cgImage = image.normalizedCGImage() else {
+          let cgImage = image.normalizedCGImage(targetSize: size) else {
         return nil
     }
 
@@ -220,15 +268,17 @@ private func waitUntilReady(input: AVAssetWriterInput, writer: AVAssetWriter) th
 }
 
 private extension UIImage {
-    func normalizedCGImage() -> CGImage? {
-        if imageOrientation == .up {
+    func normalizedCGImage(targetSize: CGSize) -> CGImage? {
+        if imageOrientation == .up,
+           cgImage?.width == Int(targetSize.width),
+           cgImage?.height == Int(targetSize.height) {
             return cgImage
         }
 
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = 1
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            draw(in: CGRect(origin: .zero, size: size))
+        return UIGraphicsImageRenderer(size: targetSize, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: targetSize))
         }.cgImage
     }
 }
