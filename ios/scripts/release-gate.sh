@@ -4,9 +4,9 @@ set -euo pipefail
 usage() {
   cat <<'USAGE'
 Usage:
-  scripts/release-gate.sh check [--plan]
-  scripts/release-gate.sh firebase --publish [--plan]
-  scripts/release-gate.sh appstore --publish [--plan]
+  scripts/release-gate.sh check [--ui-evidence] [--plan]
+  scripts/release-gate.sh firebase --publish [--ui-evidence] [--plan]
+  scripts/release-gate.sh appstore --publish [--ui-evidence] [--plan]
 
 Modes:
   check       Run every local release validation without publishing.
@@ -15,6 +15,9 @@ Modes:
 
 Options:
   --publish   Required explicit authorization for an external upload.
+  --ui-evidence
+              Generate and archive the complete iPhone/iPad screenshot matrix.
+              Disabled by default for faster non-UI validation.
   --plan      Print the enforced stages without running them.
   -h, --help  Show this help.
 
@@ -33,9 +36,11 @@ shift
 
 PUBLISH=0
 PLAN_ONLY=0
+UI_EVIDENCE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --publish) PUBLISH=1 ;;
+    --ui-evidence) UI_EVIDENCE=1 ;;
     --plan) PLAN_ONLY=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
@@ -80,7 +85,11 @@ print_plan() {
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
   echo "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
-  echo "visual evidence: six locales on iPhone and iPad, archived under docs/ui-evidence"
+  if [[ "$UI_EVIDENCE" -eq 1 ]]; then
+    echo "visual evidence: enabled; six locales on iPhone and iPad, archived under docs/ui-evidence"
+  else
+    echo "visual evidence: skipped; enable with --ui-evidence"
+  fi
   echo "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
   echo "build: unsigned device build before signed archive"
 }
@@ -186,9 +195,13 @@ step "Run Swift component and integration tests"
   CODE_SIGNING_ALLOWED=NO \
   test)
 
-step "Generate simulator UI evidence"
-(cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --device iphone --destination "$TEST_DESTINATION" --all-locales --archive-tracked)
-(cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --device ipad --all-locales --archive-tracked)
+if [[ "$UI_EVIDENCE" -eq 1 ]]; then
+  step "Generate simulator UI evidence"
+  (cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --device iphone --destination "$TEST_DESTINATION" --all-locales --archive-tracked)
+  (cd "$IOS_DIR" && ./scripts/generate-ui-evidence.sh --device ipad --all-locales --archive-tracked)
+else
+  step "Skip simulator UI evidence (enable with --ui-evidence)"
+fi
 
 step "Run C++ Camerae Processing and Camerae Vision tests"
 cmake -S "$ROOT_DIR/processing" -B "$ROOT_DIR/.build/release-gate-processing" -DBUILD_TESTING=ON

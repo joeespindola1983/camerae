@@ -22,8 +22,11 @@ expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
 expect_contains "$check_plan" "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
-expect_contains "$check_plan" "visual evidence: six locales on iPhone and iPad, archived under docs/ui-evidence"
+expect_contains "$check_plan" "visual evidence: skipped; enable with --ui-evidence"
 expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
+
+ui_evidence_plan="$($SCRIPT check --plan --ui-evidence)"
+expect_contains "$ui_evidence_plan" "visual evidence: enabled; six locales on iPhone and iPad, archived under docs/ui-evidence"
 
 firebase_plan="$($SCRIPT firebase --plan --publish)"
 expect_contains "$firebase_plan" "mode: firebase"
@@ -97,6 +100,10 @@ if ! rg -q "^## \[$VERSION\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$ROOT_DIR/CHANGELOG
 fi
 if ! rg -q -- '--archive-tracked' "$SCRIPT"; then
   echo "Release gate must archive UI evidence in the tracked gallery" >&2
+  exit 1
+fi
+if ! rg -q -- '--ui-evidence' "$SCRIPT"; then
+  echo "Release gate must expose explicit opt-in UI evidence" >&2
   exit 1
 fi
 if ! rg -q 'ITSAppUsesNonExemptEncryption: false' "$IOS_DIR/project.yml"; then

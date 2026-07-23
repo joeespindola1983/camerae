@@ -78,11 +78,12 @@ cd ios
 scripts/release-gate.sh check
 scripts/release-gate.sh firebase --publish
 scripts/release-gate.sh appstore --publish
+scripts/release-gate.sh check --ui-evidence
 ```
 
 O gate bloqueia publicação quando há alterações rastreadas, arquivos não rastreados dentro de `ios/`, branch incorreta, commit diferente do upstream, versão inválida, assinatura ausente, teste com falha ou build inválido. Firebase exige `qa`; App Store Connect exige `release/v<MARKETING_VERSION>`. A opção `--publish` torna qualquer mutação externa explícita.
 
-O gate roda `pod install --deployment`, fronteiras de arquitetura, testes Swift, testes C++, evidências visuais de iPhone e iPad nos seis idiomas suportados e build genérico sem assinatura antes de chamar o archive assinado. A matriz completa também pode ser executada diretamente com `./scripts/generate-ui-evidence.sh --all-devices --all-locales --archive-tracked`. As evidências temporárias ficam em `ios/build/ui-evidence`; PNGs, manifesto e galeria HTML são copiados para `docs/ui-evidence/`, usando sufixos de device e idioma como `-ipad`, `-de` e `-ipad-ru`, e devem ser commitados após a publicação. IPA, ZIP e dados derivados continuam locais. O gate usa `Camerae.xcworkspace`; o `.xcodeproj` isolado não contém as dependências CocoaPods.
+O gate roda `pod install --deployment`, fronteiras de arquitetura, testes Swift, testes C++ e build genérico sem assinatura antes de chamar o archive assinado. Evidências visuais são opcionais para não atrasar mudanças sem impacto de interface: use `--ui-evidence` para gerar e arquivar a matriz de iPhone e iPad nos seis idiomas suportados. A matriz completa também pode ser executada diretamente com `./scripts/generate-ui-evidence.sh --all-devices --all-locales --archive-tracked`. As evidências temporárias ficam em `ios/build/ui-evidence`; PNGs, manifesto e galeria HTML são copiados para `docs/ui-evidence/`, usando sufixos de device e idioma como `-ipad`, `-de` e `-ipad-ru`, e devem ser commitados após a publicação. IPA, ZIP e dados derivados continuam locais. O gate usa `Camerae.xcworkspace`; o `.xcodeproj` isolado não contém as dependências CocoaPods.
 
 Os workflows GitHub Actions permanecem disponíveis somente por `workflow_dispatch` como ferramenta manual de diagnóstico. Não publicam nem compilam automaticamente em pushes, PRs ou tags.
 

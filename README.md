@@ -57,7 +57,7 @@ Always build `Camerae.xcworkspace`. The standalone `.xcodeproj` does not include
 
 ## Test
 
-Product changes follow TDD. The release gate runs localization and architecture checks, Swift tests, C++ processing tests, device builds, and visual evidence generation.
+Product changes follow TDD. The release gate runs localization and architecture checks, Swift tests, C++ processing tests, and device builds. Visual evidence is opt-in with `--ui-evidence` for releases that change the interface.
 
 ```sh
 cd ios

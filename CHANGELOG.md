@@ -27,6 +27,7 @@ No changes yet.
 - Required every QA-approved candidate to be reconciled into `develop`.
 - Added a permanent changelog requirement to the release process.
 - Replaced the Firebase Core-only pod with the locked Crashlytics dependency set.
+- Made the 12-gallery UI evidence matrix opt-in through `--ui-evidence`; non-UI QA gates skip screenshots by default.
 
 ### Privacy
 
@@ -252,6 +253,7 @@ These tags identify validated candidates but are not final production releases:
 | `v8.3.1-qa.1` | 2026-07-22 | Localization | Camerae 8.3.1 localization hotfix candidate |
 | `v8.3.2-qa.1` | 2026-07-22 | Orientation | Camerae 8.3.2 capture-orientation hotfix candidate |
 | `v8.4.0-qa.1` | 2026-07-23 | Diagnostics, privacy | First Firebase Crashlytics candidate |
+| `v8.4.0-qa.2` | 2026-07-23 | Release engineering | Crashlytics candidate with opt-in UI evidence |
 
 [Unreleased]: https://github.com/joeespindola1983/camerae/compare/v8.4.0...develop
 [8.4.0]: https://github.com/joeespindola1983/camerae/compare/v8.3.2...v8.4.0
