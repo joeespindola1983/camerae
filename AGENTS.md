@@ -24,5 +24,7 @@ These rules apply to every code or product change in this repository.
 
 - Use TDD for product changes.
 - Run the relevant tests before committing.
+- Add user-visible and release-process changes to `CHANGELOG.md` under `Unreleased`.
+- Before creating a production tag, move the applicable `Unreleased` entries into a dated `X.Y.Z` section with status and affected areas.
 - Run `ios/scripts/release-gate.sh` for release validation and publication.
 - Before starting the next version, confirm the latest production tag is reachable from `main`, `develop`, and `qa`.

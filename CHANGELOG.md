@@ -1,87 +1,254 @@
 # Changelog
 
-## v8.2.0-qa.1
+All notable Camerae changes are recorded in this file.
 
-- Completed the next-generation Repeatable project workspace with persistent Configuration and Captures sections, inline capture finalization, full-screen playback, sharing, and MP4 generation states.
-- Added project reference-image management with placeholder, import and camera capture actions, stable thumbnails, reference replacement, and camera/lens locking after the first compatible media or photographed reference.
-- Migrated the Repeatable capture HUD, information visibility, comparison timing, composition-grid selection, orientation handling, and capture completion behavior to the shared themed interface.
-- Added shared alignment configuration for Repeatable timelapses and recorded videos, including correction models, crop limits, persisted settings, review/progress presentations, and reference-frame requirements.
-- Moved timelapse alignment configuration to MP4 generation and added an explicit video alignment action while preserving tap-to-play behavior for recorded clips.
-- Expanded Astro processing and shared workflow states while preserving module-specific Repeatable and Astro colors, components, and conditional controls.
-- Hardened session manifests and catalogs for capture kinds, reference frames, rendered output discovery, empty-session cleanup, and restored project state.
-- Expanded TDD coverage across configuration, capture tools, grids, catalogs, operation states, composition, references, alignment, and session persistence.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Historical entries before this file was introduced were reconstructed from immutable Git tags and commit history. When the original release commit did not contain detailed notes, the entry is intentionally described as a consolidated historical milestone.
 
-## v8.1.0-qa.1
+## [Unreleased]
 
-- Added shared SwiftUI state components for Repeatable and Astro planning, camera availability, fallback, and reference/guide status using the module-specific design-system themes.
-- Connected the new configuration interface to real capture preflight estimates so storage warnings remain actionable while blocked, unavailable, and error states prevent capture from starting.
-- Added the themed custom-duration sheet with validated hour/minute input and quick presets for Repeatable timelapse and Astro sessions.
-- Disabled manual Astro exposure controls in Automatic mode and preserved the existing legacy screens while the Next interface continues its staged migration.
-- Expanded TDD coverage for planning gates, camera selection and fallback, reference states, custom durations, and conditional Astro controls.
+**Status:** Development
+**Areas:** Release engineering, documentation
 
-## v7.0.0
+### Changed
 
-- Extracted OpenCV alignment into the shared desktop C++ `camerae_vision` module, independent from Astro, Repeatable, Timelapse, and platform UI code.
-- Added deterministic alignment feasibility coverage for `accept`, `review`, and `reject`, with stable typed diagnostics and versioned JSON schema 1 reports.
-- Added the lightweight `CaptureFast` evaluator using reduced input, ORB, similarity/affine comparison, reference-feature caching, measured latency, and no image I/O, SIFT, or ECC.
-- Added a reusable capture-alignment session with explicit reference invalidation, cancellation, resume, bounded cache diagnostics, and zero evaluation work while cancelled.
-- Added an optional capture-support contract that is disabled by default and creates no evaluator or scheduled work until enabled.
-- Added a desktop capture simulator with virtual cadence, latest-only backpressure, bounded pending frames, reduced decoding, decision distributions, latency percentiles, and approximate retained memory.
-- Added conservative automatic final model selection across similarity, affine, and homography while preserving explicit model selection and exposing all candidate metrics through the desktop lab.
-- Added seeded synthetic regression coverage for rigid, affine, perspective, and moving-object scenarios plus desktop benchmark guardrails for fast capture evaluation, final alignment, and retained memory.
-- Expanded the release gate's C++ stage to explicitly cover both Camerae Processing and all Camerae Vision regression, benchmark, session, diagnostics, and simulator tests.
-- Kept Camerae Vision integration with the live iOS and Android capture pipelines outside this release; that work remains a separate platform phase.
+- Established `develop` as the mandatory source for normal development.
+- Made pull requests optional for the current solo-developer workflow.
+- Required every QA-approved candidate to be reconciled into `develop`.
+- Added a permanent changelog requirement to the release process.
 
-## v6.0.0
+## [8.3.2] - 2026-07-22
 
-- Added a new branded entry experience, shared Camerae design tokens, bundled typography, module-specific themes, and redesigned project surfaces for Repeatable and Astro.
-- Added direct project deletion with catalog, application, and integration coverage.
-- Separated Astro planning from its live camera phase, keeping duration, format, exposure, interval, batch, and preflight controls in a dedicated setup screen.
-- Improved orientation ownership so setup and project screens return to portrait while live capture can use the device orientation.
-- Refined camera presentation, module navigation, responsive layouts, and reusable visual assets without changing existing project or session storage formats.
-- Added an experimental desktop OpenCV alignment laboratory with ORB, AKAZE, and SIFT detectors; translation, similarity, affine, and homography models; optional CLAHE, mutual matching, RANSAC, and ECC; and reproducible diagnostics.
-- Added desktop alignment feasibility classification (`accept`, `review`, or `reject`) based on geometric consistency, overlap, spatial coverage, deformation, and local edge residuals.
-- Documented the future Camerae Vision module boundary and a deliberately staged Fast-model implementation plan; no mobile Camerae Vision integration is included in this release.
-- Expanded Core, integration, and C++ coverage for project deletion, navigation composition, synthetic alignment, and processing regressions.
+**Status:** Production
+**Areas:** Capture, orientation, iPad, distribution, QA evidence
 
-## v5.0.0
+### Fixed
 
-- Added duration presets and Custom planning for Repeatable video, Repeatable timelapse, and Astro captures.
-- Added preflight estimates for completion time, frame count, final video duration, storage, energy, and effective Astro processing capability.
-- Made HEIC the default still-image format with an explicit JPEG fallback based on runtime camera capabilities.
-- Added conservative storage admission and active-capture guards that preserve finalization space and stop safely when capacity becomes critical.
-- Added planned automatic completion, versioned capture plans, schema 5 migration, session repair, and project storage inventories.
-- Added runtime Astro pipeline degradation for constrained memory, Low Power Mode, and thermal pressure.
-- Added atomic validation and publication of rendered MP4 artifacts so a failed render cannot replace the last valid result.
-- Added Core, Media, and integration coverage for planning, compatibility, recovery, storage safety, and Repeatable video presentation.
-- Added a fail-closed local release gate for Git, signing, tests, builds, Firebase, and App Store Connect; automatic GitHub Actions triggers are disabled.
-- Updated the iOS app icon and refined Repeatable video with a clip-size label, recording countdown, explicit early-stop retention, and safe-area-aware capture controls.
+- Preserved the selected portrait or landscape orientation from camera startup through timelapse video generation.
+- Declared the complete set of supported iPad orientations.
+- Accepted modern and legacy Apple distribution identities in the release gate.
 
-## v4.0.0
+### Changed
 
-- Added Edit as a third project module for assembling a video portfolio from Camerae output.
-- Added a global media catalog with Repeatable/Astro, video/timelapse, and project filters.
-- Added thumbnails, ordered timelines, repeated clips, removal, reordering, and missing-media handling.
-- Added sequential preview in horizontal and vertical canvases.
-- Added cancellable 1080p/30 fps MP4 export with progress, validation, persistence, and sharing.
-- Added Core, Media, integration, performance, and UI coverage following the project TDD workflow.
+- Declared App Store encryption compliance.
+- Refreshed the App Store visual evidence gallery.
 
-## v2.2.1-qa.1
+## [8.3.1] - 2026-07-22
 
-- Fixed iOS archives to use the configured marketing version and build number in Firebase App Distribution.
+**Status:** Production hotfix
+**Areas:** Localization, workflow presentation, build system, QA evidence
 
-## v2.2.0-qa.1
+### Fixed
 
-- Added a live elapsed-time display while recording Repeatable video clips.
-- Refined Repeatable capture rows with readable titles, saved video duration, and a vertical-friendly layout.
-- Added the ability to import a photo or video from the iOS Photo Library as the first Repeatable reference; videos provide a reference frame automatically.
+- Corrected localized workflow presentation tests.
+- Preserved CocoaPods workspace integration for command-line and distribution builds.
 
-## v2.1.0
+### Changed
 
-- Added Firebase setup for `com.espindola.camerae` and a local Firebase App Distribution script.
-- Added Repeatable alignment contour mode with RGB colors and fine/medium/thick line presets.
-- Added reference blink mode with 2s, 5s, and 10s intervals plus 25%, 50%, and 100% opacity presets.
-- Reorganized Repeatable alignment HUD controls into categories.
-- Made Video the first/default Repeatable capture mode.
-- Updated iOS CI to install CocoaPods and build `Camerae.xcworkspace`.
-- Documented the Camerae GitFlow with `main`, `qa`, and `release/**` branches.
+- Completed localized configuration content and archived multilingual UI evidence.
+
+## [8.3.0] - 2026-07-21
+
+**Status:** Production
+**Areas:** UI quality, iPhone, iPad, localization, release evidence
+
+### Added
+
+- Added a tracked, browsable visual history of the principal application screens.
+
+### Changed
+
+- Expanded QA evidence to cover iPhone and iPad layouts across the six supported languages.
+
+## [8.2.0] - 2026-07-21
+
+**Status:** Production
+**Areas:** Repeatable, Astro, configuration workflows
+
+### Changed
+
+- Consolidated the configuration states and conditional workflow variations used by Repeatable and Astro.
+- Prepared the updated project, capture, processing, and media flows for QA.
+
+## [8.1.0] - 2026-07-20
+
+**Status:** Production
+**Areas:** Configuration UI, conditional states
+
+### Added
+
+- Added explicit UI states for project type, camera, capture timing, reference media, and module-specific configuration.
+
+### Changed
+
+- Improved parity between the designed workflows and their SwiftUI implementations.
+
+## [8.0.0] - 2026-07-19
+
+**Status:** Production major release
+**Areas:** SwiftUI, Repeatable, Astro, alignment, media processing
+
+### Added
+
+- Introduced the new shared SwiftUI design-system migration for Repeatable and Astro.
+- Added a conservative video-clip alignment pipeline.
+- Added the Camerae Vision integration plan and reusable processing path.
+
+### Changed
+
+- Replaced the principal legacy workflow screens while retaining old implementations during migration.
+- Unified shared module components and theme-driven presentation.
+
+## [7.0.0] - 2026-07-19
+
+**Status:** Production major release
+**Areas:** Camerae Vision, alignment, diagnostics, performance
+
+### Added
+
+- Added a reusable capture-alignment session and automatic final alignment selection.
+- Added typed alignment diagnostics and regression benchmarks.
+- Added capture-quality evaluation and optional-capture support contracts.
+- Added a desktop capture-quality simulator.
+
+### Changed
+
+- Extracted the shared Camerae Vision module for reuse by application and laboratory workflows.
+
+## [6.0.0] - 2026-07-19
+
+**Status:** Production major release
+**Areas:** Release engineering, QA distribution
+
+### Changed
+
+- Consolidated the approved Camerae 5 release line into the next production baseline.
+- Aligned the local release gate and Firebase QA promotion flow.
+
+## [5.0.0] - 2026-07-14
+
+**Status:** Production major release
+**Areas:** Capture planning, storage, energy, recovery, release safety
+
+### Added
+
+- Added capture planning, storage admission, capability, and energy-domain models.
+- Added HEIC capture storage and recovery support.
+- Added preflight UI, planned completion, and persistent capture plans.
+- Added storage-exhaustion protection for active captures.
+
+### Changed
+
+- Added schema 5 compatibility and project-storage inventory.
+- Introduced a fail-closed local release gate and safer Firebase distribution.
+
+## [4.0.0] - 2026-07-14
+
+**Status:** Production major release
+**Areas:** Edit, media library, alignment, performance, session UI
+
+### Added
+
+- Added the Edit module for discovering rendered Repeatable and Astro media.
+- Added ordered sequence creation, preview, and shareable 1080p MP4 export without duplicating source files.
+- Added a draggable alignment magnifier.
+
+### Changed
+
+- Redesigned timelapse session cards and improved card actions and navigation.
+- Completed the Camerae 3 performance and TDD program before consolidating it into the 4.0 production tag.
+
+## [2.1.0] - 2026-07-11
+
+**Status:** Production minor release
+**Areas:** Firebase, Repeatable alignment, GitFlow, build system
+
+### Added
+
+- Added Firebase distribution tooling and Repeatable alignment controls.
+
+### Fixed
+
+- Corrected command-line builds to use the CocoaPods workspace.
+
+### Changed
+
+- Documented the first lightweight Camerae GitFlow.
+
+## [2.0.0] - 2026-07-07
+
+**Status:** Production major release
+**Areas:** iOS application
+
+### Changed
+
+- Consolidated the initial Camerae application into its second production generation.
+
+## [1.6.0] - 2026-07-06
+
+**Status:** Production minor release
+**Areas:** iOS application
+
+### Changed
+
+- Historical stabilization milestone reconstructed from the final release tag.
+
+## [1.5.0] - 2026-07-05
+
+**Status:** Production minor release
+**Areas:** iOS application
+
+### Changed
+
+- Historical stabilization milestone reconstructed from the final release tag.
+
+## [1.4.0] - 2026-07-04
+
+**Status:** Production minor release
+**Areas:** iOS application
+
+### Changed
+
+- Historical stabilization milestone reconstructed from the final release tag.
+
+## [1.3.0] - 2026-07-01
+
+**Status:** Production minor release
+**Areas:** Project foundation, iOS build
+
+### Added
+
+- Added the Camerae iOS application to the repository.
+- Added the initial iOS build workflow.
+
+## Historical QA candidates
+
+These tags identify validated candidates but are not final production releases:
+
+| Candidate | Date | Area | Description |
+| --- | --- | --- | --- |
+| `v2.2.0-qa.1` | 2026-07-12 | Distribution | Initial Camerae 2.2 QA build |
+| `v2.2.1-qa.1` | 2026-07-12 | Distribution, build versioning | Follow-up QA build with build-setting version fixes |
+| `v8.0.0-qa.1` | 2026-07-19 | Interface migration | Camerae 8.0 interface candidate |
+| `v8.1.0-qa.1` | 2026-07-20 | Configuration UI | Camerae 8.1 conditional-state candidate |
+| `v8.2.0-qa.1` | 2026-07-21 | Workflows | Camerae 8.2 workflow candidate |
+| `v8.3.0-qa.1` | 2026-07-21 | Visual evidence | Camerae 8.3 UI validation candidate |
+| `v8.3.1-qa.1` | 2026-07-22 | Localization | Camerae 8.3.1 localization hotfix candidate |
+| `v8.3.2-qa.1` | 2026-07-22 | Orientation | Camerae 8.3.2 capture-orientation hotfix candidate |
+
+[Unreleased]: https://github.com/joeespindola1983/camerae/compare/v8.3.2...develop
+[8.3.2]: https://github.com/joeespindola1983/camerae/compare/v8.3.1...v8.3.2
+[8.3.1]: https://github.com/joeespindola1983/camerae/compare/v8.3.0...v8.3.1
+[8.3.0]: https://github.com/joeespindola1983/camerae/compare/v8.2.0...v8.3.0
+[8.2.0]: https://github.com/joeespindola1983/camerae/compare/v8.1.0...v8.2.0
+[8.1.0]: https://github.com/joeespindola1983/camerae/compare/v8.0.0...v8.1.0
+[8.0.0]: https://github.com/joeespindola1983/camerae/compare/v7.0.0...v8.0.0
+[7.0.0]: https://github.com/joeespindola1983/camerae/compare/v6.0.0...v7.0.0
+[6.0.0]: https://github.com/joeespindola1983/camerae/compare/v5.0.0...v6.0.0
+[5.0.0]: https://github.com/joeespindola1983/camerae/compare/v4.0.0...v5.0.0
+[4.0.0]: https://github.com/joeespindola1983/camerae/compare/v2.1.0...v4.0.0
+[2.1.0]: https://github.com/joeespindola1983/camerae/compare/v2.0.0...v2.1.0
+[2.0.0]: https://github.com/joeespindola1983/camerae/compare/v1.6.0...v2.0.0
+[1.6.0]: https://github.com/joeespindola1983/camerae/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/joeespindola1983/camerae/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/joeespindola1983/camerae/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/joeespindola1983/camerae/releases/tag/v1.3.0

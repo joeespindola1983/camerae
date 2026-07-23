@@ -79,6 +79,14 @@ if ! rg -q 'localization-tests\.sh' "$SCRIPT"; then
   echo "Release gate must validate localization catalogs" >&2
   exit 1
 fi
+if ! rg -q 'CHANGELOG\.md' "$SCRIPT"; then
+  echo "Release gate must validate the versioned changelog" >&2
+  exit 1
+fi
+if ! rg -q "^## \[$VERSION\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$ROOT_DIR/CHANGELOG.md"; then
+  echo "Changelog must contain a dated entry for Camerae $VERSION" >&2
+  exit 1
+fi
 if ! rg -q -- '--archive-tracked' "$SCRIPT"; then
   echo "Release gate must archive UI evidence in the tracked gallery" >&2
   exit 1

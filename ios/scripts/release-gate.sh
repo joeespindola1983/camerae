@@ -141,6 +141,11 @@ version="$(awk -F '"' '/MARKETING_VERSION:/ { print $2; exit }' "$IOS_DIR/projec
 build="$(awk -F '"' '/CURRENT_PROJECT_VERSION:/ { print $2; exit }' "$IOS_DIR/project.yml")"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "invalid MARKETING_VERSION in project.yml"
 [[ "$build" =~ ^[0-9]+$ ]] || fail "invalid CURRENT_PROJECT_VERSION in project.yml"
+changelog="$ROOT_DIR/CHANGELOG.md"
+[[ -f "$changelog" ]] || fail "CHANGELOG.md is missing"
+rg -q '^## \[Unreleased\]$' "$changelog" || fail "CHANGELOG.md has no Unreleased section"
+rg -q "^## \\[$version\\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" "$changelog" \
+  || fail "CHANGELOG.md has no dated entry for Camerae $version"
 if [[ "$MODE" == "appstore" && "$branch" != "release/v$version" ]]; then
   fail "branch $branch does not match MARKETING_VERSION $version"
 fi

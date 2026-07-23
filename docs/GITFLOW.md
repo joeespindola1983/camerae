@@ -26,7 +26,7 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 
 1. Switch to synchronized `develop`. Commit there directly, or optionally create `feature/*` or `codex/*` from it and merge completed work back.
 2. Cut `release/vX.Y.Z` from `develop` when the version enters stabilization.
-3. Bump versions, finalize release notes, and merge or fast-forward the release candidate into `qa`.
+3. Bump versions, move the applicable `CHANGELOG.md` entries from `Unreleased` into a dated version section, finalize release notes, and merge or fast-forward the release candidate into `qa`.
 4. From a synchronized local `qa`, run `ios/scripts/release-gate.sh firebase --publish` and validate the Firebase build.
 5. After QA approves the candidate, merge or fast-forward that exact release commit into `develop`.
 6. Apply every later stabilization fix to `release/vX.Y.Z`, update `qa`, repeat validation, and reconcile each newly approved candidate into `develop`.
@@ -35,6 +35,8 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 9. Verify that the tag is reachable from `main`, `qa`, and `develop` before starting the next version.
 
 QA builds that are not production releases may use prerelease tags such as `vX.Y.Z-qa.N`. Merely setting `MARKETING_VERSION` to `X.Y.Z` on `qa` does not make that commit the final tagged release.
+
+`CHANGELOG.md` is mandatory release state. Every user-visible, architecture, dependency, privacy, build, or release-process change is added under `Unreleased` during development. A release candidate receives a dated version section containing its status, affected areas, and categorized changes before the first QA tag. Stabilization fixes are appended to the same version section before the final production tag.
 
 Hotfixes start from `main`, are released and tagged through the same validation gates, and are merged back into both `develop` and `qa`.
 
