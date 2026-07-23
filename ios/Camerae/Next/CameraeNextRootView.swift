@@ -108,31 +108,19 @@ struct CameraeNextHomeView: View {
         } label: {
             VStack(spacing: compact ? 8 : 12) {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(module.designTheme.accent)
+                    .fill(module.designTheme.accent.opacity(0.18))
                     .frame(width: compact ? 32 : 52, height: compact ? 32 : 52)
                     .overlay {
                         Image(systemName: module.systemImage)
                             .font(.system(size: compact ? 14 : 22, weight: .medium))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(module.designTheme.accent)
                     }
                 Text(module.title)
                     .font(.custom("Outfit-Regular", size: compact ? 10 : 14, relativeTo: .caption))
                     .foregroundStyle(CameraeColor.textPrimary.opacity(0.7))
             }
             .frame(width: compact ? 111 : 120, height: compact ? 79 : 121)
-            .background(CameraeColor.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(CameraeColor.borderStrong.opacity(0.45), lineWidth: 1)
-            }
-            .overlay(alignment: .topTrailing) {
-                if !compact {
-                    Image(systemName: "questionmark.circle")
-                        .font(.system(size: 14, weight: .regular))
-                        .foregroundStyle(CameraeColor.textMuted)
-                        .padding(8)
-                }
-            }
+            .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
             .accessibilityIdentifier(CameraeAccessibility.openModule(module))
         }
         .buttonStyle(.plain)

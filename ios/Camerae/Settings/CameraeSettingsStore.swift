@@ -10,9 +10,9 @@ enum CameraePerformanceMode: String, CaseIterable, Identifiable, Sendable {
 
     var title: String {
         switch self {
-        case .automatic: "Automático"
-        case .economy: "Economia"
-        case .maximumQuality: "Qualidade máxima"
+        case .automatic: CameraeL10n.settingsPerformanceAutomatic
+        case .economy: CameraeL10n.settingsPerformanceEconomy
+        case .maximumQuality: CameraeL10n.settingsPerformanceMaximum
         }
     }
 }

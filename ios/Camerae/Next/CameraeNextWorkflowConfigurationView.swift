@@ -269,6 +269,7 @@ struct CameraeNextWorkflowConfigurationView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(theme.background.opacity(0.96), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarColorScheme(theme.colorScheme, for: .navigationBar)
         .toolbar {
             if !isEmbeddedInProjectWorkspace {
                 ToolbarItem(placement: .topBarTrailing) {

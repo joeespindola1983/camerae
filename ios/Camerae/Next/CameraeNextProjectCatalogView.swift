@@ -182,7 +182,7 @@ struct CameraeNextProjectCatalogView: View {
             ToolbarItem(placement: .principal) {
                 Label(theme.title, systemImage: theme.systemImage)
                     .font(.custom("Outfit-SemiBold", size: 24, relativeTo: .title2))
-                    .foregroundStyle(theme.text)
+                    .foregroundStyle(theme.titleText)
                     .labelStyle(ProjectListTitleLabelStyle(theme: theme))
             }
 

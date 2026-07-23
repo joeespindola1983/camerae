@@ -11,7 +11,7 @@ struct CameraeSettingsView: View {
                 CameraeColor.canvas.ignoresSafeArea()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        Text("Preferências globais do Camerae. As escolhas de captura são separadas por módulo.")
+                        Text(CameraeL10n.settingsOverviewHelper)
                             .cameraeSettingsHelper()
 
                         NavigationLink {
@@ -19,35 +19,38 @@ struct CameraeSettingsView: View {
                         } label: {
                             CameraeSettingsSummaryCard(
                                 icon: "shield.lefthalf.filled",
-                                title: "Diagnóstico e uso",
-                                helper: "Crashlytics e Analytics",
-                                value: settings.diagnosticsEnabled ? "ATIVO" : "DESATIVADO"
+                                title: CameraeL10n.settingsDiagnosticsUsage,
+                                helper: CameraeL10n.settingsCrashlyticsAnalytics,
+                                value: settings.diagnosticsEnabled ? CameraeL10n.settingsActive : CameraeL10n.settingsDisabled
                             )
                         }
+                        .accessibilityIdentifier("settings.privacy.open")
 
                         NavigationLink {
                             CameraeCaptureSettingsView()
                         } label: {
                             CameraeSettingsSummaryCard(
                                 icon: "gauge.with.dots.needle.67percent",
-                                title: "Desempenho",
-                                helper: "Equilíbrio entre energia, temperatura e qualidade",
-                                value: settings.performanceMode == .automatic ? "AUTO" : settings.performanceMode.title.uppercased()
+                                title: CameraeL10n.settingsPerformance,
+                                helper: CameraeL10n.settingsPerformanceHelper,
+                                value: settings.performanceMode == .automatic ? CameraeL10n.settingsAutomaticShort : settings.performanceMode.title.uppercased()
                             )
                         }
+                        .accessibilityIdentifier("settings.capture.open")
 
                         NavigationLink {
                             CameraeStorageSettingsView()
                         } label: {
                             CameraeSettingsSummaryCard(
                                 icon: "externaldrive.fill",
-                                title: "Armazenamento",
-                                helper: "Projetos e cache sob controle",
+                                title: CameraeL10n.settingsStorage,
+                                helper: CameraeL10n.settingsStorageHelper,
                                 value: availableStorage
                             )
                         }
+                        .accessibilityIdentifier("settings.storage.open")
 
-                        Text("ALTERAÇÕES APLICADAS A NOVOS PROJETOS")
+                        Text(CameraeL10n.settingsAppliedToNewProjects)
                             .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
                             .foregroundStyle(CameraeColor.textMuted)
                     }
@@ -55,12 +58,13 @@ struct CameraeSettingsView: View {
                     .padding(.bottom, 34)
                 }
             }
-            .navigationTitle("Configurações")
+            .navigationTitle(CameraeL10n.settingsTitle)
             .navigationBarTitleDisplayMode(.large)
+            .accessibilityIdentifier("settings.overview")
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { dismiss() } label: { Image(systemName: "xmark") }
-                        .accessibilityLabel("Fechar")
+                        .accessibilityLabel(CameraeL10n.settingsClose)
                 }
             }
         }
@@ -71,7 +75,9 @@ struct CameraeSettingsView: View {
     private var availableStorage: String {
         let values = try? FileManager.default.attributesOfFileSystem(forPath: NSHomeDirectory())
         let bytes = values?[.systemFreeSize] as? Int64 ?? 0
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file).uppercased() + " LIVRES"
+        return CameraeL10n.settingsFreeStorage(
+            ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file).uppercased()
+        )
     }
 }
 
@@ -80,20 +86,21 @@ private struct CameraePrivacySettingsView: View {
 
     var body: some View {
         CameraeSettingsPage(
-            title: "Privacidade e diagnóstico",
-            helper: "Você pode sair a qualquer momento. Fotos, vídeos, localização, nomes de projetos e identificadores pessoais não são enviados."
+            title: CameraeL10n.settingsPrivacyTitle,
+            helper: CameraeL10n.settingsPrivacyHelper
         ) {
-            CameraeSettingsSection(icon: "shield.fill", title: "Diagnóstico") {
-                Toggle("Compartilhar relatórios de falha", isOn: $settings.diagnosticsEnabled)
+            CameraeSettingsSection(icon: "shield.fill", title: CameraeL10n.settingsDiagnostics) {
+                Toggle(CameraeL10n.settingsShareCrashReports, isOn: $settings.diagnosticsEnabled)
                     .cameraeSettingsRow()
             }
-            CameraeSettingsSection(icon: "chart.xyaxis.line", title: "Analytics") {
-                Toggle("Compartilhar análise de uso", isOn: $settings.analyticsEnabled)
+            CameraeSettingsSection(icon: "chart.xyaxis.line", title: CameraeL10n.settingsAnalytics) {
+                Toggle(CameraeL10n.settingsShareAnalytics, isOn: $settings.analyticsEnabled)
                     .cameraeSettingsRow()
                     .disabled(!settings.diagnosticsEnabled)
                     .opacity(settings.diagnosticsEnabled ? 1 : 0.5)
             }
         }
+        .accessibilityIdentifier("settings.privacy")
     }
 }
 
@@ -102,11 +109,11 @@ private struct CameraeCaptureSettingsView: View {
 
     var body: some View {
         CameraeSettingsPage(
-            title: "Captura e desempenho",
-            helper: "Valores padrão para novos projetos. A câmera pode ajustar o formato quando o aparelho não oferecer suporte."
+            title: CameraeL10n.settingsCaptureTitle,
+            helper: CameraeL10n.settingsCaptureHelper
         ) {
             CameraeSettingsSection(icon: "sun.max.fill", title: "Repeatable", accent: CameraeColor.accentRepeatable) {
-                Text("Formato das imagens do timelapse").cameraeSettingsHelper()
+                Text(CameraeL10n.settingsTimelapseFormat).cameraeSettingsHelper()
                 Picker("Formato Repeatable", selection: $settings.repeatableFormat) {
                     Text("HEIC").tag(CaptureSourceFormat.heic)
                     Text("JPEG").tag(CaptureSourceFormat.jpeg)
@@ -115,7 +122,7 @@ private struct CameraeCaptureSettingsView: View {
             }
 
             CameraeSettingsSection(icon: "star.fill", title: "Astro", accent: CameraeColor.accentAstro) {
-                Text("Formato das capturas de céu noturno").cameraeSettingsHelper()
+                Text(CameraeL10n.settingsAstroFormat).cameraeSettingsHelper()
                 Picker("Formato Astro", selection: $settings.astroFormat) {
                     Text("DNG").tag(CaptureSourceFormat.dng)
                     Text("HEIC").tag(CaptureSourceFormat.heic)
@@ -123,9 +130,9 @@ private struct CameraeCaptureSettingsView: View {
                 .cameraeSettingsPicker(dark: true)
             }
 
-            CameraeSettingsSection(icon: "gauge.with.dots.needle.67percent", title: "Desempenho") {
-                Text("Equilíbrio entre energia, temperatura e qualidade").cameraeSettingsHelper()
-                Picker("Desempenho", selection: $settings.performanceMode) {
+            CameraeSettingsSection(icon: "gauge.with.dots.needle.67percent", title: CameraeL10n.settingsPerformance) {
+                Text(CameraeL10n.settingsPerformanceHelper).cameraeSettingsHelper()
+                Picker(CameraeL10n.settingsPerformance, selection: $settings.performanceMode) {
                     ForEach(CameraePerformanceMode.allCases) { mode in
                         Text(mode.title).tag(mode)
                     }
@@ -133,6 +140,7 @@ private struct CameraeCaptureSettingsView: View {
                 .cameraeSettingsPicker()
             }
         }
+        .accessibilityIdentifier("settings.capture")
     }
 }
 
@@ -141,18 +149,19 @@ private struct CameraeStorageSettingsView: View {
 
     var body: some View {
         CameraeSettingsPage(
-            title: "Armazenamento",
-            helper: "Controle como os originais e os avisos de capacidade são tratados."
+            title: CameraeL10n.settingsStorageTitle,
+            helper: CameraeL10n.settingsStoragePageHelper
         ) {
-            CameraeSettingsSection(icon: "externaldrive.fill", title: "Originais") {
-                Toggle("Preservar arquivos originais", isOn: $settings.preserveOriginals)
+            CameraeSettingsSection(icon: "externaldrive.fill", title: CameraeL10n.settingsOriginals) {
+                Toggle(CameraeL10n.settingsPreserveOriginals, isOn: $settings.preserveOriginals)
                     .cameraeSettingsRow()
             }
-            CameraeSettingsSection(icon: "internaldrive.fill", title: "Espaço livre") {
-                Toggle("Avisar quando houver pouco espaço", isOn: $settings.lowStorageWarningEnabled)
+            CameraeSettingsSection(icon: "internaldrive.fill", title: CameraeL10n.settingsFreeSpace) {
+                Toggle(CameraeL10n.settingsLowStorageWarning, isOn: $settings.lowStorageWarningEnabled)
                     .cameraeSettingsRow()
             }
         }
+        .accessibilityIdentifier("settings.storage")
     }
 }
 

@@ -88,8 +88,8 @@
 		76935B3ABD143A53B4DA80EC /* CameraeCrashReporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 830D063C75C478E2074FA1A2 /* CameraeCrashReporterTests.swift */; };
 		76DE24607B5A167610E44362 /* MediaLibraryCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2D8E79C89726A90E937F4FB7 /* MediaLibraryCatalogTests.swift */; };
 		780AD9F14F7B35A4F17F858F /* ExportedArchivesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF7281FE32B0EC7BA4C57F2F /* ExportedArchivesView.swift */; };
+		7B8ABAFDA42FD12DF5FAF7B3 /* Pods_Camerae.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 9FBC4F26B7C13B9F9DFEE2A7 /* Pods_Camerae.framework */; };
 		7CE2CEBAAB1500E60E533FAF /* CameraeNextWorkflowConfigurationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD256572B0B0F36489550132 /* CameraeNextWorkflowConfigurationTests.swift */; };
-		7D60A432BE53FC38ED69FAC9 /* Pods_CameraeIntegrationTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 74F6A2A28BA15D0932B985E2 /* Pods_CameraeIntegrationTests.framework */; };
 		7EC9ED1CFF43CEB474ED1B9E /* CameraeVisionOpenCVBackendTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0809EB823676DCBC7E92CE85 /* CameraeVisionOpenCVBackendTests.swift */; };
 		82576EFAB38ABD25C1A28C12 /* CameraeNextSessionCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7ABD17BCD7FA2853D597FA9 /* CameraeNextSessionCatalogTests.swift */; };
 		8689DCB3C6B2AA6156A1ABAD /* MediaThumbnailDecoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53FC2DEABB4191BA132EDC7A /* MediaThumbnailDecoder.swift */; };
@@ -134,7 +134,6 @@
 		B5C5A94F2A4222B6DB24C41D /* capture_alignment_session.hpp in Headers */ = {isa = PBXBuildFile; fileRef = 43B1F0D997F5A71BA4E93FDA /* capture_alignment_session.hpp */; };
 		BABE07B841D8E02389936848 /* EntryHomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7C5C8E1FF8F8056BA0AD632 /* EntryHomeView.swift */; };
 		BCE1969E60297E29B0854B14 /* CameraeVision.framework in Embed Frameworks */ = {isa = PBXBuildFile; fileRef = 271D6817887C55A89BA6D9A1 /* CameraeVision.framework */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
-		BE1A6811EDED9C54770C65AF /* Pods_Camerae.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 3DCD1A3E317954DEA8936392 /* Pods_Camerae.framework */; };
 		BE380CC8B638B1E151808BA2 /* ClipSpatialAlignmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F21795E1E7DCBB6A8F9ABE9C /* ClipSpatialAlignmentTests.swift */; };
 		BE8AB35FFB79FCE5F868091C /* ProjectStorageScanner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 785DFC7BD7527B29C19F9272 /* ProjectStorageScanner.swift */; };
 		BEEBFDFACCA868D6028084D2 /* CameraeNextAlignmentModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72B84C0CBC3B02BEE2798924 /* CameraeNextAlignmentModel.swift */; };
@@ -161,6 +160,7 @@
 		D7B1BAC3E3B8EBD483292130 /* alignment.cpp in Sources */ = {isa = PBXBuildFile; fileRef = EB2DD2D5036923931FBCE934 /* alignment.cpp */; };
 		DC3CB4A042165C17A240282F /* CameraeCaptureLifecycle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FAA78769480818026A404EFA /* CameraeCaptureLifecycle.swift */; };
 		DCB7B44F9CBF78D518B2B6BA /* CameraeNextCaptureCompletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F1C3F30DDC8523CC02E7D1D /* CameraeNextCaptureCompletionTests.swift */; };
+		E080A20B93F8F6EF6F4AA18E /* Pods_CameraeIntegrationTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 346593C00EE7FFF582FAAEDA /* Pods_CameraeIntegrationTests.framework */; };
 		E22EC4AF0F072370DF9B8A7B /* CameraeMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 31B8D315F7F3ECC966096FDA /* CameraeMedia.framework */; };
 		E2DBBDE6A9C1A1AF1C9E2A7B /* EdgeOverlayRenderer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 24D3260B62DE714429D42AFE /* EdgeOverlayRenderer.swift */; };
 		E3C316E87FC91F8C0112227F /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = B62ADDBF0A316548A10CE640 /* GoogleService-Info.plist */; };
@@ -329,7 +329,6 @@
 		06760F1623764A0D85ECA398 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		0809EB823676DCBC7E92CE85 /* CameraeVisionOpenCVBackendTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeVisionOpenCVBackendTests.swift; sourceTree = "<group>"; };
 		0A40C1983F7AC20B97F6C3C6 /* EditVideoComposerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditVideoComposerTests.swift; sourceTree = "<group>"; };
-		0A7538D69CEFFC10882129DC /* Pods-Camerae.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Camerae.release.xcconfig"; path = "Target Support Files/Pods-Camerae/Pods-Camerae.release.xcconfig"; sourceTree = "<group>"; };
 		0B19C52D9835835212B6EED6 /* CameraPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraPreview.swift; sourceTree = "<group>"; };
 		0CAAE2A0DE7F575C5A75899A /* RepeatableCameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatableCameraView.swift; sourceTree = "<group>"; };
 		0D8141DF619526A0A7E57A16 /* MediaAssetProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaAssetProbe.swift; sourceTree = "<group>"; };
@@ -337,6 +336,7 @@
 		104B6D3D2DC7E887B9A6674F /* CameraeDiagnosticsConsent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeDiagnosticsConsent.swift; sourceTree = "<group>"; };
 		106D2E69DDE39E3AA32CBACF /* CameraePerformanceTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CameraePerformanceTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		13EAB0F617A85352199CE596 /* ProjectCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectCatalog.swift; sourceTree = "<group>"; };
+		14D0AB7047CAE0C19279240D /* Pods-Camerae.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Camerae.debug.xcconfig"; path = "Target Support Files/Pods-Camerae/Pods-Camerae.debug.xcconfig"; sourceTree = "<group>"; };
 		16B72332A901822A8DA83F7C /* CameraeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeSettingsView.swift; sourceTree = "<group>"; };
 		19CB890233E7103FBD6D1973 /* CameraeNextGridLibrary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextGridLibrary.swift; sourceTree = "<group>"; };
 		1D35626EC523DF3208DD55E1 /* CameraeApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeApp.swift; sourceTree = "<group>"; };
@@ -357,11 +357,11 @@
 		30BEEE270551A4286753B133 /* CameraeTokens.generated.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeTokens.generated.swift; sourceTree = "<group>"; };
 		31B8D315F7F3ECC966096FDA /* CameraeMedia.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = CameraeMedia.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		335F784E7B6B3ED75B95AA37 /* MediaLibraryCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaLibraryCatalog.swift; sourceTree = "<group>"; };
+		346593C00EE7FFF582FAAEDA /* Pods_CameraeIntegrationTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_CameraeIntegrationTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		34B1A539797A97565A7399CA /* SessionCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCatalog.swift; sourceTree = "<group>"; };
 		34FAD333F9DE7160AB9C2734 /* VideoClipAlignmentAdapters.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClipAlignmentAdapters.swift; sourceTree = "<group>"; };
 		398649A82B1B5CD8A0E1DB33 /* CameraeNextNewProjectPresentationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextNewProjectPresentationTests.swift; sourceTree = "<group>"; };
 		3C754A5286FA86769EF9247F /* CameraeVisionTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = CameraeVisionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		3DCD1A3E317954DEA8936392 /* Pods_Camerae.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Camerae.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		3DFDC0C420C062225F5F1ADD /* CameraeVisionRuntime.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CameraeVisionRuntime.mm; sourceTree = "<group>"; };
 		3F98DF0F764D2ED29ABBA24B /* RepeatableProjectsMakeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatableProjectsMakeView.swift; sourceTree = "<group>"; };
 		41C12E24D6EFD196EC78BCC0 /* EditExportViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditExportViewModel.swift; sourceTree = "<group>"; };
@@ -373,7 +373,6 @@
 		4CE6E7DCC671BDBC7210F6AD /* Providers.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Providers.swift; sourceTree = "<group>"; };
 		4E74F2FCB4B5DCEE6566A176 /* ExposureStacker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExposureStacker.swift; sourceTree = "<group>"; };
 		4FD61DCF79DE05A11F6D4F15 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
-		516B27C923E4CE701B821444 /* Pods-CameraeIntegrationTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CameraeIntegrationTests.release.xcconfig"; path = "Target Support Files/Pods-CameraeIntegrationTests/Pods-CameraeIntegrationTests.release.xcconfig"; sourceTree = "<group>"; };
 		532A18A987A8E87B17B84A23 /* CameraView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraView.swift; sourceTree = "<group>"; };
 		53FC2DEABB4191BA132EDC7A /* MediaThumbnailDecoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaThumbnailDecoder.swift; sourceTree = "<group>"; };
 		5561AD83A1A09051BFFC4F21 /* ProjectManifestCodec.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectManifestCodec.swift; sourceTree = "<group>"; };
@@ -381,15 +380,12 @@
 		5AE524F03D4A28BD7063BCF0 /* TimelapseVideoRenderer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelapseVideoRenderer.swift; sourceTree = "<group>"; };
 		5AF017751D1CA35E525E8C81 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		5CC90A8EF4822809CACC56FF /* SessionCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionCatalogTests.swift; sourceTree = "<group>"; };
-		5DB088F590B003C6254246B9 /* Pods-Camerae.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Camerae.debug.xcconfig"; path = "Target Support Files/Pods-Camerae/Pods-Camerae.debug.xcconfig"; sourceTree = "<group>"; };
 		68D6BB04116AC15A47F1BC67 /* CameraeNextWorkflowConfigurationView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextWorkflowConfigurationView.swift; sourceTree = "<group>"; };
 		68ECE4DCA95274829E8A97BA /* CameraeVisionClipAlignment.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = CameraeVisionClipAlignment.h; sourceTree = "<group>"; };
 		695607EE714C3BD7E5C21A16 /* CameraeNextSegmentedControlTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextSegmentedControlTests.swift; sourceTree = "<group>"; };
 		6AE22B5FA5E2E91FDFD16877 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		6AF84A00900C1A9E9D500287 /* CameraeNextProjectCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextProjectCatalogTests.swift; sourceTree = "<group>"; };
 		72B84C0CBC3B02BEE2798924 /* CameraeNextAlignmentModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextAlignmentModel.swift; sourceTree = "<group>"; };
-		73BB9633DA17E6469B0F57AF /* Pods-CameraeIntegrationTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CameraeIntegrationTests.debug.xcconfig"; path = "Target Support Files/Pods-CameraeIntegrationTests/Pods-CameraeIntegrationTests.debug.xcconfig"; sourceTree = "<group>"; };
-		74F6A2A28BA15D0932B985E2 /* Pods_CameraeIntegrationTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_CameraeIntegrationTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		764D2AB0A5AC0810BFAD54BB /* VisualAlignmentTransformTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualAlignmentTransformTests.swift; sourceTree = "<group>"; };
 		76B7863397497478A6190969 /* EditProjectRuntimeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProjectRuntimeView.swift; sourceTree = "<group>"; };
 		78273C083E1B26A88BAF0692 /* CameraeNextGridCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextGridCatalogTests.swift; sourceTree = "<group>"; };
@@ -405,6 +401,7 @@
 		811508EE4B526ACD08DD5F08 /* CameraeVisionClipAlignment.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CameraeVisionClipAlignment.mm; sourceTree = "<group>"; };
 		8248A2B63F4DFBDC666D6A4F /* RepeatableProjectRuntimeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RepeatableProjectRuntimeView.swift; sourceTree = "<group>"; };
 		830D063C75C478E2074FA1A2 /* CameraeCrashReporterTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeCrashReporterTests.swift; sourceTree = "<group>"; };
+		839B4787D526270BE84DABAB /* Pods-Camerae.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Camerae.release.xcconfig"; path = "Target Support Files/Pods-Camerae/Pods-Camerae.release.xcconfig"; sourceTree = "<group>"; };
 		845CFB29F2B170AA1997C7F7 /* CameraeCrashReporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeCrashReporter.swift; sourceTree = "<group>"; };
 		84F41174157AC537818B54FA /* EditProjectTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditProjectTests.swift; sourceTree = "<group>"; };
 		85DBEB4ED91494B577FD1D51 /* VideoClipAlignmentAnalyzerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VideoClipAlignmentAnalyzerTests.swift; sourceTree = "<group>"; };
@@ -435,6 +432,7 @@
 		9E5612AD53E7A7C0CFE19C14 /* opencv2.xcframework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.xcframework; name = opencv2.xcframework; path = Frameworks/opencv2.xcframework; sourceTree = "<group>"; };
 		9EB3842FED3F457E619314AD /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		9F7ECDA1422A767CF069E414 /* CameraeNextSegmentedControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextSegmentedControl.swift; sourceTree = "<group>"; };
+		9FBC4F26B7C13B9F9DFEE2A7 /* Pods_Camerae.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_Camerae.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		A09D8603943009752AB6E7B2 /* automatic_alignment.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = automatic_alignment.cpp; sourceTree = "<group>"; };
 		A10841DEA1A6D05D4FD57A00 /* OpenCVBridge.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OpenCVBridge.mm; sourceTree = "<group>"; };
 		A92DA59F732BD54C2C71CF77 /* OpenCVBridge.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OpenCVBridge.h; sourceTree = "<group>"; };
@@ -447,6 +445,7 @@
 		B38E855FB588668EDF9B1CA7 /* WorkflowVideoSettings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowVideoSettings.swift; sourceTree = "<group>"; };
 		B4085373CC284A14E86596BF /* CameraeVisionCaptureCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeVisionCaptureCoordinator.swift; sourceTree = "<group>"; };
 		B413F7B1C525DF09E5F1A555 /* ThumbnailPipelineTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThumbnailPipelineTests.swift; sourceTree = "<group>"; };
+		B453EE02F1A95DDA5DCC90E5 /* Pods-CameraeIntegrationTests.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CameraeIntegrationTests.debug.xcconfig"; path = "Target Support Files/Pods-CameraeIntegrationTests/Pods-CameraeIntegrationTests.debug.xcconfig"; sourceTree = "<group>"; };
 		B50ECBABFBCF36DC83958D11 /* CameraeVisionBridgeContractTests.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = CameraeVisionBridgeContractTests.mm; sourceTree = "<group>"; };
 		B62ADDBF0A316548A10CE640 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
 		B7ABD17BCD7FA2853D597FA9 /* CameraeNextSessionCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextSessionCatalogTests.swift; sourceTree = "<group>"; };
@@ -466,6 +465,7 @@
 		CA846836228557DBA9CFC3E7 /* capture_support.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = capture_support.cpp; sourceTree = "<group>"; };
 		CD256572B0B0F36489550132 /* CameraeNextWorkflowConfigurationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeNextWorkflowConfigurationTests.swift; sourceTree = "<group>"; };
 		CD4A564FE55CAD0561E33CE5 /* EditCompositionPlanTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EditCompositionPlanTests.swift; sourceTree = "<group>"; };
+		CE913C0FB04964BFD370272E /* Pods-CameraeIntegrationTests.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-CameraeIntegrationTests.release.xcconfig"; path = "Target Support Files/Pods-CameraeIntegrationTests/Pods-CameraeIntegrationTests.release.xcconfig"; sourceTree = "<group>"; };
 		CFDB593F8A1218C949108620 /* CameraeSmokeUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraeSmokeUITests.swift; sourceTree = "<group>"; };
 		D12FABFAEF67672CDF14E399 /* CapturePlanning.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CapturePlanning.swift; sourceTree = "<group>"; };
 		D214B617DDA753B395247142 /* ReferenceThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReferenceThumbnail.swift; sourceTree = "<group>"; };
@@ -527,14 +527,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		414DF9E42C97AD33FC0615BE /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				7D60A432BE53FC38ED69FAC9 /* Pods_CameraeIntegrationTests.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		4E2DA4482BFA1CD83D1A7CDE /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -567,7 +559,7 @@
 				8B9621422A9D8936C11C6C15 /* CameraeCore.framework in Frameworks */,
 				9F135E698EA95D9232B73E7E /* CameraeMedia.framework in Frameworks */,
 				32DC4E20E33324E86019C2AE /* CameraeVision.framework in Frameworks */,
-				BE1A6811EDED9C54770C65AF /* Pods_Camerae.framework in Frameworks */,
+				7B8ABAFDA42FD12DF5FAF7B3 /* Pods_Camerae.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -576,6 +568,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				F22C361CB32F09E8843482C8 /* CameraeCore.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F66325FBE411B0ADE65FBB3D /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E080A20B93F8F6EF6F4AA18E /* Pods_CameraeIntegrationTests.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -769,20 +769,8 @@
 				9EE8C6A4F33DA1ABB0D184CF /* src */,
 				71C16146F44E74AB88CACA49 /* Frameworks */,
 				3A9C2547B53BABAECBAFA3F0 /* Products */,
-				6E9F65B89D10C35857DC1052 /* Pods */,
+				F7056D71A77A03ADE0026020 /* Pods */,
 			);
-			sourceTree = "<group>";
-		};
-		6E9F65B89D10C35857DC1052 /* Pods */ = {
-			isa = PBXGroup;
-			children = (
-				5DB088F590B003C6254246B9 /* Pods-Camerae.debug.xcconfig */,
-				0A7538D69CEFFC10882129DC /* Pods-Camerae.release.xcconfig */,
-				73BB9633DA17E6469B0F57AF /* Pods-CameraeIntegrationTests.debug.xcconfig */,
-				516B27C923E4CE701B821444 /* Pods-CameraeIntegrationTests.release.xcconfig */,
-			);
-			name = Pods;
-			path = Pods;
 			sourceTree = "<group>";
 		};
 		6ED0EF24CB08D95DF748541E /* opencv */ = {
@@ -799,8 +787,8 @@
 			children = (
 				E18024C03B97A3F961FDF8CA /* CoreVideo.framework */,
 				9E5612AD53E7A7C0CFE19C14 /* opencv2.xcframework */,
-				3DCD1A3E317954DEA8936392 /* Pods_Camerae.framework */,
-				74F6A2A28BA15D0932B985E2 /* Pods_CameraeIntegrationTests.framework */,
+				9FBC4F26B7C13B9F9DFEE2A7 /* Pods_Camerae.framework */,
+				346593C00EE7FFF582FAAEDA /* Pods_CameraeIntegrationTests.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -1007,6 +995,18 @@
 			path = ../vision/include;
 			sourceTree = "<group>";
 		};
+		F7056D71A77A03ADE0026020 /* Pods */ = {
+			isa = PBXGroup;
+			children = (
+				14D0AB7047CAE0C19279240D /* Pods-Camerae.debug.xcconfig */,
+				839B4787D526270BE84DABAB /* Pods-Camerae.release.xcconfig */,
+				B453EE02F1A95DDA5DCC90E5 /* Pods-CameraeIntegrationTests.debug.xcconfig */,
+				CE913C0FB04964BFD370272E /* Pods-CameraeIntegrationTests.release.xcconfig */,
+			);
+			name = Pods;
+			path = Pods;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXHeadersBuildPhase section */
@@ -1052,13 +1052,13 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = A2CC7B43892E4984FD0F815A /* Build configuration list for PBXNativeTarget "Camerae" */;
 			buildPhases = (
-				647A0EAAD440AA65BB7DB229 /* [CP] Check Pods Manifest.lock */,
+				3FE06BB87903294FA4FE04E8 /* [CP] Check Pods Manifest.lock */,
 				8FBDDE30C22B5875AEFBD01A /* Sources */,
 				A5AF538882DFF1781B2222A8 /* Resources */,
 				B6931418D669E31B0B1EE59C /* Frameworks */,
 				FB7B7A82C9E1DF9FDE72903A /* Embed Frameworks */,
 				B4E5DC8045CB08A4C98A4A7B /* Upload Crashlytics Symbols */,
-				D006852C43FB1EDFDC05B689 /* [CP] Embed Pods Frameworks */,
+				C4B266CDE8BC34AC2C8E269A /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -1094,9 +1094,9 @@
 			isa = PBXNativeTarget;
 			buildConfigurationList = 5692F7A4C360873B0EEA55B3 /* Build configuration list for PBXNativeTarget "CameraeIntegrationTests" */;
 			buildPhases = (
-				65488F634F09F4E698363E06 /* [CP] Check Pods Manifest.lock */,
+				9ABAB7A6D99F7CE0A190237B /* [CP] Check Pods Manifest.lock */,
 				7C11D6AB0158500937FF175B /* Sources */,
-				414DF9E42C97AD33FC0615BE /* Frameworks */,
+				F66325FBE411B0ADE65FBB3D /* Frameworks */,
 			);
 			buildRules = (
 			);
@@ -1279,7 +1279,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXShellScriptBuildPhase section */
-		647A0EAAD440AA65BB7DB229 /* [CP] Check Pods Manifest.lock */ = {
+		3FE06BB87903294FA4FE04E8 /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1301,7 +1301,7 @@
 			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
 			showEnvVarsInLog = 0;
 		};
-		65488F634F09F4E698363E06 /* [CP] Check Pods Manifest.lock */ = {
+		9ABAB7A6D99F7CE0A190237B /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1347,7 +1347,7 @@
 			shellPath = /bin/sh;
 			shellScript = "if [ \"${CONFIGURATION}\" = \"Release\" ]; then\n  \"${PODS_ROOT}/FirebaseCrashlytics/run\"\nelse\n  echo \"Skipping Crashlytics symbol upload for ${CONFIGURATION}\"\nfi\n";
 		};
-		D006852C43FB1EDFDC05B689 /* [CP] Embed Pods Frameworks */ = {
+		C4B266CDE8BC34AC2C8E269A /* [CP] Embed Pods Frameworks */ = {
 			isa = PBXShellScriptBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -1685,7 +1685,7 @@
 		};
 		0CEA1ECDC8C5161908B18D60 /* Debug */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 73BB9633DA17E6469B0F57AF /* Pods-CameraeIntegrationTests.debug.xcconfig */;
+			baseConfigurationReference = B453EE02F1A95DDA5DCC90E5 /* Pods-CameraeIntegrationTests.debug.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1864,7 +1864,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
@@ -1877,7 +1877,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 8.4.0;
+				MARKETING_VERSION = 8.5.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -1978,7 +1978,7 @@
 		};
 		B5E99AC3EE0F282E296EC04F /* Release */ = {
 			isa = XCBuildConfiguration;
-			baseConfigurationReference = 516B27C923E4CE701B821444 /* Pods-CameraeIntegrationTests.release.xcconfig */;
+			baseConfigurationReference = CE913C0FB04964BFD370272E /* Pods-CameraeIntegrationTests.release.xcconfig */;
 			buildSettings = {
 				BUNDLE_LOADER = "$(TEST_HOST)";
 				GENERATE_INFOPLIST_FILE = YES;
@@ -2122,7 +2122,7 @@
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 23;
 				DEBUG_INFORMATION_FORMAT = dwarf;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
@@ -2141,7 +2141,7 @@
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
-				MARKETING_VERSION = 8.4.0;
+				MARKETING_VERSION = 8.5.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;

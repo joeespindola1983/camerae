@@ -155,6 +155,43 @@ enum CameraeL10n {
     static var lensMain: String { text("workflow.camera.lens.main", "Principal") }
     static var lensTelephoto: String { text("workflow.camera.lens.telephoto", "Teleobjetiva") }
 
+    static var settingsTitle: String { text("settings.title", "Configurações") }
+    static var settingsClose: String { text("settings.close", "Fechar") }
+    static var settingsOverviewHelper: String { text("settings.overview.helper", "Preferências globais do Camerae. As escolhas de captura são separadas por módulo.") }
+    static var settingsDiagnosticsUsage: String { text("settings.diagnostics_usage", "Diagnóstico e uso") }
+    static var settingsCrashlyticsAnalytics: String { text("settings.crashlytics_analytics", "Crashlytics e Analytics") }
+    static var settingsPerformance: String { text("settings.performance", "Desempenho") }
+    static var settingsPerformanceHelper: String { text("settings.performance.helper", "Equilíbrio entre energia, temperatura e qualidade") }
+    static var settingsStorage: String { text("settings.storage", "Armazenamento") }
+    static var settingsStorageHelper: String { text("settings.storage.helper", "Projetos e cache sob controle") }
+    static var settingsAppliedToNewProjects: String { text("settings.new_projects.caption", "ALTERAÇÕES APLICADAS A NOVOS PROJETOS") }
+    static var settingsActive: String { text("settings.state.active", "ATIVO") }
+    static var settingsDisabled: String { text("settings.state.disabled", "DESATIVADO") }
+    static var settingsAutomaticShort: String { text("settings.state.auto", "AUTO") }
+    static var settingsPrivacyTitle: String { text("settings.privacy.title", "Privacidade e diagnóstico") }
+    static var settingsPrivacyHelper: String { text("settings.privacy.helper", "Você pode sair a qualquer momento. Fotos, vídeos, localização, nomes de projetos e identificadores pessoais não são enviados.") }
+    static var settingsDiagnostics: String { text("settings.diagnostics", "Diagnóstico") }
+    static var settingsShareCrashReports: String { text("settings.share_crash_reports", "Compartilhar relatórios de falha") }
+    static var settingsAnalytics: String { text("settings.analytics", "Analytics") }
+    static var settingsShareAnalytics: String { text("settings.share_analytics", "Compartilhar análise de uso") }
+    static var settingsCaptureTitle: String { text("settings.capture.title", "Captura e desempenho") }
+    static var settingsCaptureHelper: String { text("settings.capture.helper", "Valores padrão para novos projetos. A câmera pode ajustar o formato quando o aparelho não oferecer suporte.") }
+    static var settingsTimelapseFormat: String { text("settings.capture.repeatable_format", "Formato das imagens do timelapse") }
+    static var settingsAstroFormat: String { text("settings.capture.astro_format", "Formato das capturas de céu noturno") }
+    static var settingsStorageTitle: String { text("settings.storage.title", "Armazenamento") }
+    static var settingsStoragePageHelper: String { text("settings.storage.page_helper", "Controle como os originais e os avisos de capacidade são tratados.") }
+    static var settingsOriginals: String { text("settings.storage.originals", "Originais") }
+    static var settingsPreserveOriginals: String { text("settings.storage.preserve_originals", "Preservar arquivos originais") }
+    static var settingsFreeSpace: String { text("settings.storage.free_space", "Espaço livre") }
+    static var settingsLowStorageWarning: String { text("settings.storage.low_space_warning", "Avisar quando houver pouco espaço") }
+    static var settingsPerformanceAutomatic: String { text("settings.performance.automatic", "Automático") }
+    static var settingsPerformanceEconomy: String { text("settings.performance.economy", "Economia") }
+    static var settingsPerformanceMaximum: String { text("settings.performance.maximum", "Qualidade máxima") }
+
+    static func settingsFreeStorage(_ value: String) -> String {
+        format("settings.storage.free_value", defaultValue: "%@ LIVRES", value)
+    }
+
     static func frameCount(_ count: Int) -> String {
         format("workflow.summary.frames", defaultValue: "%lld frames", Int64(count))
     }

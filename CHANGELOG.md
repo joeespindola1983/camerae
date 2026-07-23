@@ -8,6 +8,30 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 No changes yet.
 
+## [8.5.0] - 2026-07-23
+
+**Status:** QA candidate
+**Areas:** Home, project workflows, settings, localization, accessibility, QA evidence
+
+### Added
+
+- Added deterministic UI evidence for Settings overview, privacy and diagnostics, capture and performance, and storage.
+- Expanded each release gallery from 10 to 14 screens.
+- Added focused UI approval tests for Home, Repeatable projects, and an opened Repeatable project.
+
+### Changed
+
+- Removed the outer backgrounds, borders, and help affordances from the Home module buttons while retaining themed icon tiles.
+- Applied theme accent colors to project-list titles.
+- Made the opened Repeatable project title explicitly follow the light navigation-bar color scheme.
+- Localized every Settings screen in Portuguese, Spanish, English, French, German, and Russian.
+- Applied stable accessibility identifiers to Settings destinations and the complete first-project button.
+
+### Fixed
+
+- Fixed white Repeatable project titles on light backgrounds.
+- Fixed iPad UI evidence navigation where the create-project identifier was attached to an inner label instead of the actionable button.
+
 ## [8.4.0] - 2026-07-23
 
 **Status:** QA candidate

@@ -288,6 +288,7 @@ struct ProjectListTheme {
     var card: Color { isAstro ? CameraeColor.astroDarkCard : CameraeColor.repeatableLightCard }
     var surface: Color { isAstro ? CameraeColor.astroDarkSurface : CameraeColor.repeatableLightSurface }
     var text: Color { isAstro ? CameraeColor.astroDarkText : CameraeColor.repeatableLightText }
+    var titleText: Color { accent }
     var muted: Color { isAstro ? CameraeColor.astroDarkMuted : CameraeColor.repeatableLightMuted }
     var accent: Color { isAstro ? CameraeColor.astroDarkAccent : CameraeColor.repeatableLightAccent }
     var border: Color { isAstro ? CameraeColor.astroDarkBorder : CameraeColor.repeatableLightBorder }
@@ -475,9 +476,9 @@ struct ProjectListEmptyHero: View {
                 .foregroundStyle(theme.text)
             Button(action: createAction) {
                 Label(CameraeL10n.newProject, systemImage: "plus")
-                    .accessibilityIdentifier(CameraeAccessibility.createFirstProject)
             }
-                .buttonStyle(.borderedProminent)
+            .buttonStyle(.borderedProminent)
+            .accessibilityIdentifier(CameraeAccessibility.createFirstProject)
         }
         .frame(maxWidth: .infinity)
         .frame(height: 230)

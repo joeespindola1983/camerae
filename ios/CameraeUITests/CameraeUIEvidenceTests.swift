@@ -51,6 +51,44 @@ final class CameraeUIEvidenceTests: XCTestCase {
         openWorkflow(.edit, app: app)
         try capture("10-editor-projetos", title: "Editor · Projetos", app: app)
 
+        relaunch(app)
+        try captureSettingsEvidence(app: app)
+
+        try writeManifestAndGallery()
+    }
+
+    func testGenerateHomeAndRepeatableProjectsApprovalEvidence() throws {
+        let app = launchCleanApplication()
+
+        try capture("home", title: "Início", app: app)
+        openWorkflow(.repeatable, app: app)
+        XCTAssertTrue(element("camerae.project.empty.create", app: app).waitForExistence(timeout: 8))
+        try capture("repeatable-projects", title: "Repeatable · Projetos", app: app)
+
+        try writeManifestAndGallery()
+    }
+
+    func testGenerateRepeatableConfigurationApprovalEvidence() throws {
+        let app = launchCleanApplication()
+
+        openWorkflow(.repeatable, app: app)
+        openNewProject(app: app)
+        createProject(app: app)
+        XCTAssertTrue(
+            element(
+                localizedTitle(
+                    ptBR: "Capturas",
+                    es: "Capturas",
+                    en: "Captures",
+                    fr: "Captures",
+                    de: "Aufnahmen",
+                    ru: "Съёмки"
+                ),
+                app: app
+            ).waitForExistence(timeout: 8)
+        )
+        try capture("repeatable-configuration", title: "Repeatable · Projeto aberto", app: app)
+
         try writeManifestAndGallery()
     }
 
@@ -77,6 +115,56 @@ final class CameraeUIEvidenceTests: XCTestCase {
         let button = element("camerae.module.\(workflow.rawValue).open", app: app)
         XCTAssertTrue(button.waitForExistence(timeout: 5))
         button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+    }
+
+    private func captureSettingsEvidence(app: XCUIApplication) throws {
+        let settingsButton = element("home.settings", app: app)
+        XCTAssertTrue(settingsButton.waitForExistence(timeout: 5))
+        settingsButton.tap()
+
+        XCTAssertTrue(element("settings.overview", app: app).waitForExistence(timeout: 8))
+        try capture("11-settings-overview", title: "Configurações · Visão geral", app: app)
+
+        try captureSettingsPage(
+            openIdentifier: "settings.privacy.open",
+            pageIdentifier: "settings.privacy",
+            filename: "12-settings-privacy",
+            title: "Configurações · Privacidade e diagnóstico",
+            app: app
+        )
+        try captureSettingsPage(
+            openIdentifier: "settings.capture.open",
+            pageIdentifier: "settings.capture",
+            filename: "13-settings-capture",
+            title: "Configurações · Captura e desempenho",
+            app: app
+        )
+        try captureSettingsPage(
+            openIdentifier: "settings.storage.open",
+            pageIdentifier: "settings.storage",
+            filename: "14-settings-storage",
+            title: "Configurações · Armazenamento",
+            app: app
+        )
+    }
+
+    private func captureSettingsPage(
+        openIdentifier: String,
+        pageIdentifier: String,
+        filename: String,
+        title: String,
+        app: XCUIApplication
+    ) throws {
+        let link = element(openIdentifier, app: app)
+        XCTAssertTrue(link.waitForExistence(timeout: 5))
+        link.tap()
+        XCTAssertTrue(element(pageIdentifier, app: app).waitForExistence(timeout: 8))
+        try capture(filename, title: title, app: app)
+
+        let backButton = app.navigationBars.buttons.firstMatch
+        XCTAssertTrue(backButton.waitForExistence(timeout: 5))
+        backButton.tap()
+        XCTAssertTrue(element("settings.overview", app: app).waitForExistence(timeout: 8))
     }
 
     private func createProject(app: XCUIApplication) {

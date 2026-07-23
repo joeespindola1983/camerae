@@ -160,19 +160,6 @@ private struct WorkflowCard: View {
         }
         .padding(.top, size.topPadding)
         .frame(width: size.cardSize.width, height: size.cardSize.height, alignment: .top)
-        .background(CameraeColor.surface.opacity(0.78), in: RoundedRectangle(cornerRadius: CameraeRadius.large, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: CameraeRadius.large, style: .continuous)
-                .stroke(CameraeColor.borderStrong.opacity(0.45), lineWidth: 1)
-        }
-        .overlay(alignment: .topTrailing) {
-            if size == .standard {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 14, weight: .regular))
-                    .foregroundStyle(.white.opacity(0.35))
-                    .padding(8)
-            }
-        }
         .contentShape(RoundedRectangle(cornerRadius: CameraeRadius.large, style: .continuous))
     }
 
