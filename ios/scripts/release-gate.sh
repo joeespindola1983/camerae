@@ -79,7 +79,7 @@ print_plan() {
   esac
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
-  echo "tests: localization, architecture, Swift, Camerae Processing, Camerae Vision"
+  echo "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
   echo "visual evidence: six locales on iPhone and iPad, archived under docs/ui-evidence"
   echo "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
   echo "build: unsigned device build before signed archive"
@@ -173,6 +173,9 @@ step "Check architecture boundaries"
 
 step "Validate localization catalogs"
 (cd "$IOS_DIR" && ./scripts/tests/localization-tests.sh)
+
+step "Validate Crashlytics privacy and build contract"
+(cd "$IOS_DIR" && ./scripts/tests/crashlytics-contract-tests.sh)
 
 step "Run Swift component and integration tests"
 (cd "$IOS_DIR" && xcodebuild \

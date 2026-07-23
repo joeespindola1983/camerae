@@ -72,12 +72,16 @@ struct CameraeNextHomeView: View {
         .preferredColorScheme(.dark)
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
+            CameraeCrashReporter.shared.setModule(.app)
             projectStore.reload()
         }
     }
 
     private func workflowButton(_ module: CameraModule, compact: Bool) -> some View {
-        Button { path.append(module) } label: {
+        Button {
+            CameraeCrashReporter.shared.setModule(.init(module: module))
+            path.append(module)
+        } label: {
             VStack(spacing: compact ? 8 : 12) {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .fill(module.designTheme.accent.opacity(compact ? 1 : 0.95))

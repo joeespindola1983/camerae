@@ -38,6 +38,12 @@ final class CameraeAppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         FirebaseApp.configure()
+        let info = Bundle.main.infoDictionary ?? [:]
+        CameraeCrashReporter.shared.start(
+            configuration: CameraeCrashReportingConfiguration(infoDictionary: info),
+            appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
+            build: info["CFBundleVersion"] as? String ?? "unknown"
+        )
         return true
     }
 

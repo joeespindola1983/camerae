@@ -21,7 +21,7 @@ check_plan="$($SCRIPT check --plan)"
 expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
-expect_contains "$check_plan" "tests: localization, architecture, Swift, Camerae Processing, Camerae Vision"
+expect_contains "$check_plan" "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
 expect_contains "$check_plan" "visual evidence: six locales on iPhone and iPad, archived under docs/ui-evidence"
 expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
 
@@ -51,6 +51,10 @@ if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$
   echo "Firebase distribution must disable provisioning updates by default" >&2
   exit 1
 fi
+if ! rg -q 'CAMERAE_RELEASE_CHANNEL=qa' "$IOS_DIR/scripts/distribute-firebase.sh"; then
+  echo "Firebase archives must identify the QA release channel" >&2
+  exit 1
+fi
 if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$IOS_DIR/scripts/upload-appstore.sh"; then
   echo "App Store upload must disable provisioning updates by default" >&2
   exit 1
@@ -77,6 +81,10 @@ if ! rg -q 'generate-ui-evidence\.sh' "$SCRIPT"; then
 fi
 if ! rg -q 'localization-tests\.sh' "$SCRIPT"; then
   echo "Release gate must validate localization catalogs" >&2
+  exit 1
+fi
+if ! rg -q 'crashlytics-contract-tests\.sh' "$SCRIPT"; then
+  echo "Release gate must validate Crashlytics privacy and build settings" >&2
   exit 1
 fi
 if ! rg -q 'CHANGELOG\.md' "$SCRIPT"; then

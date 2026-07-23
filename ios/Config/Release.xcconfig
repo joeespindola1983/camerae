@@ -1,2 +1,5 @@
 #include? "../Pods/Target Support Files/Pods-Camerae/Pods-Camerae.release.xcconfig"
 #include "Signing.xcconfig"
+
+CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES
+CAMERAE_RELEASE_CHANNEL = release

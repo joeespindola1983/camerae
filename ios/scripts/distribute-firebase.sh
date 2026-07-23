@@ -168,7 +168,7 @@ if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
     )
   fi
 
-  build_settings=()
+  build_settings=(CAMERAE_RELEASE_CHANNEL=qa)
   if [[ -n "$APPLE_TEAM_ID" ]]; then
     build_settings+=(DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic)
   fi

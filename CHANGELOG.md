@@ -7,7 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 **Status:** Development
-**Areas:** Release engineering, documentation
+**Areas:** Diagnostics, privacy, release engineering, documentation
+
+### Added
+
+- Integrated Firebase Crashlytics for symbolicated QA and production crash reports.
+- Added a testable crash-reporting adapter with allowlisted, non-personal module context.
+- Added Release-only dSYM upload and explicit `qa`/`release` channel metadata.
+- Added Crashlytics data-scope, privacy, and QA verification documentation.
 
 ### Changed
 
@@ -15,6 +22,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Made pull requests optional for the current solo-developer workflow.
 - Required every QA-approved candidate to be reconciled into `develop`.
 - Added a permanent changelog requirement to the release process.
+- Replaced the Firebase Core-only pod with the locked Crashlytics dependency set.
+
+### Privacy
+
+- Crash reporting is disabled in Debug and automated-test builds.
+- Google Analytics, user IDs, project names, filesystem paths, locations, photos, and videos are excluded from diagnostic context.
 
 ## [8.3.2] - 2026-07-22
 

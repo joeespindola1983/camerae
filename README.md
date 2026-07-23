@@ -23,6 +23,7 @@ The interface supports iPhone and iPad in Brazilian Portuguese, Spanish, English
 - UI: SwiftUI
 - Capture: AVFoundation, CoreMotion, and CoreLocation
 - Alignment: Vision and OpenCV
+- Diagnostics: Firebase Crashlytics without Google Analytics in the upcoming release
 - Processing lab: C++ and OpenCV
 - Android: planned from the shared product behavior after the iOS reference implementation stabilizes
 

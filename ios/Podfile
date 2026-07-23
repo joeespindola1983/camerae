@@ -3,7 +3,7 @@ platform :ios, '17.0'
 use_frameworks!
 
 target 'Camerae' do
-  pod 'Firebase/CoreOnly'
+  pod 'FirebaseCrashlytics'
 
   target 'CameraeIntegrationTests' do
     inherit! :search_paths
