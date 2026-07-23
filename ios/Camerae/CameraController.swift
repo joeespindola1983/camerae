@@ -95,6 +95,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
     nonisolated(unsafe) private var selectedSourceFormat = CaptureSourceFormat.heic
+    nonisolated(unsafe) private var selectedPerformanceMode = CameraePerformanceMode.automatic
+    private var showsLowStorageWarnings = true
     nonisolated(unsafe) private var requestedInitialZoomFactor = 1.0
     private var captureStorageGuard: CaptureStorageGuard?
     private var stoppedForStorage = false
@@ -201,7 +203,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             cameraeVisionCoordinator.resume(.thermal)
         case .nominal:
             cameraeVisionCoordinator.updateCadence(
-                ProcessInfo.processInfo.isLowPowerModeEnabled ? .conservative : .balanced
+                ProcessInfo.processInfo.isLowPowerModeEnabled
+                    ? .conservative
+                    : visionCadence(for: selectedPerformanceMode)
             )
             cameraeVisionCoordinator.resume(.thermal)
         @unknown default:
@@ -211,7 +215,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     @objc nonisolated private func handleCameraeVisionPowerStateChange(_ notification: Notification) {
         cameraeVisionCoordinator.updateCadence(
-            ProcessInfo.processInfo.isLowPowerModeEnabled ? .conservative : .balanced
+            ProcessInfo.processInfo.isLowPowerModeEnabled
+                ? .conservative
+                : visionCadence(for: selectedPerformanceMode)
         )
     }
 
@@ -410,6 +416,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     func setCaptureSourceFormat(_ format: CaptureSourceFormat) {
         selectedSourceFormat = format
+    }
+
+    func configureApplicationSettings(
+        performanceMode: CameraePerformanceMode,
+        showsLowStorageWarnings: Bool
+    ) {
+        selectedPerformanceMode = performanceMode
+        self.showsLowStorageWarnings = showsLowStorageWarnings
+        cameraeVisionCoordinator.updateCadence(visionCadence(for: performanceMode))
     }
 
     func configureCapturePreflight(_ preflight: CapturePreflightResult) {
@@ -1048,9 +1063,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         case .healthy:
             return false
         case .warning:
-            status = result.reason == .capacityUnavailable
-                ? "Não foi possível confirmar o espaço livre"
-                : "Espaço de armazenamento ficando baixo"
+            if CameraeStorageWarningPolicy(isEnabled: showsLowStorageWarnings).shouldPresent(result) {
+                status = result.reason == .capacityUnavailable
+                    ? "Não foi possível confirmar o espaço livre"
+                    : "Espaço de armazenamento ficando baixo"
+            }
             return false
         case .stop:
             stoppedForStorage = true
@@ -1419,8 +1436,21 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         defer { cameraeVisionCoordinator.resume(.photoCapture) }
         return try captureQueue.syncSafeCapture(
             photoOutput: photoOutput,
-            preferredFormat: selectedSourceFormat
+            preferredFormat: selectedSourceFormat,
+            photoQuality: CameraePerformancePolicy(mode: selectedPerformanceMode)
+                .resolvedPhotoQuality(
+                    isLowPowerModeEnabled: ProcessInfo.processInfo.isLowPowerModeEnabled,
+                    thermalState: ProcessInfo.processInfo.thermalState
+                )
         )
+    }
+
+    nonisolated private func visionCadence(for mode: CameraePerformanceMode) -> CameraeVisionCadence {
+        switch CameraePerformancePolicy(mode: mode).visionCadence {
+        case .conservative: .conservative
+        case .balanced: .balanced
+        case .quality: .responsive
+        }
     }
 
     nonisolated private func prepareCapture(device: AVCaptureDevice) throws -> Double {
@@ -1871,7 +1901,8 @@ private final class PhotoCaptureDelegateRetainer {
 private extension DispatchQueue {
     func syncSafeCapture(
         photoOutput: AVCapturePhotoOutput,
-        preferredFormat: CaptureSourceFormat
+        preferredFormat: CaptureSourceFormat,
+        photoQuality: CameraePhotoQualityMode
     ) throws -> CapturedPhoto {
         let semaphore = DispatchSemaphore(value: 0)
         var capturedResult: Result<CapturedPhoto, Error>?
@@ -1888,7 +1919,11 @@ private extension DispatchQueue {
             selectedFormat = preferredFormat == .heic && supportsHEIC ? .heic : .jpeg
             let codec: AVVideoCodecType = selectedFormat == .heic ? .hevc : .jpeg
             settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
-            settings.photoQualityPrioritization = .speed
+            settings.photoQualityPrioritization = switch photoQuality {
+            case .speed: .speed
+            case .balanced: .balanced
+            case .quality: .quality
+            }
         }
         settings.flashMode = .off
 

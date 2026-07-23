@@ -131,6 +131,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
 }
 
 struct CameraeNextWorkflowConfigurationView: View {
+    @EnvironmentObject private var settings: CameraeSettingsStore
     let project: CameraProject
     let onStart: (CameraeNextCaptureConfiguration) -> Void
     let onShowSessions: () -> Void
@@ -210,7 +211,12 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
     private var planningPresentation: CameraeNextCapturePlanningPresentation {
         if planning.isLoading { return .evaluating }
-        if let result = planning.result { return .init(result: result) }
+        if let result = planning.result {
+            return .init(
+                result: result,
+                showsLowStorageWarning: settings.lowStorageWarningEnabled
+            )
+        }
         if planning.errorMessage != nil { return .error(planning.errorMessage) }
         return .evaluating
     }

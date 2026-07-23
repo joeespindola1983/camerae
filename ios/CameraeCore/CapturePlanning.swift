@@ -316,6 +316,18 @@ public struct CaptureStorageGuardResult: Equatable, Sendable {
     public let reason: CaptureStorageGuardReason
     public let availableBytes: UInt64?
     public let stopThresholdBytes: UInt64?
+
+    public init(
+        decision: CaptureStorageGuardDecision,
+        reason: CaptureStorageGuardReason,
+        availableBytes: UInt64?,
+        stopThresholdBytes: UInt64?
+    ) {
+        self.decision = decision
+        self.reason = reason
+        self.availableBytes = availableBytes
+        self.stopThresholdBytes = stopThresholdBytes
+    }
 }
 
 public struct CaptureStorageGuard: Equatable, Sendable {

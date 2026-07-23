@@ -1735,6 +1735,12 @@ final class AstroProcessingController: ObservableObject {
             )
             lastRenderURL = renderURL
             lastVideoURL = result.videoURL
+            try CameraeOriginalRetentionPolicy(
+                preservesOriginals: CameraeSettingsStore.shared.preserveOriginals
+            ).apply(
+                in: session.directoryURL,
+                renderedOutputURL: result.videoURL
+            )
             status = "Clipe astro pronto: \(result.outputFrames) frames"
         } catch {
             status = "Falha no processo: \(error.localizedDescription)"

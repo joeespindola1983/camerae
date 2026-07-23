@@ -17,6 +17,64 @@ enum CameraePerformanceMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+enum CameraePhotoQualityMode: Equatable, Sendable {
+    case speed
+    case balanced
+    case quality
+}
+
+enum CameraeVisionPerformanceCadence: Equatable, Sendable {
+    case conservative
+    case balanced
+    case quality
+}
+
+struct CameraePerformancePolicy: Equatable, Sendable {
+    let mode: CameraePerformanceMode
+
+    var photoQuality: CameraePhotoQualityMode {
+        switch mode {
+        case .automatic: .balanced
+        case .economy: .speed
+        case .maximumQuality: .quality
+        }
+    }
+
+    var visionCadence: CameraeVisionPerformanceCadence {
+        switch mode {
+        case .automatic: .balanced
+        case .economy: .conservative
+        case .maximumQuality: .quality
+        }
+    }
+
+    func resolvedPhotoQuality(
+        isLowPowerModeEnabled: Bool,
+        thermalState: ProcessInfo.ThermalState
+    ) -> CameraePhotoQualityMode {
+        if thermalState == .serious || thermalState == .critical {
+            return .speed
+        }
+        guard mode == .automatic else { return photoQuality }
+        if isLowPowerModeEnabled {
+            return .speed
+        }
+        return thermalState == .fair ? .speed : .balanced
+    }
+}
+
+struct CameraeStorageWarningPolicy: Equatable, Sendable {
+    let isEnabled: Bool
+
+    func shouldPresent(_ result: CaptureStorageGuardResult) -> Bool {
+        isEnabled && result.decision == .warning
+    }
+
+    func mustStop(_ result: CaptureStorageGuardResult) -> Bool {
+        result.decision == .stop
+    }
+}
+
 @MainActor
 final class CameraeSettingsStore: ObservableObject {
     static let shared = CameraeSettingsStore()
@@ -32,17 +90,18 @@ final class CameraeSettingsStore: ObservableObject {
     }
 
     private let defaults: UserDefaults
+    private let onDiagnosticsChanged: @MainActor (CameraeDiagnosticsConsentState) -> Void
 
     @Published var diagnosticsEnabled: Bool {
         didSet {
             defaults.set(diagnosticsEnabled, forKey: Key.diagnosticsEnabled)
-            CameraeDiagnosticsConsent.shared.apply(settings: self)
+            notifyDiagnosticsChanged()
         }
     }
     @Published var analyticsEnabled: Bool {
         didSet {
             defaults.set(analyticsEnabled, forKey: Key.analyticsEnabled)
-            CameraeDiagnosticsConsent.shared.apply(settings: self)
+            notifyDiagnosticsChanged()
         }
     }
     @Published var repeatableFormat: CaptureSourceFormat {
@@ -64,8 +123,14 @@ final class CameraeSettingsStore: ObservableObject {
     var effectiveCrashCollectionEnabled: Bool { diagnosticsEnabled }
     var effectiveAnalyticsCollectionEnabled: Bool { diagnosticsEnabled && analyticsEnabled }
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        onDiagnosticsChanged: @escaping @MainActor (CameraeDiagnosticsConsentState) -> Void = {
+            CameraeDiagnosticsConsent.shared.apply($0)
+        }
+    ) {
         self.defaults = defaults
+        self.onDiagnosticsChanged = onDiagnosticsChanged
         diagnosticsEnabled = Self.bool(defaults, key: Key.diagnosticsEnabled, fallback: true)
         analyticsEnabled = Self.bool(defaults, key: Key.analyticsEnabled, fallback: true)
         repeatableFormat = Self.format(defaults, key: Key.repeatableFormat, fallback: .heic, allowed: [.heic, .jpeg])
@@ -82,6 +147,21 @@ final class CameraeSettingsStore: ObservableObject {
         case .astrophotography: astroFormat
         case .edit: .jpeg
         }
+    }
+
+    var performancePolicy: CameraePerformancePolicy {
+        .init(mode: performanceMode)
+    }
+
+    var storageWarningPolicy: CameraeStorageWarningPolicy {
+        .init(isEnabled: lowStorageWarningEnabled)
+    }
+
+    private func notifyDiagnosticsChanged() {
+        onDiagnosticsChanged(.init(
+            crashlyticsEnabled: effectiveCrashCollectionEnabled,
+            analyticsEnabled: effectiveAnalyticsCollectionEnabled
+        ))
     }
 
     private static func bool(_ defaults: UserDefaults, key: String, fallback: Bool) -> Bool {

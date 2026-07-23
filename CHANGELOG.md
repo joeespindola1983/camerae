@@ -18,6 +18,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added a Figma-aligned settings hub for privacy, diagnostics, capture defaults, performance, and storage.
 - Added opt-out controls for Crashlytics and Analytics, enabled by default on new installs.
 - Added per-module defaults: HEIC for Repeatable and DNG for Astro.
+- Added runtime policies for capture quality, alignment cadence, storage warnings, and original-frame retention.
 
 ### Changed
 
@@ -27,11 +28,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added a permanent changelog requirement to the release process.
 - Replaced the Firebase Core-only pod with the locked Crashlytics dependency set.
 - Refined the Home workflow cards and added a discreet Settings entry point.
+- Applied performance preferences to AVFoundation and Camerae Vision while preserving thermal safety overrides.
+- Kept low-storage safety stops mandatory even when optional warnings are hidden.
+- Removed source frames only after a requested render completes successfully when original retention is disabled.
 
 ### Privacy
 
 - Crash reporting is disabled in Debug and automated-test builds.
 - Google Analytics, user IDs, project names, filesystem paths, locations, photos, and videos are excluded from diagnostic context.
+- Applied saved opt-out state before the first diagnostics startup and kept Debug/test collection disabled by release policy.
 
 ## [8.3.2] - 2026-07-22
 

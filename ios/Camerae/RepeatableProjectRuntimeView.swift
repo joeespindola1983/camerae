@@ -277,7 +277,11 @@ struct RepeatableProjectRuntimeView: View {
         renderingSessionID = session.id
 
         do {
-            let videoURL = try await store.renderVideo(for: session, settings: videoSettings)
+            let videoURL = try await store.renderVideo(
+                for: session,
+                settings: videoSettings,
+                preservesOriginals: CameraeSettingsStore.shared.preserveOriginals
+            )
             reloadSessions()
             shareVideo(videoURL)
         } catch {

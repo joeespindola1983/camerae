@@ -39,12 +39,20 @@ final class CameraeAppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         FirebaseApp.configure()
         let info = Bundle.main.infoDictionary ?? [:]
+        let releaseConfiguration = CameraeCrashReportingConfiguration(infoDictionary: info)
+        let settings = CameraeSettingsStore.shared
+        CameraeDiagnosticsConsent.shared.configure(
+            isCollectionAllowed: releaseConfiguration.isEnabled
+        )
         CameraeCrashReporter.shared.start(
-            configuration: CameraeCrashReportingConfiguration(infoDictionary: info),
+            configuration: .init(
+                isEnabled: releaseConfiguration.isEnabled && settings.effectiveCrashCollectionEnabled,
+                releaseChannel: releaseConfiguration.releaseChannel
+            ),
             appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
             build: info["CFBundleVersion"] as? String ?? "unknown"
         )
-        CameraeDiagnosticsConsent.shared.apply(settings: .shared)
+        CameraeDiagnosticsConsent.shared.apply(settings: settings)
         return true
     }
 

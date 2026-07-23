@@ -867,7 +867,8 @@ final class TimelapseSessionStore {
 
     func renderVideo(
         for session: TimelapseSession,
-        settings: WorkflowVideoSettings = .repeatableDefault
+        settings: WorkflowVideoSettings = .repeatableDefault,
+        preservesOriginals: Bool = true
     ) async throws -> URL {
         let frames = frameURLs(in: session)
         let outputURL = videoURL(for: session)
@@ -880,6 +881,10 @@ final class TimelapseSessionStore {
             outputURL: outputURL,
             settings: settings,
             captureOrientation: session.referenceOrientation
+        )
+        try CameraeOriginalRetentionPolicy(preservesOriginals: preservesOriginals).apply(
+            in: session.directoryURL,
+            renderedOutputURL: outputURL
         )
         return outputURL
     }
