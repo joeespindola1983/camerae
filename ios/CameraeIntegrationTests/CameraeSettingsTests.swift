@@ -1,0 +1,157 @@
+import CameraeCore
+import Foundation
+import Testing
+@testable import Camerae
+
+@Suite("Camerae settings")
+@MainActor
+struct CameraeSettingsTests {
+    @Test("new installs use the approved capture and privacy defaults")
+    func defaults() {
+        let defaults = isolatedDefaults()
+        let settings = CameraeSettingsStore(defaults: defaults)
+
+        #expect(settings.diagnosticsEnabled)
+        #expect(settings.analyticsEnabled)
+        #expect(settings.repeatableFormat == .heic)
+        #expect(settings.astroFormat == .dng)
+        #expect(settings.performanceMode == .automatic)
+        #expect(settings.preserveOriginals)
+        #expect(settings.lowStorageWarningEnabled)
+    }
+
+    @Test("privacy opt-out disables both Firebase collection paths")
+    func privacyOptOut() {
+        let defaults = isolatedDefaults()
+        var appliedConsent: CameraeDiagnosticsConsentState?
+        let settings = CameraeSettingsStore(defaults: defaults) {
+            appliedConsent = $0
+        }
+
+        settings.diagnosticsEnabled = false
+
+        #expect(!settings.effectiveCrashCollectionEnabled)
+        #expect(!settings.effectiveAnalyticsCollectionEnabled)
+        #expect(appliedConsent == .init(crashlyticsEnabled: false, analyticsEnabled: false))
+    }
+
+    @Test("Firebase consent forwards both effective collection states")
+    func firebaseConsentBackend() {
+        let backend = DiagnosticsConsentBackendSpy()
+        let consent = CameraeDiagnosticsConsent(
+            backend: backend,
+            isCollectionAllowed: false
+        )
+
+        consent.apply(.init(crashlyticsEnabled: true, analyticsEnabled: true))
+
+        #expect(backend.crashlyticsStates == [false])
+        #expect(backend.analyticsStates == [false])
+
+        consent.configure(isCollectionAllowed: true)
+        consent.apply(.init(crashlyticsEnabled: true, analyticsEnabled: false))
+        #expect(backend.crashlyticsStates == [false, true])
+        #expect(backend.analyticsStates == [false, false])
+    }
+
+    @Test("performance modes resolve capture quality and processing cadence")
+    func performancePolicy() {
+        #expect(CameraePerformancePolicy(mode: .economy).photoQuality == .speed)
+        #expect(CameraePerformancePolicy(mode: .economy).visionCadence == .conservative)
+        #expect(CameraePerformancePolicy(mode: .maximumQuality).photoQuality == .quality)
+        #expect(CameraePerformancePolicy(mode: .maximumQuality).visionCadence == .quality)
+        #expect(
+            CameraePerformancePolicy(mode: .automatic)
+                .resolvedPhotoQuality(isLowPowerModeEnabled: true, thermalState: .nominal) == .speed
+        )
+        #expect(
+            CameraePerformancePolicy(mode: .automatic)
+                .resolvedPhotoQuality(isLowPowerModeEnabled: false, thermalState: .nominal) == .balanced
+        )
+        #expect(
+            CameraePerformancePolicy(mode: .maximumQuality)
+                .resolvedPhotoQuality(isLowPowerModeEnabled: false, thermalState: .critical) == .speed
+        )
+    }
+
+    @Test("disabling low-storage warnings never disables the safety stop")
+    func storageWarningPolicy() {
+        let warning = CaptureStorageGuardResult(
+            decision: .warning,
+            reason: .lowMargin,
+            availableBytes: 100,
+            stopThresholdBytes: 80
+        )
+        let stop = CaptureStorageGuardResult(
+            decision: .stop,
+            reason: .completionReserveAtRisk,
+            availableBytes: 50,
+            stopThresholdBytes: 80
+        )
+
+        #expect(!CameraeStorageWarningPolicy(isEnabled: false).shouldPresent(warning))
+        #expect(CameraeStorageWarningPolicy(isEnabled: false).mustStop(stop))
+    }
+
+    @Test("original cleanup removes capture sources only after an output exists")
+    func originalRetentionPolicy() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeRetentionTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let frame = root.appendingPathComponent("frame_000001.heic")
+        let metadata = root.appendingPathComponent("capture_plan.json")
+        let output = root.appendingPathComponent("timelapse.mp4")
+        try Data([1]).write(to: frame)
+        try Data([2]).write(to: metadata)
+
+        let policy = CameraeOriginalRetentionPolicy(preservesOriginals: false)
+        #expect(throws: CameraeOriginalRetentionError.missingRenderedOutput) {
+            try policy.apply(in: root, renderedOutputURL: output)
+        }
+        try Data([3]).write(to: output)
+        try policy.apply(in: root, renderedOutputURL: output)
+
+        #expect(!FileManager.default.fileExists(atPath: frame.path))
+        #expect(FileManager.default.fileExists(atPath: metadata.path))
+        #expect(FileManager.default.fileExists(atPath: output.path))
+    }
+
+    @Test("settings survive recreation and feed new project configuration")
+    func persistenceAndConfiguration() {
+        let defaults = isolatedDefaults()
+        let settings = CameraeSettingsStore(defaults: defaults)
+        settings.repeatableFormat = .jpeg
+        settings.astroFormat = .heic
+        settings.performanceMode = .maximumQuality
+
+        let restored = CameraeSettingsStore(defaults: defaults)
+
+        #expect(restored.repeatableFormat == .jpeg)
+        #expect(restored.astroFormat == .heic)
+        #expect(restored.performanceMode == .maximumQuality)
+        #expect(restored.defaultSourceFormat(for: .repeatable) == .jpeg)
+        #expect(restored.defaultSourceFormat(for: .astrophotography) == .heic)
+    }
+
+    private func isolatedDefaults() -> UserDefaults {
+        let suite = "CameraeSettingsTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        return defaults
+    }
+}
+
+@MainActor
+private final class DiagnosticsConsentBackendSpy: CameraeDiagnosticsConsentBackend {
+    private(set) var crashlyticsStates: [Bool] = []
+    private(set) var analyticsStates: [Bool] = []
+
+    func setCrashlyticsCollectionEnabled(_ enabled: Bool) {
+        crashlyticsStates.append(enabled)
+    }
+
+    func setAnalyticsCollectionEnabled(_ enabled: Bool) {
+        analyticsStates.append(enabled)
+    }
+}

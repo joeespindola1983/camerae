@@ -23,6 +23,7 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
         storage: CaptureAdmissionResult,
         formatWasAdjusted: Bool = false,
         externalPowerRecommended: Bool = false,
+        showsLowStorageWarning: Bool = true,
         metricsDetail: String
     ) {
         let preflight = CapturePreflightPresentation(storage: storage)
@@ -34,7 +35,7 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
             state = .adjusted
         } else if externalPowerRecommended {
             state = .externalPower
-        } else if storage.decision == .warning {
+        } else if storage.decision == .warning && showsLowStorageWarning {
             state = .warning
         } else {
             state = .ready
@@ -79,7 +80,7 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
         }
     }
 
-    init(result: CapturePreflightResult) {
+    init(result: CapturePreflightResult, showsLowStorageWarning: Bool = true) {
         let metrics = CapturePreflightMetricsPresentation(
             plan: result.resolvedPlan,
             estimate: result.estimate
@@ -88,6 +89,7 @@ struct CameraeNextCapturePlanningPresentation: Equatable, Sendable {
             storage: result.storage,
             formatWasAdjusted: result.formatFallbackReason != nil,
             externalPowerRecommended: result.energy.externalPowerRecommended,
+            showsLowStorageWarning: showsLowStorageWarning,
             metricsDetail: Self.join(metrics.primary, metrics.secondary)
         )
     }

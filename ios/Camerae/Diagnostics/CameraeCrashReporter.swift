@@ -87,4 +87,9 @@ final class CameraeCrashReporter {
         guard isEnabled else { return }
         backend.setValue(module.rawValue, forKey: "diagnostic_module")
     }
+
+    func setCollectionEnabled(_ enabled: Bool) {
+        isEnabled = enabled
+        backend.setCollectionEnabled(enabled)
+    }
 }

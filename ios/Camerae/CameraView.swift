@@ -436,6 +436,10 @@ struct CameraView: View {
             camera.configureCapturePreflight(preflight)
         }
         camera.setCaptureSourceFormat(plan.sourceFormat)
+        camera.configureApplicationSettings(
+            performanceMode: CameraeSettingsStore.shared.performanceMode,
+            showsLowStorageWarnings: CameraeSettingsStore.shared.lowStorageWarningEnabled
+        )
         await camera.toggleAstroBatchCapture(
             timelapseInterval: timelapseIntervalSeconds,
             astroInterval: astroIntervalSeconds,

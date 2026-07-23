@@ -18,6 +18,14 @@ public enum CaptureSourceFormat: String, Codable, CaseIterable, Hashable, Sendab
         case .dng: "dng"
         }
     }
+
+    public var displayName: String {
+        switch self {
+        case .heic: "HEIC"
+        case .jpeg: "JPEG"
+        case .dng: "DNG"
+        }
+    }
 }
 
 public enum CaptureResolution: String, Codable, CaseIterable, Hashable, Sendable {
@@ -308,6 +316,18 @@ public struct CaptureStorageGuardResult: Equatable, Sendable {
     public let reason: CaptureStorageGuardReason
     public let availableBytes: UInt64?
     public let stopThresholdBytes: UInt64?
+
+    public init(
+        decision: CaptureStorageGuardDecision,
+        reason: CaptureStorageGuardReason,
+        availableBytes: UInt64?,
+        stopThresholdBytes: UInt64?
+    ) {
+        self.decision = decision
+        self.reason = reason
+        self.availableBytes = availableBytes
+        self.stopThresholdBytes = stopThresholdBytes
+    }
 }
 
 public struct CaptureStorageGuard: Equatable, Sendable {

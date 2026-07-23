@@ -46,7 +46,7 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
         videoSettings: .astroDefault,
         cameraLens: .wide,
         cameraZoomFactor: 1,
-        sourceFormat: .heic,
+        sourceFormat: .dng,
         exposureBias: 0,
         referenceOpacity: 0.5,
         intervalSeconds: 8,
@@ -131,6 +131,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
 }
 
 struct CameraeNextWorkflowConfigurationView: View {
+    @EnvironmentObject private var settings: CameraeSettingsStore
     let project: CameraProject
     let onStart: (CameraeNextCaptureConfiguration) -> Void
     let onShowSessions: () -> Void
@@ -173,6 +174,7 @@ struct CameraeNextWorkflowConfigurationView: View {
         var initialConfiguration = project.module == .astrophotography
             ? CameraeNextCaptureConfiguration.astroDefault
             : CameraeNextCaptureConfiguration.repeatableDefault
+        initialConfiguration.sourceFormat = CameraeSettingsStore.shared.defaultSourceFormat(for: project.module)
         if let lockedLens = cameraPolicy.lockedLens {
             initialConfiguration.cameraLens = lockedLens
             initialConfiguration.cameraZoomFactor = cameraPolicy.lockedZoomFactor
@@ -209,7 +211,12 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
     private var planningPresentation: CameraeNextCapturePlanningPresentation {
         if planning.isLoading { return .evaluating }
-        if let result = planning.result { return .init(result: result) }
+        if let result = planning.result {
+            return .init(
+                result: result,
+                showsLowStorageWarning: settings.lowStorageWarningEnabled
+            )
+        }
         if planning.errorMessage != nil { return .error(planning.errorMessage) }
         return .evaluating
     }
@@ -402,7 +409,7 @@ struct CameraeNextWorkflowConfigurationView: View {
                 )
 
                 HStack {
-                    summary(title: CameraeL10n.format, value: configuration.repeatableKind == .video ? "MP4" : (configuration.sourceFormat == .heic ? "HEIC" : "JPEG"))
+                    summary(title: CameraeL10n.format, value: configuration.repeatableKind == .video ? "MP4" : configuration.sourceFormat.displayName)
                     Spacer()
                     summary(title: CameraeL10n.estimate, value: CameraeL10n.frameCount(configuration.estimatedFrameCount), accent: true)
                 }

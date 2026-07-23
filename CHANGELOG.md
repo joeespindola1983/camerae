@@ -11,7 +11,7 @@ No changes yet.
 ## [8.4.0] - 2026-07-23
 
 **Status:** QA candidate
-**Areas:** Diagnostics, privacy, release engineering, documentation
+**Areas:** Settings, capture, diagnostics, privacy, interface, release engineering, documentation
 
 ### Added
 
@@ -19,6 +19,10 @@ No changes yet.
 - Added a testable crash-reporting adapter with allowlisted, non-personal module context.
 - Added Release-only dSYM upload and explicit `qa`/`release` channel metadata.
 - Added Crashlytics data-scope, privacy, and QA verification documentation.
+- Added a Figma-aligned settings hub for privacy, diagnostics, capture defaults, performance, and storage.
+- Added opt-out controls for Crashlytics and Analytics, enabled by default on new installs.
+- Added per-module defaults: HEIC for Repeatable and DNG for Astro.
+- Added runtime policies for capture quality, alignment cadence, storage warnings, and original-frame retention.
 
 ### Changed
 
@@ -28,11 +32,16 @@ No changes yet.
 - Added a permanent changelog requirement to the release process.
 - Replaced the Firebase Core-only pod with the locked Crashlytics dependency set.
 - Made the 12-gallery UI evidence matrix opt-in through `--ui-evidence`; non-UI QA gates skip screenshots by default.
+- Refined the Home workflow cards and added a discreet Settings entry point.
+- Applied performance preferences to AVFoundation and Camerae Vision while preserving thermal safety overrides.
+- Kept low-storage safety stops mandatory even when optional warnings are hidden.
+- Removed source frames only after a requested render completes successfully when original retention is disabled.
 
 ### Privacy
 
 - Crash reporting is disabled in Debug and automated-test builds.
 - Google Analytics, user IDs, project names, filesystem paths, locations, photos, and videos are excluded from diagnostic context.
+- Applied saved opt-out state before the first diagnostics startup and kept Debug/test collection disabled by release policy.
 
 ## [8.3.2] - 2026-07-22
 

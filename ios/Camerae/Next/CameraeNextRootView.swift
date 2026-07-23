@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CameraeNextRootView: View {
     @StateObject private var projectStore = ProjectStore()
+    @StateObject private var settings = CameraeSettingsStore.shared
     @State private var path = NavigationPath()
 
     var body: some View {
@@ -15,6 +16,7 @@ struct CameraeNextRootView: View {
                 }
         }
         .environmentObject(projectStore)
+        .environmentObject(settings)
         .onAppear { AppOrientationLock.shared.restorePortrait() }
     }
 }
@@ -22,6 +24,7 @@ struct CameraeNextRootView: View {
 struct CameraeNextHomeView: View {
     @EnvironmentObject private var projectStore: ProjectStore
     @Binding var path: NavigationPath
+    @State private var isShowingSettings = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -66,10 +69,31 @@ struct CameraeNextHomeView: View {
                     workflowButton(.edit, compact: true)
                 }
                 .position(x: proxy.size.width / 2, y: proxy.size.height - max(130, proxy.safeAreaInsets.bottom + 110))
+
+                Button {
+                    isShowingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 17, weight: .medium))
+                        .foregroundStyle(CameraeColor.textPrimary.opacity(0.72))
+                        .frame(width: 40, height: 40)
+                        .background(.black.opacity(0.18), in: Circle())
+                        .overlay { Circle().stroke(.white.opacity(0.12), lineWidth: 1) }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Configurações")
+                .accessibilityIdentifier("home.settings")
+                .position(
+                    x: proxy.size.width - 34,
+                    y: max(proxy.safeAreaInsets.top + 24, 34)
+                )
             }
         }
         .toolbar(.hidden, for: .navigationBar)
         .preferredColorScheme(.dark)
+        .sheet(isPresented: $isShowingSettings) {
+            CameraeSettingsView()
+        }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
             CameraeCrashReporter.shared.setModule(.app)
@@ -84,7 +108,7 @@ struct CameraeNextHomeView: View {
         } label: {
             VStack(spacing: compact ? 8 : 12) {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(module.designTheme.accent.opacity(compact ? 1 : 0.95))
+                    .fill(module.designTheme.accent)
                     .frame(width: compact ? 32 : 52, height: compact ? 32 : 52)
                     .overlay {
                         Image(systemName: module.systemImage)
@@ -96,10 +120,18 @@ struct CameraeNextHomeView: View {
                     .foregroundStyle(CameraeColor.textPrimary.opacity(0.7))
             }
             .frame(width: compact ? 111 : 120, height: compact ? 79 : 121)
-            .background(CameraeColor.surface.opacity(0.82), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .background(CameraeColor.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay {
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(CameraeColor.borderStrong.opacity(0.5), lineWidth: 1)
+                    .stroke(CameraeColor.borderStrong.opacity(0.45), lineWidth: 1)
+            }
+            .overlay(alignment: .topTrailing) {
+                if !compact {
+                    Image(systemName: "questionmark.circle")
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(CameraeColor.textMuted)
+                        .padding(8)
+                }
             }
             .accessibilityIdentifier(CameraeAccessibility.openModule(module))
         }

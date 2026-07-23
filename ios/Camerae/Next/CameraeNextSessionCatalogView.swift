@@ -665,7 +665,11 @@ struct CameraeNextSessionCatalogView: View {
         renderingSessionID = session.id
         defer { renderingSessionID = nil }
         do {
-            _ = try await store.renderVideo(for: session, settings: videoSettings)
+            _ = try await store.renderVideo(
+                for: session,
+                settings: videoSettings,
+                preservesOriginals: CameraeSettingsStore.shared.preserveOriginals
+            )
             await reload()
         } catch {
             errorMessage = error.localizedDescription
