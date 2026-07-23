@@ -2,6 +2,18 @@
 
 Galerias versionadas das telas principais, geradas pelo release gate no iOS Simulator.
 
+- [v8.5.0-23-ru](v8.5.0-23-ru/index.html)
+- [v8.5.0-23-ipad-ru](v8.5.0-23-ipad-ru/index.html)
+- [v8.5.0-23-ipad-fr](v8.5.0-23-ipad-fr/index.html)
+- [v8.5.0-23-ipad-es](v8.5.0-23-ipad-es/index.html)
+- [v8.5.0-23-ipad-en](v8.5.0-23-ipad-en/index.html)
+- [v8.5.0-23-ipad-de](v8.5.0-23-ipad-de/index.html)
+- [v8.5.0-23-ipad](v8.5.0-23-ipad/index.html)
+- [v8.5.0-23-fr](v8.5.0-23-fr/index.html)
+- [v8.5.0-23-es](v8.5.0-23-es/index.html)
+- [v8.5.0-23-en](v8.5.0-23-en/index.html)
+- [v8.5.0-23-de](v8.5.0-23-de/index.html)
+- [v8.5.0-23](v8.5.0-23/index.html)
 - [v8.4.0-22-ru](v8.4.0-22-ru/index.html)
 - [v8.4.0-22-ipad-ru](v8.4.0-22-ipad-ru/index.html)
 - [v8.4.0-22-ipad-fr](v8.4.0-22-ipad-fr/index.html)

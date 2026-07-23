@@ -1,0 +1,64 @@
+{
+  "device" : "iPad17,4",
+  "generatedAt" : "2026-07-23T20:09:50Z",
+  "locale" : "de",
+  "screens" : [
+    {
+      "filename" : "01-home.png",
+      "title" : "Início"
+    },
+    {
+      "filename" : "02-repeatable-projetos.png",
+      "title" : "Repeatable · Projetos"
+    },
+    {
+      "filename" : "03-repeatable-novo-projeto.png",
+      "title" : "Repeatable · Novo projeto"
+    },
+    {
+      "filename" : "04-repeatable-configuracao-timelapse.png",
+      "title" : "Repeatable · Configuração Timelapse"
+    },
+    {
+      "filename" : "05-repeatable-configuracao-video.png",
+      "title" : "Repeatable · Configuração Vídeo"
+    },
+    {
+      "filename" : "06-repeatable-capturas.png",
+      "title" : "Repeatable · Capturas"
+    },
+    {
+      "filename" : "07-astro-projetos.png",
+      "title" : "Astro · Projetos"
+    },
+    {
+      "filename" : "08-astro-novo-projeto.png",
+      "title" : "Astro · Novo projeto"
+    },
+    {
+      "filename" : "09-astro-configuracao.png",
+      "title" : "Astro · Configuração"
+    },
+    {
+      "filename" : "10-editor-projetos.png",
+      "title" : "Editor · Projetos"
+    },
+    {
+      "filename" : "11-settings-overview.png",
+      "title" : "Configurações · Visão geral"
+    },
+    {
+      "filename" : "12-settings-privacy.png",
+      "title" : "Configurações · Privacidade e diagnóstico"
+    },
+    {
+      "filename" : "13-settings-capture.png",
+      "title" : "Configurações · Captura e desempenho"
+    },
+    {
+      "filename" : "14-settings-storage.png",
+      "title" : "Configurações · Armazenamento"
+    }
+  ],
+  "title" : "Camerae 8.5.0 (23) · Evidências de UI · iPad · de"
+}
