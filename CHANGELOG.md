@@ -6,7 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-**Status:** Development
+No changes yet.
+
+## [8.4.0] - 2026-07-23
+
+**Status:** QA candidate
 **Areas:** Diagnostics, privacy, release engineering, documentation
 
 ### Added
@@ -247,8 +251,10 @@ These tags identify validated candidates but are not final production releases:
 | `v8.3.0-qa.1` | 2026-07-21 | Visual evidence | Camerae 8.3 UI validation candidate |
 | `v8.3.1-qa.1` | 2026-07-22 | Localization | Camerae 8.3.1 localization hotfix candidate |
 | `v8.3.2-qa.1` | 2026-07-22 | Orientation | Camerae 8.3.2 capture-orientation hotfix candidate |
+| `v8.4.0-qa.1` | 2026-07-23 | Diagnostics, privacy | First Firebase Crashlytics candidate |
 
-[Unreleased]: https://github.com/joeespindola1983/camerae/compare/v8.3.2...develop
+[Unreleased]: https://github.com/joeespindola1983/camerae/compare/v8.4.0...develop
+[8.4.0]: https://github.com/joeespindola1983/camerae/compare/v8.3.2...v8.4.0
 [8.3.2]: https://github.com/joeespindola1983/camerae/compare/v8.3.1...v8.3.2
 [8.3.1]: https://github.com/joeespindola1983/camerae/compare/v8.3.0...v8.3.1
 [8.3.0]: https://github.com/joeespindola1983/camerae/compare/v8.2.0...v8.3.0
