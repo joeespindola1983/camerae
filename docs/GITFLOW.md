@@ -8,32 +8,62 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 - `develop`: integration branch and base for the next version.
 - `qa`: environment branch used to generate Firebase App Distribution builds from an active release candidate.
 - `release/*`: stabilization branches cut from `develop`, for example `release/v5.0.0`.
-- `feature/*` or `codex/*`: short-lived implementation branches.
+- `feature/*` or `codex/*`: optional short-lived implementation branches.
 - `hotfix/*`: urgent production fixes cut from `main`.
 
 ## Invariants
 
-- Feature branches start from current `develop` and merge back to `develop`.
+- Normal development always starts from current `develop`. Direct commits to `develop` are allowed while Camerae has a single developer; pull requests and feature branches are optional.
+- When a feature branch is useful, it starts from current `develop` and merges back to `develop`.
 - `qa` is a deployment target, never the source branch for features or the next release.
-- Release fixes are committed to `release/*`, promoted again to `qa`, and returned to `develop` when the release closes.
+- Release fixes are committed to `release/*` and promoted again to `qa`.
+- Every QA-approved candidate is returned to `develop` immediately. Development never continues from a `develop` that is behind the approved QA candidate.
 - `main`, `qa`, and `develop` must all contain the approved production release before development of the following version proceeds.
 - A production tag points to the exact approved release commit.
 - Never commit feature work directly to `main` or `qa`.
 
 ## Flow
 
-1. Create `feature/*` or `codex/*` from `develop` and merge completed work back to `develop`.
+1. Switch to synchronized `develop`. Commit there directly, or optionally create `feature/*` or `codex/*` from it and merge completed work back.
 2. Cut `release/vX.Y.Z` from `develop` when the version enters stabilization.
 3. Bump versions, finalize release notes, and merge or fast-forward the release candidate into `qa`.
 4. From a synchronized local `qa`, run `ios/scripts/release-gate.sh firebase --publish` and validate the Firebase build.
-5. Apply every stabilization fix to `release/vX.Y.Z`, update `qa`, and repeat validation.
-6. After approval, merge the release into `main` and tag that exact commit as `vX.Y.Z`.
-7. Merge the approved release back into `develop` and align `qa` with the approved release commit.
-8. Verify that the tag is reachable from `main`, `qa`, and `develop` before starting the next version.
+5. After QA approves the candidate, merge or fast-forward that exact release commit into `develop`.
+6. Apply every later stabilization fix to `release/vX.Y.Z`, update `qa`, repeat validation, and reconcile each newly approved candidate into `develop`.
+7. After production approval, merge or fast-forward the release into `main` and tag that exact commit as `vX.Y.Z`.
+8. Align `develop` and `qa` with the approved production commit.
+9. Verify that the tag is reachable from `main`, `qa`, and `develop` before starting the next version.
 
 QA builds that are not production releases may use prerelease tags such as `vX.Y.Z-qa.N`. Merely setting `MARKETING_VERSION` to `X.Y.Z` on `qa` does not make that commit the final tagged release.
 
 Hotfixes start from `main`, are released and tagged through the same validation gates, and are merged back into both `develop` and `qa`.
+
+## Solo-development commands
+
+Pull requests are intentionally optional while the repository has a single developer. The safe default for a new task is:
+
+```sh
+git fetch origin
+git switch develop
+git pull --ff-only origin develop
+```
+
+Before creating a release, confirm that work started from `develop` and cut the stabilization branch from it:
+
+```sh
+git switch develop
+git switch -c release/vX.Y.Z
+```
+
+After each QA approval, update `develop` immediately:
+
+```sh
+git switch develop
+git merge --ff-only release/vX.Y.Z
+git push origin develop
+```
+
+If `--ff-only` fails, stop and inspect the divergence instead of forcing a branch. When production approves the version, advance `main`, create the final annotated tag, then align `develop` and `qa` with the same approved commit.
 
 If product work is committed directly to `qa`, stop new development, reconcile its history through a release branch, validate it, promote it to `main`, and recreate or update `develop` from the approved release before continuing.
 

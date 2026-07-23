@@ -36,10 +36,14 @@ The iOS target uses CocoaPods for Firebase Core and OpenCV, so CI and local comm
 
 Camerae uses a lightweight GitFlow:
 
-- `main` receives completed development work.
+- `develop` is the mandatory starting point for normal development.
+- Direct commits to `develop` are allowed while the project has a single developer; pull requests are optional.
+- `main` receives approved production releases.
 - `qa` receives stabilization builds for tester validation.
 - `release/*` receives release candidates for local App Store Connect publication.
 - Tags use `vMAJOR.MINOR.PATCH`, for example `v2.1.0`.
+
+Every QA-approved release candidate must be reconciled into `develop` immediately. After production approval, `main`, `develop`, and `qa` must all contain the final tagged release before work on the next version starts.
 
 Releases run through the local macOS gate in `ios/scripts/release-gate.sh`; GitHub Actions workflows are manual-only.
 
