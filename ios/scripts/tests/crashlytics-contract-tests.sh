@@ -11,12 +11,13 @@ fail() {
 
 rg -q "pod 'FirebaseCrashlytics'" "$IOS_DIR/Podfile" \
   || fail "Podfile must include FirebaseCrashlytics"
-if rg -q "Firebase.*Analytics|GoogleAnalytics" "$IOS_DIR/Podfile" "$IOS_DIR/Podfile.lock"; then
-  fail "Google Analytics must not be bundled with the minimal Crashlytics integration"
-fi
+rg -q "pod 'FirebaseAnalytics'" "$IOS_DIR/Podfile" \
+  || fail "Podfile must include FirebaseAnalytics"
 
 rg -q 'FirebaseCrashlyticsCollectionEnabled: false' "$IOS_DIR/project.yml" \
   || fail "automatic Crashlytics collection must default to disabled"
+rg -q 'FIREBASE_ANALYTICS_COLLECTION_ENABLED: false' "$IOS_DIR/project.yml" \
+  || fail "automatic Analytics collection must default to disabled"
 rg -q 'CameraeCrashlyticsCollectionEnabled: \$\(CAMERAE_CRASHLYTICS_COLLECTION_ENABLED\)' "$IOS_DIR/project.yml" \
   || fail "runtime collection policy must come from the build configuration"
 rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = NO' "$IOS_DIR/Config/Debug.xcconfig" \
@@ -25,6 +26,10 @@ rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES' "$IOS_DIR/Config/Release.xc
   || fail "Release collection must be enabled"
 rg -q 'CAMERAE_RELEASE_CHANNEL=qa' "$IOS_DIR/scripts/distribute-firebase.sh" \
   || fail "Firebase distribution must identify QA reports"
+rg -q 'setAnalyticsCollectionEnabled' "$IOS_DIR/Camerae/Diagnostics/CameraeDiagnosticsConsent.swift" \
+  || fail "Analytics collection must be controlled by runtime consent"
+rg -q 'isCollectionAllowed && state.analyticsEnabled' "$IOS_DIR/Camerae/Diagnostics/CameraeDiagnosticsConsent.swift" \
+  || fail "Analytics consent must remain constrained by the build policy"
 
 rg -q 'FirebaseCrashlytics/run' "$IOS_DIR/project.yml" \
   || fail "Release builds must upload dSYM files"

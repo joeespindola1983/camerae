@@ -1,26 +1,27 @@
 # Firebase Crashlytics
 
-Camerae uses Firebase Crashlytics to diagnose production and QA crashes without enabling Google Analytics.
+Camerae uses Firebase Crashlytics and Analytics to improve stability and understand aggregate feature usage. Both are controlled by the same in-app privacy settings and can be disabled at any time.
 
 ## Collection policy
 
 | Build | Collection | Release channel |
 | --- | --- | --- |
-| Debug and automated tests | Disabled | `debug` |
-| Firebase App Distribution | Enabled | `qa` |
-| App Store and TestFlight | Enabled | `release` |
+| Debug and automated tests | Disabled regardless of the saved preference | `debug` |
+| Firebase App Distribution | Enabled by default, with opt-out | `qa` |
+| App Store and TestFlight | Enabled by default, with opt-out | `release` |
 
-`FirebaseCrashlyticsCollectionEnabled` remains disabled in `Info.plist`. Camerae explicitly enables or disables reporting at launch from its build configuration, making the policy testable and preventing Debug builds from reporting accidentally.
+`FirebaseCrashlyticsCollectionEnabled` and `FIREBASE_ANALYTICS_COLLECTION_ENABLED` remain disabled in `Info.plist`. Camerae applies the saved consent before enabling either SDK. The build policy still prevents Debug and automated tests from reporting even if the visual preference is enabled.
 
 ## Data scope
 
-Firebase Crashlytics and its required dependencies can transmit:
+Firebase Crashlytics, Analytics, and their required dependencies can transmit:
 
 - crash stack traces and relevant application state;
 - device model and operating-system information;
 - application version, build, and release channel;
 - Firebase Sessions metadata used to group stability reports;
 - the currently selected high-level Camerae module: `app`, `repeatable`, `astro`, or `edit`.
+- aggregate application interaction and feature-usage events collected by Firebase Analytics.
 
 Camerae does not attach:
 
@@ -30,13 +31,13 @@ Camerae does not attach:
 - photos, videos, thumbnails, reference frames, or processing inputs;
 - precise or coarse location;
 - camera metadata entered or captured by the user;
-- Google Analytics events or breadcrumb logs.
+- advertising identifiers, advertising personalization, or user-profile properties configured by Camerae.
 
-Only values defined by `CameraeDiagnosticModule` and the fixed application/build keys may be attached to reports. New custom keys or logs require a privacy review and tests before release.
+Only values defined by `CameraeDiagnosticModule` and the fixed application/build keys may be attached to crash reports. Camerae does not call `setUserID`. New Analytics events, user properties, custom crash keys, or logs require a privacy review and tests before release.
 
 ## Integration
 
-- Dependency: `FirebaseCrashlytics` through the locked CocoaPods workspace.
+- Dependencies: `FirebaseCrashlytics` and `FirebaseAnalytics` through the locked CocoaPods workspace.
 - Initialization: after `FirebaseApp.configure()` in `CameraeAppDelegate`.
 - Debug symbols: the Firebase upload script runs only for Release builds.
 - Linkage: the application uses the generated CocoaPods embed-framework phase and must be built from `Camerae.xcworkspace`.
@@ -53,7 +54,8 @@ The QA archive overrides `CAMERAE_RELEASE_CHANNEL` to `qa`. App Store archives u
 5. Create a signed QA archive and confirm the Crashlytics symbol-upload build phase succeeds.
 6. Use a controlled Firebase test crash on a QA-only build and relaunch it.
 7. Confirm the issue appears symbolicated in Firebase Crashlytics.
-8. Confirm no project, media, path, location, or user data appears in its keys or logs.
+8. Confirm no project, media, path, location, or user data appears in its keys, events, or logs.
+9. Disable diagnostics in Settings, relaunch, and confirm both collection paths remain disabled.
 
 The controlled test crash must not remain reachable in a production build.
 
@@ -65,6 +67,6 @@ Before releasing the first Crashlytics-enabled version:
 - update App Store Connect App Privacy answers for the actual data collected by the bundled Firebase targets;
 - include crash and diagnostic data used for app functionality;
 - review the Firebase data-disclosure documentation again against the locked SDK version;
-- do not declare Google Analytics unless that SDK is intentionally added later.
+- declare Analytics and diagnostics according to the data actually collected by the locked Firebase SDK and Camerae configuration.
 
 The App Store privacy answers must describe the released binary, not a previous build or a planned future integration.
