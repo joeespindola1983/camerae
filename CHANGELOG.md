@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [Unreleased]
 
 **Status:** Development
-**Areas:** Diagnostics, privacy, release engineering, documentation
+**Areas:** Settings, capture, diagnostics, privacy, interface, release engineering, documentation
 
 ### Added
 
@@ -15,6 +15,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added a testable crash-reporting adapter with allowlisted, non-personal module context.
 - Added Release-only dSYM upload and explicit `qa`/`release` channel metadata.
 - Added Crashlytics data-scope, privacy, and QA verification documentation.
+- Added a Figma-aligned settings hub for privacy, diagnostics, capture defaults, performance, and storage.
+- Added opt-out controls for Crashlytics and Analytics, enabled by default on new installs.
+- Added per-module defaults: HEIC for Repeatable and DNG for Astro.
 
 ### Changed
 
@@ -23,6 +26,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Required every QA-approved candidate to be reconciled into `develop`.
 - Added a permanent changelog requirement to the release process.
 - Replaced the Firebase Core-only pod with the locked Crashlytics dependency set.
+- Refined the Home workflow cards and added a discreet Settings entry point.
 
 ### Privacy
 

@@ -44,6 +44,7 @@ final class CameraeAppDelegate: NSObject, UIApplicationDelegate {
             appVersion: info["CFBundleShortVersionString"] as? String ?? "unknown",
             build: info["CFBundleVersion"] as? String ?? "unknown"
         )
+        CameraeDiagnosticsConsent.shared.apply(settings: .shared)
         return true
     }
 

@@ -26,6 +26,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(configuration.durationMinutes == 30)
         #expect(configuration.cameraLens == .wide)
         #expect(configuration.cameraZoomFactor == 1)
+        #expect(configuration.sourceFormat == .dng)
         #expect(configuration.astroExposureSeconds == 8)
         #expect(configuration.intervalSeconds == 8)
         #expect(configuration.astroCapturesPerFrame == 3)

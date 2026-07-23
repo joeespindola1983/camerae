@@ -286,9 +286,14 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             try await configureIfNeeded()
             CameraeCaptureDiagnostics.event("C17 configure.await.end")
             guard generation == lifecycleGeneration else { return }
-            supportedSourceFormats = photoOutput.availablePhotoCodecTypes.contains(.hevc)
-                ? [.heic, .jpeg]
-                : [.jpeg]
+            var formats: Set<CaptureSourceFormat> = [.jpeg]
+            if photoOutput.availablePhotoCodecTypes.contains(.hevc) {
+                formats.insert(.heic)
+            }
+            if !photoOutput.availableRawPhotoPixelFormatTypes.isEmpty {
+                formats.insert(.dng)
+            }
+            supportedSourceFormats = formats
             startMotionUpdates()
             startLocationUpdates()
             status = "Camera principal pronta"
@@ -1871,11 +1876,20 @@ private extension DispatchQueue {
         let semaphore = DispatchSemaphore(value: 0)
         var capturedResult: Result<CapturedPhoto, Error>?
 
-        let supportsHEIC = photoOutput.availablePhotoCodecTypes.contains(.hevc)
-        let selectedFormat: CaptureSourceFormat = preferredFormat == .heic && supportsHEIC ? .heic : .jpeg
-        let codec: AVVideoCodecType = selectedFormat == .heic ? .hevc : .jpeg
-        let settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
-        settings.photoQualityPrioritization = .speed
+        let settings: AVCapturePhotoSettings
+        let selectedFormat: CaptureSourceFormat
+        if preferredFormat == .dng,
+           let rawPixelFormat = photoOutput.availableRawPhotoPixelFormatTypes.first {
+            selectedFormat = .dng
+            settings = AVCapturePhotoSettings(rawPixelFormatType: rawPixelFormat)
+            settings.photoQualityPrioritization = .quality
+        } else {
+            let supportsHEIC = photoOutput.availablePhotoCodecTypes.contains(.hevc)
+            selectedFormat = preferredFormat == .heic && supportsHEIC ? .heic : .jpeg
+            let codec: AVVideoCodecType = selectedFormat == .heic ? .hevc : .jpeg
+            settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
+            settings.photoQualityPrioritization = .speed
+        }
         settings.flashMode = .off
 
         let delegate = PhotoCaptureDelegate(format: selectedFormat) { result in

@@ -46,7 +46,7 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
         videoSettings: .astroDefault,
         cameraLens: .wide,
         cameraZoomFactor: 1,
-        sourceFormat: .heic,
+        sourceFormat: .dng,
         exposureBias: 0,
         referenceOpacity: 0.5,
         intervalSeconds: 8,
@@ -173,6 +173,7 @@ struct CameraeNextWorkflowConfigurationView: View {
         var initialConfiguration = project.module == .astrophotography
             ? CameraeNextCaptureConfiguration.astroDefault
             : CameraeNextCaptureConfiguration.repeatableDefault
+        initialConfiguration.sourceFormat = CameraeSettingsStore.shared.defaultSourceFormat(for: project.module)
         if let lockedLens = cameraPolicy.lockedLens {
             initialConfiguration.cameraLens = lockedLens
             initialConfiguration.cameraZoomFactor = cameraPolicy.lockedZoomFactor
@@ -402,7 +403,7 @@ struct CameraeNextWorkflowConfigurationView: View {
                 )
 
                 HStack {
-                    summary(title: CameraeL10n.format, value: configuration.repeatableKind == .video ? "MP4" : (configuration.sourceFormat == .heic ? "HEIC" : "JPEG"))
+                    summary(title: CameraeL10n.format, value: configuration.repeatableKind == .video ? "MP4" : configuration.sourceFormat.displayName)
                     Spacer()
                     summary(title: CameraeL10n.estimate, value: CameraeL10n.frameCount(configuration.estimatedFrameCount), accent: true)
                 }

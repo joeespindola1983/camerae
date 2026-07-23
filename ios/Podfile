@@ -4,6 +4,7 @@ use_frameworks!
 
 target 'Camerae' do
   pod 'FirebaseCrashlytics'
+  pod 'FirebaseAnalytics'
 
   target 'CameraeIntegrationTests' do
     inherit! :search_paths

@@ -18,6 +18,14 @@ public enum CaptureSourceFormat: String, Codable, CaseIterable, Hashable, Sendab
         case .dng: "dng"
         }
     }
+
+    public var displayName: String {
+        switch self {
+        case .heic: "HEIC"
+        case .jpeg: "JPEG"
+        case .dng: "DNG"
+        }
+    }
 }
 
 public enum CaptureResolution: String, Codable, CaseIterable, Hashable, Sendable {
