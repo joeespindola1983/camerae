@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Corrige o alinhamento de vídeos Repeatable para aceitar resultados de revisão dentro dos limites seguros selecionados, mantendo rejeições geométricas bloqueadas e adicionando diagnóstico estruturado por etapa.
 - Impede uma exceção da AVFoundation ao limitar a prioridade de qualidade de cada foto à capacidade configurada do output de captura.
 - Expande os diagnósticos da exportação alinhada para registrar composição, preset, status, validação e os códigos de erro subjacentes da AVFoundation.
+- Corrige a exportação alinhada em portrait usando um preset sem geometria landscape fixa, preservando o preset 1080p para composições landscape.
 
 ## [8.5.1] - 2026-07-24
 

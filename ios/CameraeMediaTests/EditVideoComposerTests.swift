@@ -7,6 +7,18 @@ import Testing
 
 @Suite("Edit video composer")
 struct EditVideoComposerTests {
+    @Test("portrait compositions use an orientation-agnostic export preset")
+    func portraitExportPresetDoesNotImposeLandscapeGeometry() {
+        #expect(
+            EditVideoExportPresetPolicy.presetName(renderWidth: 1080, renderHeight: 1920)
+                == AVAssetExportPresetHighestQuality
+        )
+        #expect(
+            EditVideoExportPresetPolicy.presetName(renderWidth: 1920, renderHeight: 1080)
+                == AVAssetExportPreset1920x1080
+        )
+    }
+
     @Test("export diagnostics preserve AVFoundation domain, code, and underlying error")
     func exportDiagnosticsPreserveSystemErrorIdentity() {
         let underlying = NSError(

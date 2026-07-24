@@ -103,9 +103,13 @@ public actor EditVideoComposer: EditVideoComposing {
             }
         }
 
+        let presetName = EditVideoExportPresetPolicy.presetName(
+            renderWidth: plan.renderWidth,
+            renderHeight: plan.renderHeight
+        )
         guard let exporter = AVAssetExportSession(
             asset: built.composition,
-            presetName: AVAssetExportPreset1920x1080
+            presetName: presetName
         ) else {
             EditVideoComposerDiagnostics.event("export.session.unavailable")
             throw EditVideoComposerError.exporterUnavailable
@@ -125,7 +129,7 @@ public actor EditVideoComposer: EditVideoComposing {
 
         EditVideoComposerDiagnostics.event(
             "export.session.started",
-            "preset=\(AVAssetExportPreset1920x1080) fileType=\(AVFileType.mp4.rawValue)"
+            "preset=\(presetName) fileType=\(AVFileType.mp4.rawValue)"
         )
         await progress(0)
         let progressTask = Task {
@@ -254,6 +258,14 @@ public actor EditVideoComposer: EditVideoComposing {
         }
         let duration = CMTimeGetSeconds(try await asset.load(.duration))
         guard duration.isFinite, duration > 0 else { throw EditVideoComposerError.emptyOutput }
+    }
+}
+
+enum EditVideoExportPresetPolicy {
+    nonisolated static func presetName(renderWidth: Int, renderHeight: Int) -> String {
+        renderHeight > renderWidth
+            ? AVAssetExportPresetHighestQuality
+            : AVAssetExportPreset1920x1080
     }
 }
 
