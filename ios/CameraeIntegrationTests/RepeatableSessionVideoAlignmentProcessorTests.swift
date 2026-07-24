@@ -113,6 +113,32 @@ struct RepeatableSessionVideoAlignmentProcessorTests {
         }
         #expect(await composer.receivedAlignment == nil)
     }
+
+    @Test("parallax warnings are never promoted to an aligned export")
+    func parallaxReviewIsBlocked() async throws {
+        let fixture = try Fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let composer = AlignmentComposerStub()
+        let unsafePlan = fixture.plan.with(
+            decision: .review,
+            reasonCodes: ["possibleParallaxOrMotion"]
+        )
+        let processor = RepeatableSessionVideoAlignmentProcessor(
+            probe: MediaProbeStub(),
+            referenceLoader: ReferenceFrameLoaderStub(frame: fixture.referenceFrame),
+            analyzer: ReferenceAnalyzerStub(plan: unsafePlan),
+            composer: composer
+        )
+
+        await #expect(throws: RepeatableSessionVideoAlignmentError.alignmentNotApplicable(.review)) {
+            _ = try await processor.process(
+                summary: fixture.summary,
+                projectReferenceURL: fixture.referenceURL,
+                settings: .videoDefault
+            )
+        }
+        #expect(await composer.receivedAlignment == nil)
+    }
 }
 
 private struct Fixture {

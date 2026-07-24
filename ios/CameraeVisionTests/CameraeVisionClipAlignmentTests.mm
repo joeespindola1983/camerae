@@ -53,6 +53,29 @@
     CVPixelBufferRelease(grayscale);
 }
 
+- (void)testRotationReportsAnInscribedValidRegionWithoutBlackCornerWedges {
+    CVPixelBufferRef reference = [self makeTexturedBufferWithWidth:320 height:240 seed:97];
+    CVPixelBufferRef moving = [self makeRotatedCopy:reference degrees:4.0];
+    NSError *error = nil;
+
+    CEVClipAlignmentResult *result = [CameraeVisionClipAlignmentEstimator
+        estimateReferencePixelBuffer:reference
+        referenceOrientation:CEVImageOrientationUp
+        movingPixelBuffer:moving
+        movingOrientation:CEVImageOrientationUp
+        error:&error];
+
+    XCTAssertNotNil(result, @"%@", error);
+    XCTAssertEqualObjects(result.selectedModel, @"similarity");
+    XCTAssertGreaterThan(result.validRegion[0].doubleValue, 0.0);
+    XCTAssertGreaterThan(result.validRegion[1].doubleValue, 0.0);
+    XCTAssertLessThan(result.validRegion[2].doubleValue, 0.99);
+    XCTAssertLessThan(result.validRegion[3].doubleValue, 0.99);
+
+    CVPixelBufferRelease(reference);
+    CVPixelBufferRelease(moving);
+}
+
 - (CVPixelBufferRef)makeTexturedBufferWithWidth:(size_t)width
                                          height:(size_t)height
                                            seed:(uint32_t)seed CF_RETURNS_RETAINED {
@@ -99,6 +122,49 @@
             const int sourceX = x - shiftX;
             const int sourceY = y - shiftY;
             if (sourceX < 0 || sourceY < 0 || sourceX >= (int)width || sourceY >= (int)height) {
+                continue;
+            }
+            memcpy(outputBase + y * outputStride + x * 4,
+                   sourceBase + sourceY * sourceStride + sourceX * 4, 4);
+        }
+    }
+    CVPixelBufferUnlockBaseAddress(output, 0);
+    CVPixelBufferUnlockBaseAddress(source, kCVPixelBufferLock_ReadOnly);
+    return output;
+}
+
+- (CVPixelBufferRef)makeRotatedCopy:(CVPixelBufferRef)source
+                            degrees:(double)degrees CF_RETURNS_RETAINED {
+    const size_t width = CVPixelBufferGetWidth(source);
+    const size_t height = CVPixelBufferGetHeight(source);
+    CVPixelBufferRef output = nil;
+    NSDictionary *attributes = @{(NSString *)kCVPixelBufferIOSurfacePropertiesKey: @{}};
+    CVPixelBufferCreate(kCFAllocatorDefault, width, height, kCVPixelFormatType_32BGRA,
+                        (__bridge CFDictionaryRef)attributes, &output);
+    CVPixelBufferLockBaseAddress(source, kCVPixelBufferLock_ReadOnly);
+    CVPixelBufferLockBaseAddress(output, 0);
+    uint8_t *sourceBase = (uint8_t *)CVPixelBufferGetBaseAddress(source);
+    uint8_t *outputBase = (uint8_t *)CVPixelBufferGetBaseAddress(output);
+    const size_t sourceStride = CVPixelBufferGetBytesPerRow(source);
+    const size_t outputStride = CVPixelBufferGetBytesPerRow(output);
+    memset(outputBase, 0, outputStride * height);
+    const double radians = degrees * M_PI / 180.0;
+    const double cosine = cos(radians);
+    const double sine = sin(radians);
+    const double centerX = ((double)width - 1.0) / 2.0;
+    const double centerY = ((double)height - 1.0) / 2.0;
+    for (int y = 0; y < (int)height; ++y) {
+        for (int x = 0; x < (int)width; ++x) {
+            const double centeredX = x - centerX;
+            const double centeredY = y - centerY;
+            const int sourceX = (int)llround(
+                cosine * centeredX + sine * centeredY + centerX
+            );
+            const int sourceY = (int)llround(
+                -sine * centeredX + cosine * centeredY + centerY
+            );
+            if (sourceX < 0 || sourceY < 0 ||
+                sourceX >= (int)width || sourceY >= (int)height) {
                 continue;
             }
             memcpy(outputBase + y * outputStride + x * 4,

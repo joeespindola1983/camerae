@@ -149,10 +149,43 @@ NSArray<NSNumber *> *NormalizedTransform(const cv::Mat &transform, const cv::Siz
 }
 
 NSArray<NSNumber *> *ValidRegion(const cv::Mat &mask) {
-    std::vector<cv::Point> points;
-    cv::findNonZero(mask, points);
-    if (points.empty()) { return @[@0, @0, @0, @0]; }
-    const cv::Rect bounds = cv::boundingRect(points);
+    if (mask.empty() || cv::countNonZero(mask) == 0) {
+        return @[@0, @0, @0, @0];
+    }
+
+    std::vector<int> heights(mask.cols, 0);
+    cv::Rect bounds;
+    int largestArea = 0;
+    for (int row = 0; row < mask.rows; ++row) {
+        const auto *pixels = mask.ptr<unsigned char>(row);
+        for (int column = 0; column < mask.cols; ++column) {
+            heights[column] = pixels[column] == 0 ? 0 : heights[column] + 1;
+        }
+
+        std::vector<int> stack;
+        stack.reserve(mask.cols + 1);
+        for (int column = 0; column <= mask.cols; ++column) {
+            const int height = column == mask.cols ? 0 : heights[column];
+            while (!stack.empty() && heights[stack.back()] > height) {
+                const int rectangleHeight = heights[stack.back()];
+                stack.pop_back();
+                const int left = stack.empty() ? 0 : stack.back() + 1;
+                const int rectangleWidth = column - left;
+                const int area = rectangleWidth * rectangleHeight;
+                if (area > largestArea) {
+                    largestArea = area;
+                    bounds = cv::Rect(
+                        left,
+                        row - rectangleHeight + 1,
+                        rectangleWidth,
+                        rectangleHeight
+                    );
+                }
+            }
+            stack.push_back(column);
+        }
+    }
+    if (largestArea == 0) { return @[@0, @0, @0, @0]; }
     return @[
         @(static_cast<double>(bounds.x) / mask.cols),
         @(static_cast<double>(bounds.y) / mask.rows),

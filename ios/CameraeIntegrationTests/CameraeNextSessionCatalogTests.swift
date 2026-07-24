@@ -175,6 +175,44 @@ struct CameraeNextSessionCatalogTests {
         ) == visibleReferenceURL)
     }
 
+    @Test func videoAlignmentUsesTheOldestVideoFrameWithoutReplacingTheVisiblePhotoReference() {
+        let photoURL = URL(fileURLWithPath: "/tmp/reference-photo.jpg")
+        let firstVideoFrameURL = URL(fileURLWithPath: "/tmp/first-video-frame.jpg")
+        let laterVideoFrameURL = URL(fileURLWithPath: "/tmp/later-video-frame.jpg")
+        let photo = fixture(
+            frameCount: 1,
+            captureKind: .photo,
+            referenceFrameURL: photoURL,
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let firstVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/first.mov"),
+            captureKind: .video,
+            referenceFrameURL: firstVideoFrameURL,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let laterVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/later.mov"),
+            captureKind: .video,
+            referenceFrameURL: laterVideoFrameURL,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let catalog = CameraeNextSessionCatalogModel(
+            summaries: [photo, laterVideo, firstVideo]
+        )
+
+        #expect(catalog.referenceFrameURL == photoURL)
+        #expect(catalog.alignmentReferenceFrameURL == firstVideoFrameURL)
+        #expect(CameraeNextSessionAlignmentReference.resolve(
+            projectReferenceURL: photoURL,
+            catalogReferenceURL: catalog.referenceFrameURL,
+            geometricReferenceURL: catalog.alignmentReferenceFrameURL
+        ) == firstVideoFrameURL)
+    }
+
     @Test func astroCaptureKeepsProcessingDestination() {
         let summary = fixture(frameCount: 8, module: .astrophotography)
 

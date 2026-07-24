@@ -201,13 +201,20 @@ extension RepeatableSessionVideoAlignmentError: LocalizedError {
 
 private extension EditSpatialAlignmentPlan {
     func approvedForVideoExport(maximumCropFraction: Double) -> EditSpatialAlignmentPlan? {
+        let unsafeGeometryReasons: Set<String> = [
+            "highLocalResidual",
+            "possibleParallaxOrMotion",
+            "perceptibleEdgeDeformation"
+        ]
         guard maximumCropFraction.isFinite,
               maximumCropFraction >= 0,
               decision != .reject,
+              unsafeGeometryReasons.isDisjoint(with: reasonCodes),
               corrections.values.allSatisfy({
                   $0.quality.decision != .reject &&
                       [.identity, .translation, .similarity].contains($0.model) &&
-                      $0.transform.isFinite
+                      $0.transform.isFinite &&
+                      unsafeGeometryReasons.isDisjoint(with: $0.quality.reasonCodes)
               }),
               1 - commonCrop.area <= maximumCropFraction + 0.000_001 else {
             return nil

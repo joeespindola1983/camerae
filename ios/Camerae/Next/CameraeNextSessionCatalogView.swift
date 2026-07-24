@@ -124,9 +124,10 @@ enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
 enum CameraeNextSessionAlignmentReference {
     static func resolve(
         projectReferenceURL: URL?,
-        catalogReferenceURL: URL?
+        catalogReferenceURL: URL?,
+        geometricReferenceURL: URL? = nil
     ) -> URL? {
-        catalogReferenceURL ?? projectReferenceURL
+        geometricReferenceURL ?? catalogReferenceURL ?? projectReferenceURL
     }
 }
 
@@ -162,6 +163,7 @@ struct CameraeNextProjectTabs: View {
 struct CameraeNextSessionCatalogModel: Equatable {
     let sessions: [TimelapseSessionSummary]
     let referenceFrameURL: URL?
+    let alignmentReferenceFrameURL: URL?
 
     init(summaries: [TimelapseSessionSummary]) {
         let populated = summaries.filter { $0.frameCount > 0 }
@@ -177,6 +179,14 @@ struct CameraeNextSessionCatalogModel: Equatable {
             .first
 
         referenceFrameURL = explicitReference ?? automaticReference
+        alignmentReferenceFrameURL = populated
+            .filter {
+                $0.captureKind == .video &&
+                    ($0.videoClipURL != nil || $0.videoURL != nil)
+            }
+            .sorted { $0.session.createdAt < $1.session.createdAt }
+            .compactMap(\.referenceFrameURL)
+            .first
         sessions = populated
             .filter { $0.captureKind != .photo }
             .sorted { $0.session.createdAt > $1.session.createdAt }
@@ -229,7 +239,8 @@ struct CameraeNextSessionCatalogView: View {
     private var alignmentReferenceURL: URL? {
         CameraeNextSessionAlignmentReference.resolve(
             projectReferenceURL: project.referenceFrameURL,
-            catalogReferenceURL: catalog.referenceFrameURL
+            catalogReferenceURL: catalog.referenceFrameURL,
+            geometricReferenceURL: catalog.alignmentReferenceFrameURL
         )
     }
 
