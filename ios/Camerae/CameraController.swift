@@ -26,6 +26,24 @@ enum CameraeLocationAuthorizationPolicy {
     }
 }
 
+enum CameraePhotoQualityPrioritizationPolicy {
+    static func resolved(
+        requested: AVCapturePhotoOutput.QualityPrioritization,
+        maximum: AVCapturePhotoOutput.QualityPrioritization
+    ) -> AVCapturePhotoOutput.QualityPrioritization {
+        switch maximum {
+        case .speed:
+            .speed
+        case .balanced:
+            requested == .quality ? .balanced : requested
+        case .quality:
+            requested
+        @unknown default:
+            .speed
+        }
+    }
+}
+
 @MainActor
 final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, CLLocationManagerDelegate {
     nonisolated(unsafe) let session = AVCaptureSession()
@@ -1348,7 +1366,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                         self.videoDataOutput.setSampleBufferDelegate(self, queue: self.visualAlignmentQueue)
                         self.session.addOutput(self.videoDataOutput)
                     }
-                    self.photoOutput.maxPhotoQualityPrioritization = .speed
+                    self.photoOutput.maxPhotoQualityPrioritization = .quality
                     try self.applyInitialZoom(to: device)
                     self.device = device
                     self.configured = true
@@ -1908,24 +1926,34 @@ private extension DispatchQueue {
         var capturedResult: Result<CapturedPhoto, Error>?
 
         let settings: AVCapturePhotoSettings
+        let requestedPrioritization: AVCapturePhotoOutput.QualityPrioritization
         let selectedFormat: CaptureSourceFormat
         if preferredFormat == .dng,
            let rawPixelFormat = photoOutput.availableRawPhotoPixelFormatTypes.first {
             selectedFormat = .dng
             settings = AVCapturePhotoSettings(rawPixelFormatType: rawPixelFormat)
-            settings.photoQualityPrioritization = .quality
+            requestedPrioritization = .quality
         } else {
             let supportsHEIC = photoOutput.availablePhotoCodecTypes.contains(.hevc)
             selectedFormat = preferredFormat == .heic && supportsHEIC ? .heic : .jpeg
             let codec: AVVideoCodecType = selectedFormat == .heic ? .hevc : .jpeg
             settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: codec])
-            settings.photoQualityPrioritization = switch photoQuality {
+            requestedPrioritization = switch photoQuality {
             case .speed: .speed
             case .balanced: .balanced
             case .quality: .quality
             }
         }
+        let resolvedPrioritization = CameraePhotoQualityPrioritizationPolicy.resolved(
+            requested: requestedPrioritization,
+            maximum: photoOutput.maxPhotoQualityPrioritization
+        )
+        settings.photoQualityPrioritization = resolvedPrioritization
         settings.flashMode = .off
+        CameraeCaptureDiagnostics.event(
+            "C20 photo.settings",
+            "format=\(selectedFormat.rawValue) requestedQuality=\(requestedPrioritization.rawValue) maxQuality=\(photoOutput.maxPhotoQualityPrioritization.rawValue) resolvedQuality=\(resolvedPrioritization.rawValue)"
+        )
 
         let delegate = PhotoCaptureDelegate(format: selectedFormat) { result in
             capturedResult = result

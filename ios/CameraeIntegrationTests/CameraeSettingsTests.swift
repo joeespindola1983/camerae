@@ -1,4 +1,5 @@
 import CameraeCore
+import AVFoundation
 import Foundation
 import Testing
 @testable import Camerae
@@ -6,6 +7,28 @@ import Testing
 @Suite("Camerae settings")
 @MainActor
 struct CameraeSettingsTests {
+    @Test("photo capture quality never exceeds the output capability")
+    func photoQualityIsClampedToOutputCapability() {
+        #expect(
+            CameraePhotoQualityPrioritizationPolicy.resolved(
+                requested: .quality,
+                maximum: .speed
+            ) == .speed
+        )
+        #expect(
+            CameraePhotoQualityPrioritizationPolicy.resolved(
+                requested: .quality,
+                maximum: .balanced
+            ) == .balanced
+        )
+        #expect(
+            CameraePhotoQualityPrioritizationPolicy.resolved(
+                requested: .balanced,
+                maximum: .quality
+            ) == .balanced
+        )
+    }
+
     @Test("new installs use the approved capture and privacy defaults")
     func defaults() {
         let defaults = isolatedDefaults()
