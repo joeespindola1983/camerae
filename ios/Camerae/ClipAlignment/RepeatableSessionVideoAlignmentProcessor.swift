@@ -203,7 +203,6 @@ private extension EditSpatialAlignmentPlan {
     func approvedForVideoExport(maximumCropFraction: Double) -> EditSpatialAlignmentPlan? {
         let unsafeGeometryReasons: Set<String> = [
             "highLocalResidual",
-            "possibleParallaxOrMotion",
             "perceptibleEdgeDeformation"
         ]
         guard maximumCropFraction.isFinite,

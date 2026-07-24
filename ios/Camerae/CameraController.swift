@@ -1411,7 +1411,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         do {
             let outputURL = try result.get()
             guard let currentSession else { throw CameraError.missingSession }
-            try saveFirstVideoFrame(from: outputURL, in: currentSession)
+            try await saveFirstVideoFrame(from: outputURL, in: currentSession)
             frameCount = store.frameCount(in: currentSession)
             completedSession = currentSession
             status = stoppedForStorage
@@ -1422,14 +1422,21 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    private func saveFirstVideoFrame(from videoURL: URL, in session: TimelapseSession) throws {
+    private func saveFirstVideoFrame(
+        from videoURL: URL,
+        in session: TimelapseSession
+    ) async throws {
         let asset = AVAsset(url: videoURL)
         let generator = AVAssetImageGenerator(asset: asset)
         generator.appliesPreferredTrackTransform = true
-        generator.requestedTimeToleranceBefore = .zero
-        generator.requestedTimeToleranceAfter = .zero
+        generator.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 30)
+        generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 30)
 
-        let cgImage = try generator.copyCGImage(at: .zero, actualTime: nil)
+        let duration = try await asset.load(.duration).seconds
+        let sampleTime = CameraeVideoReferenceFramePolicy.sampleTime(duration: duration)
+        let cgImage = try await generator.image(
+            at: CMTime(seconds: sampleTime, preferredTimescale: 600)
+        ).image
         guard let data = UIImage(cgImage: cgImage).jpegData(compressionQuality: 0.95) else {
             throw CameraError.photoEncodingFailed
         }

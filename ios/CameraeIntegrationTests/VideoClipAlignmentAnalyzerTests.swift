@@ -5,6 +5,13 @@ import CameraeMedia
 
 @Suite("Video clip alignment analyzer")
 struct VideoClipAlignmentAnalyzerTests {
+    @Test("video registration uses the same stable 200 ms frame for reference and moving clips")
+    func stableReferenceFramePolicy() {
+        #expect(CameraeVideoReferenceFramePolicy.sampleTime(duration: 8) == 0.2)
+        #expect(CameraeVideoReferenceFramePolicy.sampleFraction(duration: 8) == 0.025)
+        #expect(CameraeVideoReferenceFramePolicy.sampleTime(duration: 0.1) == 0.05)
+    }
+
     @Test("five deterministic samples produce one fixed correction per clip")
     func consensusProducesFixedTransform() async throws {
         let referenceID = UUID()
@@ -75,8 +82,8 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(rejected.applicableCorrections.isEmpty)
     }
 
-    @Test("three coherent high-local-residual samples recover as review instead of rejection")
-    func temporalConsensusRecoversLocalResidual() async throws {
+    @Test("single initial frame never recovers a high local residual from later samples")
+    func initialFrameRejectsLocalResidual() async throws {
         let itemID = UUID()
         let videoURL = URL(fileURLWithPath: "/high-residual-video.mp4")
         let extractor = ClipFrameExtractorStub(framesByURL: [
@@ -100,10 +107,8 @@ struct VideoClipAlignmentAnalyzerTests {
             source: .init(itemID: itemID, url: videoURL, duration: 7)
         )
 
-        #expect(plan.decision == .review)
-        #expect(plan.corrections[itemID]?.quality.reasonCodes.contains(
-            "temporallyConsistentLocalResidual"
-        ) == true)
+        #expect(plan.decision == .reject)
+        #expect(plan.corrections[itemID]?.quality.reasonCodes == ["highLocalResidual"])
     }
 
     @Test("analysis cache is reused until an asset fingerprint changes")
@@ -184,8 +189,9 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(plan.referenceItemID == itemID)
         #expect(plan.decision == .apply)
         #expect(abs((plan.corrections[itemID]?.transform.tx ?? 0) + 0.03) < 0.000_001)
-        #expect(await extractor.requestedFractions == [0.1, 0.3, 0.5, 0.7, 0.9])
-        #expect(await evaluator.evaluatedPairs == 5)
+        #expect(await extractor.requestedFractions.count == 1)
+        #expect(abs((await extractor.requestedFractions.first ?? 0) - 0.025) < 0.000_001)
+        #expect(await evaluator.evaluatedPairs == 1)
     }
 
     @Test("replacing the project reference invalidates single-video analysis cache")
@@ -223,7 +229,7 @@ struct VideoClipAlignmentAnalyzerTests {
             referenceFingerprint: "reference-v1",
             source: source
         )
-        #expect(await extractor.requestedFractions.count == 5)
+        #expect(await extractor.requestedFractions.count == 1)
         #expect(await analyzer.lastDiagnostics.cacheHit)
 
         _ = try await analyzer.analyze(
@@ -231,7 +237,7 @@ struct VideoClipAlignmentAnalyzerTests {
             referenceFingerprint: "reference-v2",
             source: source
         )
-        #expect(await extractor.requestedFractions.count == 10)
+        #expect(await extractor.requestedFractions.count == 2)
         #expect(!(await analyzer.lastDiagnostics.cacheHit))
     }
 
@@ -280,7 +286,7 @@ private actor ClipFrameExtractorStub: VideoClipAlignmentFrameExtracting {
 
     func frames(for source: VideoClipAlignmentSource, fractions: [Double]) async throws -> [VideoClipAlignmentFrame] {
         requestedFractions.append(contentsOf: fractions)
-        return framesByURL[source.url] ?? []
+        return Array((framesByURL[source.url] ?? []).prefix(fractions.count))
     }
 }
 

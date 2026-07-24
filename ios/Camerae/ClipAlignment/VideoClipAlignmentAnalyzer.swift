@@ -174,26 +174,33 @@ actor VideoClipAlignmentAnalyzer {
             return cached
         }
 
+        let sampleFraction = CameraeVideoReferenceFramePolicy.sampleFraction(
+            duration: source.duration
+        )
         let movingFrames = try await extractor.frames(
             for: source,
-            fractions: Self.sampleFractions
+            fractions: [sampleFraction]
         )
-        guard movingFrames.count == Self.sampleFractions.count else {
+        guard movingFrames.count == 1, let movingFrame = movingFrames.first else {
             throw VideoClipAlignmentAnalysisError.insufficientReferenceSamples
         }
-        var measurements: [VideoClipAlignmentMeasurement] = []
-        measurements.reserveCapacity(movingFrames.count)
-        for (index, movingFrame) in movingFrames.enumerated() {
-            try Task.checkCancellation()
-            let measurement = try await evaluator.evaluate(
-                reference: referenceFrame,
-                moving: movingFrame
-            )
-            measurements.append(measurement)
-            logSample(measurement, fraction: Self.sampleFractions[index], sourceIndex: 0)
-        }
-
-        let candidate = consensus(itemID: source.itemID, measurements: measurements)
+        try Task.checkCancellation()
+        CameraeAlignmentDiagnostics.event(
+            "analysis.mode",
+            "fixedFirstFrame fraction=\(sampleFraction)"
+        )
+        let measurement = try await evaluator.evaluate(
+            reference: referenceFrame,
+            moving: movingFrame
+        )
+        logSample(measurement, fraction: sampleFraction, sourceIndex: 0)
+        let candidate = ClipAlignmentCandidate(
+            itemID: source.itemID,
+            model: measurement.model,
+            transform: measurement.transform,
+            validRegion: measurement.validRegion,
+            quality: measurement.quality
+        )
         let plan = try planner.makePlan(
             referenceItemID: source.itemID,
             candidates: [candidate]
@@ -201,7 +208,7 @@ actor VideoClipAlignmentAnalyzer {
         lastDiagnostics = .init(
             cacheHit: false,
             sampledFrameCount: movingFrames.count + 1,
-            evaluatedPairCount: measurements.count
+            evaluatedPairCount: 1
         )
         cache(plan, for: cacheKey)
         return plan
@@ -433,6 +440,20 @@ actor VideoClipAlignmentAnalyzer {
             width: maximumX - minimumX,
             height: maximumY - minimumY
         )
+    }
+}
+
+enum CameraeVideoReferenceFramePolicy {
+    static let stableOffset: TimeInterval = 0.2
+
+    static func sampleTime(duration: TimeInterval) -> TimeInterval {
+        guard duration.isFinite, duration > 0 else { return 0 }
+        return min(stableOffset, duration / 2)
+    }
+
+    static func sampleFraction(duration: TimeInterval) -> Double {
+        guard duration.isFinite, duration > 0 else { return 0 }
+        return sampleTime(duration: duration) / duration
     }
 }
 

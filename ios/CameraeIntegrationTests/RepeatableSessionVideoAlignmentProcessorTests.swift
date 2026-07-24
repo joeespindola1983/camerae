@@ -114,8 +114,8 @@ struct RepeatableSessionVideoAlignmentProcessorTests {
         #expect(await composer.receivedAlignment == nil)
     }
 
-    @Test("parallax warnings are never promoted to an aligned export")
-    func parallaxReviewIsBlocked() async throws {
+    @Test("a conservative first-frame transform may export with a parallax warning")
+    func parallaxReviewUsesTheFixedFirstFrameTransform() async throws {
         let fixture = try Fixture()
         defer { try? FileManager.default.removeItem(at: fixture.directory) }
         let composer = AlignmentComposerStub()
@@ -130,14 +130,16 @@ struct RepeatableSessionVideoAlignmentProcessorTests {
             composer: composer
         )
 
-        await #expect(throws: RepeatableSessionVideoAlignmentError.alignmentNotApplicable(.review)) {
-            _ = try await processor.process(
-                summary: fixture.summary,
-                projectReferenceURL: fixture.referenceURL,
-                settings: .videoDefault
-            )
-        }
-        #expect(await composer.receivedAlignment == nil)
+        _ = try await processor.process(
+            summary: fixture.summary,
+            projectReferenceURL: fixture.referenceURL,
+            settings: .videoDefault
+        )
+
+        #expect(await composer.receivedAlignment?.decision == .apply)
+        #expect(await composer.receivedAlignment?.reasonCodes.contains(
+            "reviewAcceptedWithinUserLimits"
+        ) == true)
     }
 }
 
