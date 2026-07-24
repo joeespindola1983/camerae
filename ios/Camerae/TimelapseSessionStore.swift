@@ -54,6 +54,7 @@ struct TimelapseSessionSummary: Identifiable, Equatable, Hashable {
     let referenceFrameURL: URL?
     let videoURL: URL?
     let videoClipURL: URL?
+    let alignedVideoURL: URL?
     let isAstroProcessed: Bool
     let hasRenderedOutput: Bool
 
@@ -177,6 +178,7 @@ final class TimelapseSessionStore {
                 for: session
             )
             _ = try saveFrame(data, in: orientedSession, index: 1)
+            invalidateAlignedVideos()
             for previousReference in previousReferences {
                 try deleteSession(previousReference)
             }
@@ -355,6 +357,7 @@ final class TimelapseSessionStore {
             let clipURL = summary.videoSummary?.clipFileName.map {
                 record.directoryURL.appendingPathComponent($0)
             }
+            let alignedURL = existingAlignedVideoURL(for: session)
             return TimelapseSessionSummary(
                 session: session,
                 captureKind: session.captureKind,
@@ -363,6 +366,7 @@ final class TimelapseSessionStore {
                 referenceFrameURL: referenceURL,
                 videoURL: videoURL,
                 videoClipURL: clipURL,
+                alignedVideoURL: alignedURL,
                 isAstroProcessed: (summary.astroSummary?.frameCount ?? 0) > 0 ||
                     (summary.astroSummary?.hasRenderedClip ?? false),
                 hasRenderedOutput: (summary.astroSummary?.hasRenderedClip ?? false) ||
@@ -380,6 +384,7 @@ final class TimelapseSessionStore {
             referenceFrameURL: firstFrameURL(in: session),
             videoURL: existingVideoURL(for: session),
             videoClipURL: existingVideoClipURL(for: session),
+            alignedVideoURL: existingAlignedVideoURL(for: session),
             isAstroProcessed: isAstroProcessed(session),
             hasRenderedOutput: hasAstroRenderedClip(in: session) ||
                 existingVideoURL(for: session) != nil || existingVideoClipURL(for: session) != nil
@@ -897,6 +902,17 @@ final class TimelapseSessionStore {
         session.directoryURL.appendingPathComponent("video.mov")
     }
 
+    func alignedVideoURL(for session: TimelapseSession) -> URL {
+        session.directoryURL.appendingPathComponent("aligned.mp4")
+    }
+
+    private func invalidateAlignedVideos() {
+        guard let sessions = try? loadSessions() else { return }
+        for session in sessions where session.captureKind == .video {
+            try? fileManager.removeItem(at: alignedVideoURL(for: session))
+        }
+    }
+
     private func astroCaptureMetadataURL(for session: TimelapseSession) -> URL {
         session.directoryURL.appendingPathComponent("astro_capture.json")
     }
@@ -908,6 +924,11 @@ final class TimelapseSessionStore {
 
     private func existingVideoClipURL(for session: TimelapseSession) -> URL? {
         let url = videoClipURL(for: session)
+        return fileManager.fileExists(atPath: url.path) ? url : nil
+    }
+
+    private func existingAlignedVideoURL(for session: TimelapseSession) -> URL? {
+        let url = alignedVideoURL(for: session)
         return fileManager.fileExists(atPath: url.path) ? url : nil
     }
 

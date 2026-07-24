@@ -7,6 +7,7 @@ struct CameraeNextAlignmentView: View {
     @ObservedObject var model: CameraeNextAlignmentViewModel
     let document: EditProjectDocument
     let assets: [MediaAssetID: ResolvedMediaAsset]
+    let projectReferenceURL: URL?
     let onUseAlignment: () -> Void
     let onContinueWithoutAlignment: () -> Void
 
@@ -52,7 +53,11 @@ struct CameraeNextAlignmentView: View {
         .tint(theme.accent)
         .preferredColorScheme(.dark)
         .task(id: preparationSignature) {
-            model.prepare(document: document, assets: assets)
+            model.prepare(
+                document: document,
+                assets: assets,
+                projectReferenceURL: projectReferenceURL
+            )
         }
         .onDisappear { model.cancel() }
     }
@@ -62,13 +67,16 @@ struct CameraeNextAlignmentView: View {
     }
 
     private var preparationSignature: String {
-        document.items.map(\.id.uuidString).joined(separator: ":")
+        [
+            document.items.map(\.id.uuidString).joined(separator: ":"),
+            projectReferenceURL?.standardizedFileURL.path ?? "no-reference"
+        ].joined(separator: ":")
     }
 
     private var comparisonView: some View {
         CameraeNextAlignmentComparison(
             mode: comparison,
-            previewURL: assets.values.first?.url,
+            previewURL: projectReferenceURL ?? assets.values.first?.url,
             cropPercentage: model.snapshot.cropPercentage
         )
         .frame(height: 250)
@@ -93,7 +101,9 @@ struct CameraeNextAlignmentView: View {
                 title: model.snapshot.status == .stale ? "Resultado desatualizado" : "Pronto para analisar",
                 message: model.snapshot.status == .stale
                     ? "A timeline mudou. Analise novamente antes da exportação."
-                    : "Comparamos amostras no início, meio e fim. Seus arquivos originais não são alterados.",
+                    : projectReferenceURL == nil
+                        ? "Comparamos amostras no início, meio e fim. Seus arquivos originais não são alterados."
+                        : "Comparamos cada vídeo com a imagem de referência do projeto. Seus arquivos originais não são alterados.",
                 color: model.snapshot.status == .stale ? .yellow : theme.accent
             )
             CameraeNextActionButton(

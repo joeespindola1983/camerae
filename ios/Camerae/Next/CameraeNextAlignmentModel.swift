@@ -50,6 +50,22 @@ protocol CameraeNextAlignmentAnalyzing: Sendable {
         document: EditProjectDocument,
         assets: [MediaAssetID: ResolvedMediaAsset]
     ) async throws -> EditSpatialAlignmentPlan
+
+    func analyze(
+        document: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        projectReferenceURL: URL
+    ) async throws -> EditSpatialAlignmentPlan
+}
+
+extension CameraeNextAlignmentAnalyzing {
+    func analyze(
+        document: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        projectReferenceURL: URL
+    ) async throws -> EditSpatialAlignmentPlan {
+        try await analyze(document: document, assets: assets)
+    }
 }
 
 extension VideoClipAlignmentAnalyzer: CameraeNextAlignmentAnalyzing {}
@@ -62,6 +78,7 @@ final class CameraeNextAlignmentViewModel: ObservableObject {
     private let analyzer: any CameraeNextAlignmentAnalyzing
     private var document: EditProjectDocument?
     private var assets: [MediaAssetID: ResolvedMediaAsset] = [:]
+    private var projectReferenceURL: URL?
     private var analyzedPlan: EditSpatialAlignmentPlan?
     private var analyzedSignature: String?
     private var analysisTask: Task<Void, Never>?
@@ -84,12 +101,18 @@ final class CameraeNextAlignmentViewModel: ObservableObject {
 
     func prepare(
         document: EditProjectDocument,
-        assets: [MediaAssetID: ResolvedMediaAsset]
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        projectReferenceURL: URL? = nil
     ) {
-        let nextSignature = Self.signature(document: document, assets: assets)
+        let nextSignature = Self.signature(
+            document: document,
+            assets: assets,
+            projectReferenceURL: projectReferenceURL
+        )
         let timelineChanged = analyzedSignature != nil && analyzedSignature != nextSignature
         self.document = document
         self.assets = assets
+        self.projectReferenceURL = projectReferenceURL
 
         if timelineChanged {
             analyzedPlan = nil
@@ -127,16 +150,35 @@ final class CameraeNextAlignmentViewModel: ObservableObject {
     }
 
     func analyze() async {
-        guard mode != .off, let document, document.items.count > 1 else { return }
+        guard mode != .off, let document else { return }
+        if projectReferenceURL == nil {
+            guard document.items.count > 1 else { return }
+        } else {
+            guard !document.items.isEmpty else { return }
+        }
         analysisTask?.cancel()
         snapshot = Self.snapshot(status: .analyzing, document: document)
         let analyzer = self.analyzer
         let assets = self.assets
-        let signature = Self.signature(document: document, assets: assets)
+        let projectReferenceURL = self.projectReferenceURL
+        let signature = Self.signature(
+            document: document,
+            assets: assets,
+            projectReferenceURL: projectReferenceURL
+        )
 
         analysisTask = Task { [weak self] in
             do {
-                let plan = try await analyzer.analyze(document: document, assets: assets)
+                let plan: EditSpatialAlignmentPlan
+                if let projectReferenceURL {
+                    plan = try await analyzer.analyze(
+                        document: document,
+                        assets: assets,
+                        projectReferenceURL: projectReferenceURL
+                    )
+                } else {
+                    plan = try await analyzer.analyze(document: document, assets: assets)
+                }
                 try Task.checkCancellation()
                 guard let self else { return }
                 self.analyzedPlan = plan
@@ -177,9 +219,10 @@ final class CameraeNextAlignmentViewModel: ObservableObject {
 
     private static func signature(
         document: EditProjectDocument,
-        assets: [MediaAssetID: ResolvedMediaAsset]
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        projectReferenceURL: URL?
     ) -> String {
-        document.items.map { item in
+        let itemSignature = document.items.map { item in
             let asset = assets[item.asset.id]
             return [
                 item.id.uuidString,
@@ -189,6 +232,16 @@ final class CameraeNextAlignmentViewModel: ObservableObject {
                 String(asset?.descriptor.fileSize ?? 0)
             ].joined(separator: "|")
         }.joined(separator: ";")
+        guard let projectReferenceURL else { return itemSignature }
+        let values = try? projectReferenceURL.resourceValues(
+            forKeys: [.contentModificationDateKey, .fileSizeKey]
+        )
+        return [
+            itemSignature,
+            projectReferenceURL.standardizedFileURL.path,
+            String(values?.fileSize ?? -1),
+            String(values?.contentModificationDate?.timeIntervalSince1970 ?? -1)
+        ].joined(separator: ";")
     }
 
     private static func resultSnapshot(

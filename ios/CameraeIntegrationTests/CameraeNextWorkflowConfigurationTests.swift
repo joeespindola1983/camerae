@@ -414,6 +414,7 @@ struct CameraeNextWorkflowConfigurationTests {
             referenceFrameURL: frameCount > 0 ? session.directoryURL.appendingPathComponent("frame_000001.jpg") : nil,
             videoURL: nil,
             videoClipURL: videoClipURL,
+            alignedVideoURL: nil,
             isAstroProcessed: isAstroProcessed,
             hasRenderedOutput: videoClipURL != nil
         )

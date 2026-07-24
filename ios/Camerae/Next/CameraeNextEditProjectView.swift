@@ -72,6 +72,7 @@ struct CameraeNextEditProjectView: View {
                         model: alignment,
                         document: document,
                         assets: model.resolvedAssetsForExport,
+                        projectReferenceURL: alignmentReferenceURL,
                         onUseAlignment: { alignmentConfirmedForExport = true },
                         onContinueWithoutAlignment: { alignmentConfirmedForExport = false }
                     )
@@ -275,7 +276,17 @@ struct CameraeNextEditProjectView: View {
     }
 
     private var alignmentSignature: String {
-        (model.document?.items ?? []).map(\.id.uuidString).joined(separator: "|")
+        [
+            (model.document?.items ?? []).map(\.id.uuidString).joined(separator: "|"),
+            alignmentReferenceURL?.standardizedFileURL.path ?? "no-reference"
+        ].joined(separator: "|")
+    }
+
+    private var alignmentReferenceURL: URL? {
+        guard let sourceProjectID = model.document?.items.first?.asset.projectID else {
+            return nil
+        }
+        return projectStore.projects.first(where: { $0.id == sourceProjectID })?.referenceFrameURL
     }
 
     private var previewMessage: String {
@@ -302,7 +313,11 @@ struct CameraeNextEditProjectView: View {
 
     private func prepareAlignment() {
         guard let document = model.document else { return }
-        alignment.prepare(document: document, assets: model.resolvedAssetsForExport)
+        alignment.prepare(
+            document: document,
+            assets: model.resolvedAssetsForExport,
+            projectReferenceURL: alignmentReferenceURL
+        )
         if alignment.snapshot.status == .stale {
             alignmentConfirmedForExport = false
         }

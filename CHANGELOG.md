@@ -6,7 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-No changes yet.
+### Fixed
+
+- Made every Repeatable recorded video independently eligible for alignment whenever the project has a reference image.
+- Aligned recorded videos against the project reference image instead of depending on another video or timeline order.
+- Invalidated previously aligned video outputs when the project reference image is replaced.
+- Preserved original recorded videos and made the generated aligned MP4 the default playback and sharing artifact.
 
 ## [8.5.0] - 2026-07-23
 

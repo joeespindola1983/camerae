@@ -64,6 +64,11 @@ struct VideoClipAlignmentDiagnostics: Equatable, Sendable {
 }
 
 actor VideoClipAlignmentAnalyzer {
+    private struct ReferenceCacheKey: Hashable {
+        let referenceFingerprint: String
+        let source: VideoClipAlignmentSource
+    }
+
     static let sampleFractions = [0.2, 0.5, 0.8]
     private static let cacheCapacity = 8
 
@@ -72,6 +77,8 @@ actor VideoClipAlignmentAnalyzer {
     private let planner: ClipSpatialAlignmentPlanner
     private var cachedPlans: [[VideoClipAlignmentSource]: EditSpatialAlignmentPlan] = [:]
     private var cacheOrder: [[VideoClipAlignmentSource]] = []
+    private var cachedReferencePlans: [ReferenceCacheKey: EditSpatialAlignmentPlan] = [:]
+    private var referenceCacheOrder: [ReferenceCacheKey] = []
     private(set) var lastDiagnostics = VideoClipAlignmentDiagnostics.empty
 
     init(
@@ -144,6 +151,54 @@ actor VideoClipAlignmentAnalyzer {
         return plan
     }
 
+    func analyze(
+        referenceFrame: VideoClipAlignmentFrame,
+        referenceFingerprint: String,
+        source: VideoClipAlignmentSource
+    ) async throws -> EditSpatialAlignmentPlan {
+        try Task.checkCancellation()
+        guard source.duration.isFinite, source.duration > 0 else {
+            throw VideoClipAlignmentAnalysisError.invalidDuration
+        }
+        let cacheKey = ReferenceCacheKey(
+            referenceFingerprint: referenceFingerprint,
+            source: source
+        )
+        if let cached = cachedReferencePlans[cacheKey] {
+            lastDiagnostics = .init(cacheHit: true, sampledFrameCount: 0, evaluatedPairCount: 0)
+            return cached
+        }
+
+        let movingFrames = try await extractor.frames(
+            for: source,
+            fractions: Self.sampleFractions
+        )
+        guard movingFrames.count == Self.sampleFractions.count else {
+            throw VideoClipAlignmentAnalysisError.insufficientReferenceSamples
+        }
+        var measurements: [VideoClipAlignmentMeasurement] = []
+        measurements.reserveCapacity(movingFrames.count)
+        for movingFrame in movingFrames {
+            try Task.checkCancellation()
+            measurements.append(
+                try await evaluator.evaluate(reference: referenceFrame, moving: movingFrame)
+            )
+        }
+
+        let candidate = consensus(itemID: source.itemID, measurements: measurements)
+        let plan = try planner.makePlan(
+            referenceItemID: source.itemID,
+            candidates: [candidate]
+        )
+        lastDiagnostics = .init(
+            cacheHit: false,
+            sampledFrameCount: movingFrames.count + 1,
+            evaluatedPairCount: measurements.count
+        )
+        cache(plan, for: cacheKey)
+        return plan
+    }
+
     private func cache(_ plan: EditSpatialAlignmentPlan, for sources: [VideoClipAlignmentSource]) {
         if cachedPlans[sources] == nil {
             cacheOrder.append(sources)
@@ -151,6 +206,16 @@ actor VideoClipAlignmentAnalyzer {
         cachedPlans[sources] = plan
         while cacheOrder.count > Self.cacheCapacity {
             cachedPlans.removeValue(forKey: cacheOrder.removeFirst())
+        }
+    }
+
+    private func cache(_ plan: EditSpatialAlignmentPlan, for key: ReferenceCacheKey) {
+        if cachedReferencePlans[key] == nil {
+            referenceCacheOrder.append(key)
+        }
+        cachedReferencePlans[key] = plan
+        while referenceCacheOrder.count > Self.cacheCapacity {
+            cachedReferencePlans.removeValue(forKey: referenceCacheOrder.removeFirst())
         }
     }
 

@@ -114,6 +114,84 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(!(await analyzer.lastDiagnostics.cacheHit))
     }
 
+    @Test("one video aligns directly against the project reference image")
+    func singleVideoUsesProjectReference() async throws {
+        let itemID = UUID()
+        let videoURL = URL(fileURLWithPath: "/only-video.mp4")
+        let extractor = ClipFrameExtractorStub(framesByURL: [
+            videoURL: try Self.frames(markers: [11, 12, 13])
+        ])
+        let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
+            11: Self.measurement(tx: -0.03, score: 0.91),
+            12: Self.measurement(tx: -0.03, score: 0.94),
+            13: Self.measurement(tx: -0.03, score: 0.92)
+        ])
+        let analyzer = VideoClipAlignmentAnalyzer(extractor: extractor, evaluator: evaluator)
+        let referenceFrame = try #require(Self.frames(markers: [1]).first)
+
+        let plan = try await analyzer.analyze(
+            referenceFrame: referenceFrame,
+            referenceFingerprint: "project-reference-v1",
+            source: .init(
+                itemID: itemID,
+                url: videoURL,
+                duration: 8,
+                fingerprint: "video-v1"
+            )
+        )
+
+        #expect(plan.referenceItemID == itemID)
+        #expect(plan.decision == .apply)
+        #expect(abs((plan.corrections[itemID]?.transform.tx ?? 0) + 0.03) < 0.000_001)
+        #expect(await extractor.requestedFractions == [0.2, 0.5, 0.8])
+        #expect(await evaluator.evaluatedPairs == 3)
+    }
+
+    @Test("replacing the project reference invalidates single-video analysis cache")
+    func referenceFingerprintInvalidatesSingleVideoCache() async throws {
+        let itemID = UUID()
+        let videoURL = URL(fileURLWithPath: "/only-video.mp4")
+        let extractor = ClipFrameExtractorStub(framesByURL: [
+            videoURL: try Self.frames(markers: [11, 12, 13])
+        ])
+        let analyzer = VideoClipAlignmentAnalyzer(
+            extractor: extractor,
+            evaluator: ClipPairEvaluatorStub(measurementsByMarker: [
+                11: Self.measurement(tx: -0.02, score: 0.9),
+                12: Self.measurement(tx: -0.02, score: 0.9),
+                13: Self.measurement(tx: -0.02, score: 0.9)
+            ])
+        )
+        let referenceFrame = try #require(Self.frames(markers: [1]).first)
+        let source = VideoClipAlignmentSource(
+            itemID: itemID,
+            url: videoURL,
+            duration: 5,
+            fingerprint: "video-v1"
+        )
+
+        _ = try await analyzer.analyze(
+            referenceFrame: referenceFrame,
+            referenceFingerprint: "reference-v1",
+            source: source
+        )
+        _ = try await analyzer.analyze(
+            referenceFrame: referenceFrame,
+            referenceFingerprint: "reference-v1",
+            source: source
+        )
+        #expect(await extractor.requestedFractions.count == 3)
+        #expect(await analyzer.lastDiagnostics.cacheHit)
+
+        _ = try await analyzer.analyze(
+            referenceFrame: referenceFrame,
+            referenceFingerprint: "reference-v2",
+            source: source
+        )
+        #expect(await extractor.requestedFractions.count == 6)
+        #expect(!(await analyzer.lastDiagnostics.cacheHit))
+    }
+
     private static func frames(markers: [UInt8]) throws -> [VideoClipAlignmentFrame] {
         try markers.map { marker in
             var buffer: CVPixelBuffer?

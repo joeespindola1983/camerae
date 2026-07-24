@@ -24,6 +24,25 @@ struct CameraeNextAlignmentTests {
         #expect(await analyzer.callCount == 1)
     }
 
+    @Test("one video can be analyzed when its source project has a reference image")
+    func singleVideoUsesProjectReference() async throws {
+        let fixture = try Self.fixture(decision: .apply, cropArea: 0.94)
+        var singleVideoDocument = fixture.document
+        singleVideoDocument.items = [try #require(fixture.document.items.first)]
+        let analyzer = CameraeNextAlignmentAnalyzerStub(result: .success(fixture.plan))
+        let model = CameraeNextAlignmentViewModel(analyzer: analyzer)
+
+        model.prepare(
+            document: singleVideoDocument,
+            assets: fixture.assets,
+            projectReferenceURL: URL(fileURLWithPath: "/tmp/project-reference.jpg")
+        )
+        await model.analyze()
+
+        #expect(model.snapshot.status == .applied)
+        #expect(await analyzer.callCount == 1)
+    }
+
     @Test("review and rejection remain explicit instead of becoming export plans")
     func conservativeDecisions() async throws {
         for decision in [ClipAlignmentDecision.review, .reject] {

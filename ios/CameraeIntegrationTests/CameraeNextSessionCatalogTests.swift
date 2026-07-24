@@ -73,6 +73,23 @@ struct CameraeNextSessionCatalogTests {
         #expect(presentation.trailingAction == .videoMenu(url))
     }
 
+    @Test func alignedVideoBecomesTheDefaultPlayerAndShareArtifact() {
+        let originalURL = URL(fileURLWithPath: "/tmp/capture.mov")
+        let alignedURL = URL(fileURLWithPath: "/tmp/aligned.mp4")
+        let summary = fixture(
+            frameCount: 1,
+            videoClipURL: originalURL,
+            alignedVideoURL: alignedURL,
+            captureKind: .video
+        )
+
+        #expect(CameraeNextSessionOpenRoute(summary: summary) == .video(alignedURL))
+        #expect(
+            CameraeNextSessionCardPresentation(summary: summary).trailingAction ==
+                .videoMenu(alignedURL)
+        )
+    }
+
     @Test func captureWithoutMP4ShowsGenerationStatusAndMenu() {
         let presentation = CameraeNextSessionCardPresentation(summary: fixture(frameCount: 8))
 
@@ -97,6 +114,46 @@ struct CameraeNextSessionCatalogTests {
         #expect(prompt.primaryActionTitle == "Processar alinhamento")
         #expect(prompt.secondaryActionTitle == "Agora não")
         #expect(prompt.message.contains("frame de referência do projeto"))
+    }
+
+    @Test func everyRecordedVideoIsAlignableWhenTheProjectHasAReference() {
+        let first = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/first.mov"),
+            captureKind: .video
+        )
+        let second = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/second.mov"),
+            captureKind: .video
+        )
+        let referenceURL = URL(fileURLWithPath: "/tmp/reference.jpg")
+
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: first,
+            projectReferenceURL: referenceURL
+        ) == .available)
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: second,
+            projectReferenceURL: referenceURL
+        ) == .available)
+    }
+
+    @Test func alignmentEligibilityNeverDependsOnAnotherVideo() {
+        let video = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/only.mov"),
+            captureKind: .video
+        )
+
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: video,
+            projectReferenceURL: URL(fileURLWithPath: "/tmp/reference.jpg")
+        ) == .available)
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: video,
+            projectReferenceURL: nil
+        ) == .referenceUnavailable)
     }
 
     @Test func astroCaptureKeepsProcessingDestination() {
@@ -181,6 +238,7 @@ struct CameraeNextSessionCatalogTests {
         module: CameraModule = .repeatable,
         videoURL: URL? = nil,
         videoClipURL: URL? = nil,
+        alignedVideoURL: URL? = nil,
         captureKind: RepeatableCaptureKind = .timelapse,
         referenceFrameURL: URL? = nil,
         createdAt: Date = .now
@@ -206,6 +264,7 @@ struct CameraeNextSessionCatalogTests {
             referenceFrameURL: referenceFrameURL,
             videoURL: videoURL,
             videoClipURL: videoClipURL,
+            alignedVideoURL: alignedVideoURL,
             isAstroProcessed: false,
             hasRenderedOutput: false
         )

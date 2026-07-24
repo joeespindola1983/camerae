@@ -52,7 +52,7 @@ enum CameraeNextSessionOpenRoute: Equatable, Sendable {
     init(summary: TimelapseSessionSummary) {
         if summary.session.module == .astrophotography {
             self = .astroProcessing
-        } else if let url = summary.videoClipURL ?? summary.videoURL {
+        } else if let url = summary.alignedVideoURL ?? summary.videoClipURL ?? summary.videoURL {
             self = .video(url)
         } else {
             self = .generateVideo
@@ -75,10 +75,10 @@ struct CameraeNextSessionCardPresentation: Equatable, Sendable {
             statusText = "ABRIR PROCESSAMENTO"
             trailingAction = .menu
         } else if summary.captureKind == .video,
-                  let url = summary.videoClipURL ?? summary.videoURL {
+                  let url = summary.alignedVideoURL ?? summary.videoClipURL ?? summary.videoURL {
             statusText = "TOQUE PARA REPRODUZIR"
             trailingAction = .videoMenu(url)
-        } else if let url = summary.videoClipURL ?? summary.videoURL {
+        } else if let url = summary.alignedVideoURL ?? summary.videoClipURL ?? summary.videoURL {
             statusText = "TOQUE PARA REPRODUZIR"
             trailingAction = .share(url)
         } else {
@@ -100,6 +100,25 @@ struct CameraeNextProcessVideoAlignmentPrompt: Equatable, Sendable {
     let message = "Use o frame de referência do projeto para reenquadrar este clipe antes de gerar o MP4 alinhado."
     let primaryActionTitle = "Processar alinhamento"
     let secondaryActionTitle = "Agora não"
+}
+
+enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
+    case available
+    case referenceUnavailable
+    case mediaUnavailable
+
+    init(summary: TimelapseSessionSummary, projectReferenceURL: URL?) {
+        guard projectReferenceURL != nil else {
+            self = .referenceUnavailable
+            return
+        }
+        guard summary.captureKind == .video,
+              summary.videoClipURL != nil || summary.videoURL != nil else {
+            self = .mediaUnavailable
+            return
+        }
+        self = .available
+    }
 }
 
 struct CameraeNextProjectTabs: View {
@@ -536,11 +555,17 @@ struct CameraeNextSessionCatalogView: View {
         case let .videoMenu(url):
             Menu {
                 Button("Processar alinhamento", systemImage: "viewfinder") {
-                    guard catalog.referenceFrameURL != nil else {
+                    switch CameraeNextSessionAlignmentAvailability(
+                        summary: summary,
+                        projectReferenceURL: project.referenceFrameURL
+                    ) {
+                    case .available:
+                        pendingVideoAlignmentConfirmation = summary
+                    case .referenceUnavailable:
                         errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
-                        return
+                    case .mediaUnavailable:
+                        errorMessage = "O vídeo original desta sessão não está disponível."
                     }
-                    pendingVideoAlignmentConfirmation = summary
                 }
                 Button("Compartilhar", systemImage: "square.and.arrow.up") {
                     shareItem = .init(url: url)
@@ -621,6 +646,20 @@ struct CameraeNextSessionCatalogView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
                     Task { await render(summary.session) }
                 }
+            } else if settings.isEnabled {
+                guard let referenceURL = project.referenceFrameURL else {
+                    errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
+                    return
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    Task {
+                        await processVideoAlignment(
+                            summary,
+                            referenceURL: referenceURL,
+                            settings: settings
+                        )
+                    }
+                }
             }
         } catch {
             errorMessage = error.localizedDescription
@@ -673,6 +712,27 @@ struct CameraeNextSessionCatalogView: View {
             await reload()
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    private func processVideoAlignment(
+        _ summary: TimelapseSessionSummary,
+        referenceURL: URL,
+        settings: CameraeNextRepeatableAlignmentSettings
+    ) async {
+        guard renderingSessionID == nil else { return }
+        renderingSessionID = summary.id
+        defer { renderingSessionID = nil }
+        do {
+            _ = try await RepeatableSessionVideoAlignmentProcessor().process(
+                summary: summary,
+                projectReferenceURL: referenceURL,
+                settings: settings
+            )
+            await reload()
+        } catch {
+            errorMessage = "Não foi possível alinhar este vídeo. \(error.localizedDescription)"
         }
     }
 }

@@ -251,10 +251,14 @@ struct AppCompositionTests {
 
         let first = try store.importReferenceImage(testImage(color: .red))
         let firstURL = try #require(store.firstFrameURL(in: first))
+        let videoSession = try store.createSession(captureKind: .video)
+        let staleAlignedURL = store.alignedVideoURL(for: videoSession)
+        try Data([1]).write(to: staleAlignedURL)
         let second = try store.importReferenceImage(testImage(color: .blue))
         let secondURL = try #require(store.firstFrameURL(in: second))
 
         #expect(!FileManager.default.fileExists(atPath: firstURL.path))
+        #expect(!FileManager.default.fileExists(atPath: staleAlignedURL.path))
         #expect(FileManager.default.fileExists(atPath: secondURL.path))
         #expect(store.sessionSummaries().filter { $0.captureKind == .photo }.map(\.session.id) == [second.id])
         #expect(store.firstReferenceFrameURL() == secondURL)
@@ -455,6 +459,7 @@ struct AppCompositionTests {
             referenceFrameURL: nil,
             videoURL: kind == .timelapse && hasVideo ? directory.appendingPathComponent("timelapse.mp4") : nil,
             videoClipURL: kind == .video && hasVideo ? directory.appendingPathComponent("video.mov") : nil,
+            alignedVideoURL: nil,
             isAstroProcessed: false,
             hasRenderedOutput: hasVideo
         )

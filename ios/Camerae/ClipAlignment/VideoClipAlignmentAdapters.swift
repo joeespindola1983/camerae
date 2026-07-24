@@ -127,6 +127,46 @@ extension VideoClipAlignmentAnalyzer {
         return try await analyze(sources: sources)
     }
 
+    func analyze(
+        document: EditProjectDocument,
+        assets: [MediaAssetID: ResolvedMediaAsset],
+        projectReferenceURL: URL
+    ) async throws -> EditSpatialAlignmentPlan {
+        guard let referenceItemID = document.items.first?.id else {
+            throw VideoClipAlignmentAnalysisError.emptyTimeline
+        }
+        let referenceFrame = try await ImageIOVideoClipReferenceFrameLoader()
+            .load(url: projectReferenceURL)
+        let referenceFingerprint = try fileFingerprint(projectReferenceURL)
+        var candidates: [ClipAlignmentCandidate] = []
+        candidates.reserveCapacity(document.items.count)
+
+        for item in document.items {
+            guard let asset = assets[item.asset.id], asset.descriptor.isAvailable else {
+                throw EditCompositionError.missingMedia(item.asset.id)
+            }
+            let source = VideoClipAlignmentSource(
+                itemID: item.id,
+                url: asset.url,
+                duration: asset.descriptor.duration,
+                fingerprint: assetFingerprint(asset)
+            )
+            let itemPlan = try await analyze(
+                referenceFrame: referenceFrame,
+                referenceFingerprint: referenceFingerprint,
+                source: source
+            )
+            guard let candidate = itemPlan.corrections[item.id] else {
+                throw ClipSpatialAlignmentError.missingReference(item.id)
+            }
+            candidates.append(candidate)
+        }
+        return try ClipSpatialAlignmentPlanner().makePlan(
+            referenceItemID: referenceItemID,
+            candidates: candidates
+        )
+    }
+
     private func assetFingerprint(_ asset: ResolvedMediaAsset) -> String {
         let values = try? asset.url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         return [
@@ -135,6 +175,15 @@ extension VideoClipAlignmentAnalyzer {
             String(asset.descriptor.fileSize),
             String(values?.fileSize ?? -1),
             String(values?.contentModificationDate?.timeIntervalSince1970 ?? -1)
+        ].joined(separator: "|")
+    }
+
+    private func fileFingerprint(_ url: URL) throws -> String {
+        let values = try url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
+        return [
+            url.standardizedFileURL.path,
+            String(values.fileSize ?? -1),
+            String(values.contentModificationDate?.timeIntervalSince1970 ?? -1)
         ].joined(separator: "|")
     }
 }
