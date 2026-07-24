@@ -17,7 +17,7 @@ struct EditCompositionPlanTests {
             EditRenderSizePolicy.renderSize(
                 canvas: .portrait9x16,
                 sourceSizes: [(width: 2160, height: 3840)]
-            ) == (width: 1080, height: 1920)
+            ) == (width: 2160, height: 3840)
         )
         #expect(
             EditRenderSizePolicy.renderSize(

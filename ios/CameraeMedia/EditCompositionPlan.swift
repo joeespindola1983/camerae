@@ -131,6 +131,7 @@ enum EditRenderSizePolicy {
         let availableShort = normalized.map(\.short).min() ?? 2
         let availableLong = normalized.map(\.long).min() ?? 2
         let standardPortraitSizes = [
+            (width: 2160, height: 3840),
             (width: 1080, height: 1920),
             (width: 720, height: 1280),
             (width: 540, height: 960),

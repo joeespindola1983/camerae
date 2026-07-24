@@ -14,6 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Evita upscale durante a composição alinhada escolhendo a maior resolução padrão 9:16 ou 16:9 suportada pelas dimensões orientadas da mídia.
 - Faz resolução, FPS e qualidade selecionados chegarem à captura real de vídeo, escolhendo um formato compatível da câmera e configurando codec e bitrate antes da gravação.
 - Substitui o `AVAssetExportSession` incompatível com composições alinhadas portrait por um pipeline controlado de leitura, composição e codificação MP4.
+- Preserva a resolução 4K no MP4 alinhado quando todas as mídias da composição fornecem pixels suficientes.
 
 ## [8.5.1] - 2026-07-24
 
