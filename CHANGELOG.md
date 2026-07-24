@@ -6,21 +6,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-- Corrige o alinhamento de vídeos Repeatable para aceitar resultados de revisão dentro dos limites seguros selecionados, mantendo rejeições geométricas bloqueadas e adicionando diagnóstico estruturado por etapa.
-- Impede uma exceção da AVFoundation ao limitar a prioridade de qualidade de cada foto à capacidade configurada do output de captura.
-- Expande os diagnósticos da exportação alinhada para registrar composição, preset, status, validação e os códigos de erro subjacentes da AVFoundation.
-- Corrige a exportação alinhada em portrait usando um preset sem geometria landscape fixa, preservando o preset 1080p para composições landscape.
-- Torna o alinhamento de vídeo mais robusto com cinco amostras temporais, consenso pelo maior grupo geometricamente coerente e diagnóstico individual de cada amostra.
-- Evita upscale durante a composição alinhada escolhendo a maior resolução padrão 9:16 ou 16:9 suportada pelas dimensões orientadas da mídia.
-- Faz resolução, FPS e qualidade selecionados chegarem à captura real de vídeo, escolhendo um formato compatível da câmera e configurando codec e bitrate antes da gravação.
-- Substitui o `AVAssetExportSession` incompatível com composições alinhadas portrait por um pipeline controlado de leitura, composição e codificação MP4.
-- Preserva a resolução 4K no MP4 alinhado quando todas as mídias da composição fornecem pixels suficientes.
-- Recupera `highLocalResidual` como revisão somente quando pelo menos três amostras temporais de boa pontuação concordam geometricamente.
-- Prepara o formato 4K/16:9 antes de iniciar o preview de vídeo, evitando a mudança de enquadramento ao pressionar gravar.
-- Ativa estabilização padrão quando suportada e usa o mesmo modo no preview e na gravação para manter o enquadramento consistente.
-- Usa o primeiro frame do primeiro vídeo como referência geométrica comum, bloqueia exportações com paralaxe e recorta a maior área retangular sem bordas pretas.
-- Registra cada vídeo Repeatable por um único frame estável em 0,2 s e aplica essa transformação fixa ao clipe completo, sem confundir movimento interno com desalinhamento entre sessões.
-
 ## [8.5.1] - 2026-07-24
 
 **Status:** QA candidate
@@ -33,6 +18,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Invalidated previously aligned video outputs when the project reference image is replaced.
 - Preserved original recorded videos and made the generated aligned MP4 the default playback and sharing artifact.
 - Used the reference image visible in the capture catalog when the project summary has not yet persisted that reference.
+- Accepted reviewed Repeatable video alignments within the selected safe limits while keeping unsafe geometry blocked and logging each processing stage.
+- Prevented an AVFoundation exception by limiting each photo request to the capture output's configured quality capability.
+- Expanded aligned-export diagnostics with composition, preset, status, validation, and underlying AVFoundation error codes.
+- Fixed portrait aligned exports without forcing landscape geometry, while retaining the 1080p preset for landscape compositions.
+- Prevented upscaling by selecting the largest standard 9:16 or 16:9 resolution supported by the oriented source media.
+- Applied the selected resolution, frame rate, quality, codec, and bitrate to actual video capture.
+- Replaced the portrait-incompatible `AVAssetExportSession` path with controlled MP4 reading, composition, and encoding.
+- Preserved 4K resolution in aligned MP4 output when the source media provides enough pixels.
+- Prepared the 4K/16:9 camera format before preview starts to prevent reframing when recording begins.
+- Enabled standard video stabilization when supported and kept preview and recording stabilization consistent.
+- Used the first recorded video's stable frame as the shared geometric reference and cropped to the largest safe rectangle without black borders.
+- Registered each Repeatable video from one stable frame at 0.2 seconds and applied that single fixed transform to the complete clip.
 
 ## [8.5.0] - 2026-07-23
 
