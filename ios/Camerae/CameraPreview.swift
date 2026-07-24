@@ -32,6 +32,7 @@ struct CameraPreview: UIViewRepresentable {
 final class PreviewView: UIView {
     private var lastLoggedWindowState: Bool?
     private var lastLoggedAngle: CGFloat?
+    private var lastLoggedStabilizationMode: AVCaptureVideoStabilizationMode?
     override class var layerClass: AnyClass {
         AVCaptureVideoPreviewLayer.self
     }
@@ -59,12 +60,15 @@ final class PreviewView: UIView {
     }
 
     func updatePreviewOrientation() {
-        guard let connection = previewLayer.connection,
-              let angle = window?.windowScene?.interfaceOrientation.videoRotationAngle,
-              connection.isVideoRotationAngleSupported(angle) else {
+        guard let connection = previewLayer.connection else {
             if window != nil, previewLayer.connection == nil {
                 CameraeCaptureDiagnostics.error("P90 preview.noConnection", "sessionRunning=\(previewLayer.session?.isRunning ?? false)")
             }
+            return
+        }
+        updatePreviewStabilization(connection: connection)
+        guard let angle = window?.windowScene?.interfaceOrientation.videoRotationAngle,
+              connection.isVideoRotationAngleSupported(angle) else {
             return
         }
 
@@ -72,6 +76,25 @@ final class PreviewView: UIView {
         connection.videoRotationAngle = angle
         CameraeCaptureDiagnostics.event("P05 preview.orientation", "angle=\(angle)")
         lastLoggedAngle = angle
+    }
+
+    private func updatePreviewStabilization(connection: AVCaptureConnection) {
+        guard connection.isVideoStabilizationSupported,
+              let deviceInput = previewLayer.session?.inputs
+                .compactMap({ $0 as? AVCaptureDeviceInput })
+                .first(where: { $0.device.hasMediaType(.video) }) else {
+            return
+        }
+        let mode = CameraeVideoStabilizationPolicy.preferredMode(
+            for: deviceInput.device.activeFormat
+        )
+        connection.preferredVideoStabilizationMode = mode
+        guard lastLoggedStabilizationMode != mode else { return }
+        CameraeCaptureDiagnostics.event(
+            "P06 preview.stabilization",
+            "preferred=\(mode.rawValue) active=\(connection.activeVideoStabilizationMode.rawValue)"
+        )
+        lastLoggedStabilizationMode = mode
     }
 }
 

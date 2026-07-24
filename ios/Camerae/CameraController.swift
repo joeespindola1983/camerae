@@ -49,6 +49,21 @@ struct CameraeVideoFormatCapability: Equatable, Sendable {
     let height: Int
     let minimumFPS: Double
     let maximumFPS: Double
+    let supportsStandardStabilization: Bool
+
+    init(
+        width: Int,
+        height: Int,
+        minimumFPS: Double,
+        maximumFPS: Double,
+        supportsStandardStabilization: Bool = false
+    ) {
+        self.width = width
+        self.height = height
+        self.minimumFPS = minimumFPS
+        self.maximumFPS = maximumFPS
+        self.supportsStandardStabilization = supportsStandardStabilization
+    }
 }
 
 enum CameraeVideoCaptureFormatPolicy {
@@ -64,7 +79,11 @@ enum CameraeVideoCaptureFormatPolicy {
         guard !compatible.isEmpty else { return nil }
         if resolution == .fullSensor {
             return compatible.max {
-                capabilities[$0].width * capabilities[$0].height
+                if capabilities[$0].supportsStandardStabilization !=
+                    capabilities[$1].supportsStandardStabilization {
+                    return !capabilities[$0].supportsStandardStabilization
+                }
+                return capabilities[$0].width * capabilities[$0].height
                     < capabilities[$1].width * capabilities[$1].height
             }
         }
@@ -80,7 +99,11 @@ enum CameraeVideoCaptureFormatPolicy {
                     max(capabilities[$0].width, capabilities[$0].height) >= target.long
             }
             .min {
-                capabilities[$0].width * capabilities[$0].height
+                if capabilities[$0].supportsStandardStabilization !=
+                    capabilities[$1].supportsStandardStabilization {
+                    return capabilities[$0].supportsStandardStabilization
+                }
+                return capabilities[$0].width * capabilities[$0].height
                     < capabilities[$1].width * capabilities[$1].height
             }
     }
@@ -96,6 +119,29 @@ enum CameraeVideoEncodingPolicy {
         return Int(
             (base * max(Double(settings.fps) / 30, 1) * settings.quality.bitRateMultiplier)
                 .rounded()
+        )
+    }
+}
+
+enum CameraeVideoStabilizationPolicy {
+    static func preferredMode(
+        supportedModes: [AVCaptureVideoStabilizationMode]
+    ) -> AVCaptureVideoStabilizationMode {
+        if supportedModes.contains(.standard) { return .standard }
+        if supportedModes.contains(.cinematic) { return .cinematic }
+        if supportedModes.contains(.cinematicExtended) { return .cinematicExtended }
+        return .off
+    }
+
+    static func preferredMode(
+        for format: AVCaptureDevice.Format
+    ) -> AVCaptureVideoStabilizationMode {
+        preferredMode(
+            supportedModes: [
+                .standard,
+                .cinematic,
+                .cinematicExtended
+            ].filter(format.isVideoStabilizationModeSupported)
         )
     }
 }
@@ -1205,6 +1251,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             }
             MovieRecordingDelegateRetainer.shared.retain(delegate)
             movieOutput.startRecording(to: outputURL, recordingDelegate: delegate)
+            if let connection = movieOutput.connection(with: .video) {
+                CameraeCaptureDiagnostics.event(
+                    "C21 video.stabilization.active",
+                    "preferred=\(connection.preferredVideoStabilizationMode.rawValue) active=\(connection.activeVideoStabilizationMode.rawValue)"
+                )
+            }
             videoStopTask?.cancel()
             videoStopTask = Task { [weak self] in
                 let budget = CaptureRunBudget(
@@ -1280,7 +1332,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 width: Int(dimensions.width),
                 height: Int(dimensions.height),
                 minimumFPS: ranges.map(\.minFrameRate).min() ?? 0,
-                maximumFPS: ranges.map(\.maxFrameRate).max() ?? 0
+                maximumFPS: ranges.map(\.maxFrameRate).max() ?? 0,
+                supportsStandardStabilization: format.isVideoStabilizationModeSupported(.standard)
             )
         }
         guard let formatIndex = CameraeVideoCaptureFormatPolicy.preferredIndex(
@@ -1307,6 +1360,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         guard let connection = movieOutput.connection(with: .video) else {
             throw CameraError.unsupportedVideoConfiguration
         }
+        let stabilizationMode = CameraeVideoStabilizationPolicy.preferredMode(
+            for: device.activeFormat
+        )
+        connection.preferredVideoStabilizationMode = connection.isVideoStabilizationSupported
+            ? stabilizationMode
+            : .off
         let supportedKeys = Set(movieOutput.supportedOutputSettingsKeys(for: connection))
         let codec: AVVideoCodecType = movieOutput.availableVideoCodecTypes.contains(.hevc)
             ? .hevc
@@ -1330,7 +1389,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         let selected = capabilities[formatIndex]
         CameraeCaptureDiagnostics.event(
             "C19 video.configuration",
-            "requested=\(settings.summary) actual=\(selected.width)x\(selected.height) fps=\(settings.fps) codec=\(codec.rawValue) bitrate=\(CameraeVideoEncodingPolicy.averageBitRate(settings: settings))"
+            "requested=\(settings.summary) actual=\(selected.width)x\(selected.height) fps=\(settings.fps) codec=\(codec.rawValue) bitrate=\(CameraeVideoEncodingPolicy.averageBitRate(settings: settings)) stabilization=\(connection.preferredVideoStabilizationMode.rawValue)"
         )
     }
 

@@ -31,10 +31,49 @@ struct CameraeSettingsTests {
         )
     }
 
+    @Test("video format selection prefers stabilization without lowering resolution or frame rate")
+    func videoFormatSelectionPrefersStabilization() {
+        let formats = [
+            CameraeVideoFormatCapability(
+                width: 3840,
+                height: 2160,
+                minimumFPS: 24,
+                maximumFPS: 60
+            ),
+            CameraeVideoFormatCapability(
+                width: 3840,
+                height: 2160,
+                minimumFPS: 24,
+                maximumFPS: 60,
+                supportsStandardStabilization: true
+            )
+        ]
+
+        #expect(
+            CameraeVideoCaptureFormatPolicy.preferredIndex(
+                capabilities: formats,
+                resolution: .ultraHD,
+                framesPerSecond: 60
+            ) == 1
+        )
+    }
+
     @Test("video quality contributes to the actual encoder bitrate")
     func videoQualityControlsEncoderBitrate() {
         let settings = WorkflowVideoSettings(resolution: .fourK, fps: 60, quality: .high)
         #expect(CameraeVideoEncodingPolicy.averageBitRate(settings: settings) == 120_000_000)
+    }
+
+    @Test("video stabilization prefers the low-crop standard mode consistently")
+    func videoStabilizationUsesStandardMode() {
+        #expect(
+            CameraeVideoStabilizationPolicy.preferredMode(
+                supportedModes: [.cinematic, .standard, .cinematicExtended]
+            ) == .standard
+        )
+        #expect(
+            CameraeVideoStabilizationPolicy.preferredMode(supportedModes: []) == .off
+        )
     }
 
     @Test("photo capture quality never exceeds the output capability")

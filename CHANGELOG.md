@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Preserva a resolução 4K no MP4 alinhado quando todas as mídias da composição fornecem pixels suficientes.
 - Recupera `highLocalResidual` como revisão somente quando pelo menos três amostras temporais de boa pontuação concordam geometricamente.
 - Prepara o formato 4K/16:9 antes de iniciar o preview de vídeo, evitando a mudança de enquadramento ao pressionar gravar.
+- Ativa estabilização padrão quando suportada e usa o mesmo modo no preview e na gravação para manter o enquadramento consistente.
 
 ## [8.5.1] - 2026-07-24
 
