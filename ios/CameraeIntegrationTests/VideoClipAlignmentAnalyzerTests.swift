@@ -75,6 +75,37 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(rejected.applicableCorrections.isEmpty)
     }
 
+    @Test("three coherent high-local-residual samples recover as review instead of rejection")
+    func temporalConsensusRecoversLocalResidual() async throws {
+        let itemID = UUID()
+        let videoURL = URL(fileURLWithPath: "/high-residual-video.mp4")
+        let extractor = ClipFrameExtractorStub(framesByURL: [
+            videoURL: try Self.frames(markers: [11, 12, 13, 14, 15])
+        ])
+        let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
+            11: Self.highResidualMeasurement(tx: -0.021),
+            12: Self.highResidualMeasurement(tx: -0.013),
+            13: Self.highResidualMeasurement(tx: -0.002),
+            14: Self.highResidualMeasurement(tx: -0.007),
+            15: Self.highResidualMeasurement(tx: -0.011)
+        ])
+        let referenceFrame = try #require(Self.frames(markers: [1]).first)
+
+        let plan = try await VideoClipAlignmentAnalyzer(
+            extractor: extractor,
+            evaluator: evaluator
+        ).analyze(
+            referenceFrame: referenceFrame,
+            referenceFingerprint: "reference-v1",
+            source: .init(itemID: itemID, url: videoURL, duration: 7)
+        )
+
+        #expect(plan.decision == .review)
+        #expect(plan.corrections[itemID]?.quality.reasonCodes.contains(
+            "temporallyConsistentLocalResidual"
+        ) == true)
+    }
+
     @Test("analysis cache is reused until an asset fingerprint changes")
     func cacheUsesAssetFingerprint() async throws {
         let referenceID = UUID()
@@ -222,6 +253,19 @@ struct VideoClipAlignmentAnalyzerTests {
             transform: .init(a: 1, b: 0, c: 0, d: 1, tx: tx, ty: 0.01),
             validRegion: .init(x: 0, y: 0.01, width: 0.95, height: 0.99),
             quality: .init(decision: .apply, score: score, reasonCodes: ["stableGeometry"])
+        )
+    }
+
+    private static func highResidualMeasurement(tx: Double) -> VideoClipAlignmentMeasurement {
+        .init(
+            model: .translation,
+            transform: .init(a: 1, b: 0, c: 0, d: 1, tx: tx, ty: 0.003),
+            validRegion: .full,
+            quality: .init(
+                decision: .reject,
+                score: 0.6,
+                reasonCodes: ["highLocalResidual"]
+            )
         )
     }
 }

@@ -231,7 +231,11 @@ actor VideoClipAlignmentAnalyzer {
         itemID: UUID,
         measurements: [VideoClipAlignmentMeasurement]
     ) -> ClipAlignmentCandidate {
-        let usable = measurements.filter { $0.quality.decision != .reject }
+        let recoverableLocalResiduals = measurements.filter(isRecoverableLocalResidual)
+        let recovered = recoverableLocalResiduals.count >= 3
+            ? recoverableLocalResiduals.map(recoveredLocalResidual)
+            : []
+        let usable = measurements.filter { $0.quality.decision != .reject } + recovered
         guard usable.count >= 2 else {
             let reasons = measurements.flatMap(\.quality.reasonCodes)
             return rejectedCandidate(
@@ -270,6 +274,31 @@ actor VideoClipAlignmentAnalyzer {
                 decision: decision,
                 score: selected.map(\.quality.score).min() ?? 0,
                 reasonCodes: Array(Set(selected.flatMap(\.quality.reasonCodes))).sorted()
+            )
+        )
+    }
+
+    private func isRecoverableLocalResidual(
+        _ measurement: VideoClipAlignmentMeasurement
+    ) -> Bool {
+        measurement.quality.decision == .reject &&
+            measurement.quality.score >= 0.55 &&
+            measurement.transform.isFinite &&
+            Set(measurement.quality.reasonCodes) == ["highLocalResidual"]
+    }
+
+    private func recoveredLocalResidual(
+        _ measurement: VideoClipAlignmentMeasurement
+    ) -> VideoClipAlignmentMeasurement {
+        VideoClipAlignmentMeasurement(
+            model: measurement.model,
+            transform: measurement.transform,
+            validRegion: measurement.validRegion,
+            quality: .init(
+                decision: .review,
+                score: measurement.quality.score,
+                reasonCodes: measurement.quality.reasonCodes +
+                    ["temporallyConsistentLocalResidual"]
             )
         )
     }

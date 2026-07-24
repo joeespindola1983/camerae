@@ -140,6 +140,12 @@ struct RepeatableCameraView: View {
         }
         .task {
             CameraeCaptureDiagnostics.event("R03 repeatable.task.begin")
+            if selectedCaptureKind == .video {
+                camera.prepareVideoPreview(
+                    settings: videoSettings,
+                    resolution: captureResolution
+                )
+            }
             await camera.start()
             CameraeCaptureDiagnostics.event("R04 repeatable.camera.start.returned", "state=\(String(describing: camera.lifecycleState))")
             await camera.setExposureBias(evBias)

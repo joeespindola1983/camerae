@@ -168,6 +168,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var isSequenceFocusLocked = false
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
+    nonisolated(unsafe) private var pendingVideoConfiguration:
+        (settings: WorkflowVideoSettings, resolution: CaptureResolution)?
     nonisolated(unsafe) private var selectedSourceFormat = CaptureSourceFormat.heic
     nonisolated(unsafe) private var selectedPerformanceMode = CameraePerformanceMode.automatic
     private var showsLowStorageWarnings = true
@@ -490,6 +492,17 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     func setCaptureSourceFormat(_ format: CaptureSourceFormat) {
         selectedSourceFormat = format
+    }
+
+    func prepareVideoPreview(
+        settings: WorkflowVideoSettings,
+        resolution: CaptureResolution
+    ) {
+        pendingVideoConfiguration = (settings, resolution)
+        CameraeCaptureDiagnostics.event(
+            "C18.1 video.preview.requested",
+            "settings=\(settings.summary)"
+        )
     }
 
     func configureApplicationSettings(
@@ -1236,72 +1249,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             captureQueue.async {
                 do {
                     guard let device = self.device else { throw CameraError.noCamera }
-                    let capabilities = device.formats.map { format in
-                        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                        let ranges = format.videoSupportedFrameRateRanges
-                        return CameraeVideoFormatCapability(
-                            width: Int(dimensions.width),
-                            height: Int(dimensions.height),
-                            minimumFPS: ranges.map(\.minFrameRate).min() ?? 0,
-                            maximumFPS: ranges.map(\.maxFrameRate).max() ?? 0
-                        )
-                    }
-                    guard let formatIndex = CameraeVideoCaptureFormatPolicy.preferredIndex(
-                        capabilities: capabilities,
-                        resolution: plan.resolution,
-                        framesPerSecond: settings.fps
-                    ) else {
-                        throw CameraError.unsupportedVideoConfiguration
-                    }
-
                     self.session.beginConfiguration()
                     defer { self.session.commitConfiguration() }
-                    if self.session.canSetSessionPreset(.inputPriority) {
-                        self.session.sessionPreset = .inputPriority
-                    }
-
-                    try device.lockForConfiguration()
-                    device.activeFormat = device.formats[formatIndex]
-                    if #available(iOS 18.0, *), device.isAutoVideoFrameRateEnabled {
-                        device.isAutoVideoFrameRateEnabled = false
-                    }
-                    let frameDuration = CMTime(
-                        value: 1,
-                        timescale: CMTimeScale(settings.fps)
-                    )
-                    device.activeVideoMinFrameDuration = frameDuration
-                    device.activeVideoMaxFrameDuration = frameDuration
-                    device.unlockForConfiguration()
-
-                    guard let connection = self.movieOutput.connection(with: .video) else {
-                        throw CameraError.unsupportedVideoConfiguration
-                    }
-                    let supportedKeys = Set(
-                        self.movieOutput.supportedOutputSettingsKeys(for: connection)
-                    )
-                    let codec: AVVideoCodecType = self.movieOutput.availableVideoCodecTypes.contains(.hevc)
-                        ? .hevc
-                        : .h264
-                    var outputSettings: [String: Any] = [:]
-                    if supportedKeys.contains(AVVideoCodecKey) {
-                        outputSettings[AVVideoCodecKey] = codec
-                    }
-                    if supportedKeys.contains(AVVideoCompressionPropertiesKey) {
-                        outputSettings[AVVideoCompressionPropertiesKey] = [
-                            AVVideoAverageBitRateKey: CameraeVideoEncodingPolicy.averageBitRate(
-                                settings: settings
-                            ),
-                            AVVideoMaxKeyFrameIntervalKey: settings.fps
-                        ]
-                    }
-                    if !outputSettings.isEmpty {
-                        self.movieOutput.setOutputSettings(outputSettings, for: connection)
-                    }
-
-                    let selected = capabilities[formatIndex]
-                    CameraeCaptureDiagnostics.event(
-                        "C19 video.configuration",
-                        "requested=\(settings.summary) actual=\(selected.width)x\(selected.height) fps=\(settings.fps) codec=\(codec.rawValue) bitrate=\(CameraeVideoEncodingPolicy.averageBitRate(settings: settings))"
+                    try self.applyVideoConfiguration(
+                        device: device,
+                        settings: settings,
+                        resolution: plan.resolution
                     )
                     continuation.resume(returning: ())
                 } catch {
@@ -1313,6 +1266,72 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 }
             }
         }
+    }
+
+    nonisolated private func applyVideoConfiguration(
+        device: AVCaptureDevice,
+        settings: WorkflowVideoSettings,
+        resolution: CaptureResolution
+    ) throws {
+        let capabilities = device.formats.map { format in
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            let ranges = format.videoSupportedFrameRateRanges
+            return CameraeVideoFormatCapability(
+                width: Int(dimensions.width),
+                height: Int(dimensions.height),
+                minimumFPS: ranges.map(\.minFrameRate).min() ?? 0,
+                maximumFPS: ranges.map(\.maxFrameRate).max() ?? 0
+            )
+        }
+        guard let formatIndex = CameraeVideoCaptureFormatPolicy.preferredIndex(
+            capabilities: capabilities,
+            resolution: resolution,
+            framesPerSecond: settings.fps
+        ) else {
+            throw CameraError.unsupportedVideoConfiguration
+        }
+        if session.canSetSessionPreset(.inputPriority) {
+            session.sessionPreset = .inputPriority
+        }
+
+        try device.lockForConfiguration()
+        device.activeFormat = device.formats[formatIndex]
+        if #available(iOS 18.0, *), device.isAutoVideoFrameRateEnabled {
+            device.isAutoVideoFrameRateEnabled = false
+        }
+        let frameDuration = CMTime(value: 1, timescale: CMTimeScale(settings.fps))
+        device.activeVideoMinFrameDuration = frameDuration
+        device.activeVideoMaxFrameDuration = frameDuration
+        device.unlockForConfiguration()
+
+        guard let connection = movieOutput.connection(with: .video) else {
+            throw CameraError.unsupportedVideoConfiguration
+        }
+        let supportedKeys = Set(movieOutput.supportedOutputSettingsKeys(for: connection))
+        let codec: AVVideoCodecType = movieOutput.availableVideoCodecTypes.contains(.hevc)
+            ? .hevc
+            : .h264
+        var outputSettings: [String: Any] = [:]
+        if supportedKeys.contains(AVVideoCodecKey) {
+            outputSettings[AVVideoCodecKey] = codec
+        }
+        if supportedKeys.contains(AVVideoCompressionPropertiesKey) {
+            outputSettings[AVVideoCompressionPropertiesKey] = [
+                AVVideoAverageBitRateKey: CameraeVideoEncodingPolicy.averageBitRate(
+                    settings: settings
+                ),
+                AVVideoMaxKeyFrameIntervalKey: settings.fps
+            ]
+        }
+        if !outputSettings.isEmpty {
+            movieOutput.setOutputSettings(outputSettings, for: connection)
+        }
+
+        let selected = capabilities[formatIndex]
+        CameraeCaptureDiagnostics.event(
+            "C19 video.configuration",
+            "requested=\(settings.summary) actual=\(selected.width)x\(selected.height) fps=\(settings.fps) codec=\(codec.rawValue) bitrate=\(CameraeVideoEncodingPolicy.averageBitRate(settings: settings))"
+        )
     }
 
     private func stopVideoRecording() {
@@ -1524,8 +1543,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                         self.session.addOutput(self.videoDataOutput)
                     }
                     self.photoOutput.maxPhotoQualityPrioritization = .quality
-                    try self.applyInitialZoom(to: device)
                     self.device = device
+                    if let videoConfiguration = self.pendingVideoConfiguration {
+                        try self.applyVideoConfiguration(
+                            device: device,
+                            settings: videoConfiguration.settings,
+                            resolution: videoConfiguration.resolution
+                        )
+                    }
+                    try self.applyInitialZoom(to: device)
                     self.configured = true
 
                     CameraeCaptureDiagnostics.event(
