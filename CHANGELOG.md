@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [8.5.1] - 2026-07-24
+
+**Status:** QA candidate
+**Areas:** Repeatable, video alignment, reference images, playback, sharing
+
 ### Fixed
 
 - Made every Repeatable recorded video independently eligible for alignment whenever the project has a reference image.
