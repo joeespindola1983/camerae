@@ -77,7 +77,11 @@ struct RepeatableSessionVideoAlignmentProcessor: Sendable {
 
             phase = "referenceLoad"
             let referenceFrame = try await referenceLoader.load(url: projectReferenceURL)
-            CameraeAlignmentDiagnostics.event("reference.loaded")
+            let referenceValues = try? projectReferenceURL.resourceValues(forKeys: [.fileSizeKey])
+            CameraeAlignmentDiagnostics.event(
+                "reference.loaded",
+                "kind=projectImage extension=\(projectReferenceURL.pathExtension.lowercased()) bytes=\(referenceValues?.fileSize ?? -1)"
+            )
             let reference = MediaAssetReference(
                 projectID: summary.session.projectID,
                 sessionID: summary.session.id,
@@ -247,7 +251,7 @@ private extension EditSpatialAlignmentPlan {
     }
 }
 
-private enum CameraeAlignmentDiagnostics {
+enum CameraeAlignmentDiagnostics {
     private static let logger = Logger(
         subsystem: "com.espindola.camerae",
         category: "CameraeAlignment"

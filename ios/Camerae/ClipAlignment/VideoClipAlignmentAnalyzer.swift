@@ -69,7 +69,7 @@ actor VideoClipAlignmentAnalyzer {
         let source: VideoClipAlignmentSource
     }
 
-    static let sampleFractions = [0.2, 0.5, 0.8]
+    static let sampleFractions = [0.1, 0.3, 0.5, 0.7, 0.9]
     private static let cacheCapacity = 8
 
     private let extractor: any VideoClipAlignmentFrameExtracting
@@ -129,9 +129,14 @@ actor VideoClipAlignmentAnalyzer {
             }
 
             var measurements: [VideoClipAlignmentMeasurement] = []
-            for (reference, moving) in zip(referenceFrames, movingFrames) {
+            for (index, pair) in zip(referenceFrames, movingFrames).enumerated() {
                 try Task.checkCancellation()
-                measurements.append(try await evaluator.evaluate(reference: reference, moving: moving))
+                let measurement = try await evaluator.evaluate(
+                    reference: pair.0,
+                    moving: pair.1
+                )
+                measurements.append(measurement)
+                logSample(measurement, fraction: Self.sampleFractions[index], sourceIndex: candidates.count)
                 evaluatedPairCount += 1
             }
             candidates.append(consensus(itemID: source.itemID, measurements: measurements))
@@ -178,11 +183,14 @@ actor VideoClipAlignmentAnalyzer {
         }
         var measurements: [VideoClipAlignmentMeasurement] = []
         measurements.reserveCapacity(movingFrames.count)
-        for movingFrame in movingFrames {
+        for (index, movingFrame) in movingFrames.enumerated() {
             try Task.checkCancellation()
-            measurements.append(
-                try await evaluator.evaluate(reference: referenceFrame, moving: movingFrame)
+            let measurement = try await evaluator.evaluate(
+                reference: referenceFrame,
+                moving: movingFrame
             )
+            measurements.append(measurement)
+            logSample(measurement, fraction: Self.sampleFractions[index], sourceIndex: 0)
         }
 
         let candidate = consensus(itemID: source.itemID, measurements: measurements)
@@ -232,19 +240,9 @@ actor VideoClipAlignmentAnalyzer {
             )
         }
 
-        let similarityCount = usable.filter { $0.model == .similarity }.count
-        let translationCount = usable.filter { $0.model == .translation }.count
-        let selectedModel: ClipAlignmentMotionModel
-        if similarityCount >= 2 {
-            selectedModel = .similarity
-        } else if translationCount >= 2 {
-            selectedModel = .translation
-        } else {
+        guard let selected = bestConsistentMeasurements(from: usable),
+              let selectedModel = selected.first?.model else {
             return rejectedCandidate(itemID: itemID, reason: "inconsistentMotionModel")
-        }
-        let selected = usable.filter { $0.model == selectedModel }
-        guard selected.count >= 2 else {
-            return rejectedCandidate(itemID: itemID, reason: "insufficientConsensus")
         }
 
         let transform = ClipAlignmentTransform(
@@ -273,6 +271,84 @@ actor VideoClipAlignmentAnalyzer {
                 score: selected.map(\.quality.score).min() ?? 0,
                 reasonCodes: Array(Set(selected.flatMap(\.quality.reasonCodes))).sorted()
             )
+        )
+    }
+
+    private func bestConsistentMeasurements(
+        from measurements: [VideoClipAlignmentMeasurement]
+    ) -> [VideoClipAlignmentMeasurement]? {
+        var best: [VideoClipAlignmentMeasurement]?
+        for model in [ClipAlignmentMotionModel.similarity, .translation] {
+            let matching = measurements.filter { $0.model == model }
+            guard matching.count >= 2 else { continue }
+            for size in stride(from: matching.count, through: 2, by: -1) {
+                for subset in combinations(of: matching, taking: size) {
+                    let center = medianTransform(of: subset)
+                    guard transformSpread(subset, around: center) <= 0.025,
+                          intersect(subset.map(\.validRegion)) != nil else {
+                        continue
+                    }
+                    if isBetterConsensus(subset, than: best) {
+                        best = subset
+                    }
+                }
+                if best?.count == size { break }
+            }
+        }
+        return best
+    }
+
+    private func combinations(
+        of measurements: [VideoClipAlignmentMeasurement],
+        taking count: Int
+    ) -> [[VideoClipAlignmentMeasurement]] {
+        guard count > 0, count <= measurements.count else { return [] }
+        if count == measurements.count { return [measurements] }
+        if count == 1 { return measurements.map { [$0] } }
+        var result: [[VideoClipAlignmentMeasurement]] = []
+        for index in 0...(measurements.count - count) {
+            let head = measurements[index]
+            let tail = Array(measurements[(index + 1)...])
+            for remainder in combinations(of: tail, taking: count - 1) {
+                result.append([head] + remainder)
+            }
+        }
+        return result
+    }
+
+    private func isBetterConsensus(
+        _ candidate: [VideoClipAlignmentMeasurement],
+        than current: [VideoClipAlignmentMeasurement]?
+    ) -> Bool {
+        guard let current else { return true }
+        if candidate.count != current.count { return candidate.count > current.count }
+        let candidateScore = candidate.map(\.quality.score).min() ?? 0
+        let currentScore = current.map(\.quality.score).min() ?? 0
+        if candidateScore != currentScore { return candidateScore > currentScore }
+        return candidate.first?.model == .similarity && current.first?.model != .similarity
+    }
+
+    private func medianTransform(
+        of measurements: [VideoClipAlignmentMeasurement]
+    ) -> ClipAlignmentTransform {
+        ClipAlignmentTransform(
+            a: median(measurements.map(\.transform.a)),
+            b: median(measurements.map(\.transform.b)),
+            c: median(measurements.map(\.transform.c)),
+            d: median(measurements.map(\.transform.d)),
+            tx: median(measurements.map(\.transform.tx)),
+            ty: median(measurements.map(\.transform.ty))
+        )
+    }
+
+    private func logSample(
+        _ measurement: VideoClipAlignmentMeasurement,
+        fraction: Double,
+        sourceIndex: Int
+    ) {
+        CameraeAlignmentDiagnostics.event(
+            "analysis.sample",
+            "source=\(sourceIndex) fraction=\(fraction) model=\(measurement.model.rawValue) decision=\(measurement.quality.decision.rawValue) score=\(measurement.quality.score) tx=\(measurement.transform.tx) ty=\(measurement.transform.ty) reasons=\(measurement.quality.reasonCodes.joined(separator: ","))"
         )
     }
 

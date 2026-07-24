@@ -5,18 +5,20 @@ import CameraeMedia
 
 @Suite("Video clip alignment analyzer")
 struct VideoClipAlignmentAnalyzerTests {
-    @Test("three deterministic samples produce one fixed correction per clip")
+    @Test("five deterministic samples produce one fixed correction per clip")
     func consensusProducesFixedTransform() async throws {
         let referenceID = UUID()
         let movingID = UUID()
         let extractor = ClipFrameExtractorStub(framesByURL: [
-            URL(fileURLWithPath: "/reference.mp4"): try Self.frames(markers: [1, 2, 3]),
-            URL(fileURLWithPath: "/moving.mp4"): try Self.frames(markers: [11, 12, 13])
+            URL(fileURLWithPath: "/reference.mp4"): try Self.frames(markers: [1, 2, 3, 4, 5]),
+            URL(fileURLWithPath: "/moving.mp4"): try Self.frames(markers: [11, 12, 13, 14, 15])
         ])
         let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
             11: Self.measurement(tx: -0.041, score: 0.90),
             12: Self.measurement(tx: -0.040, score: 0.94),
-            13: Self.measurement(tx: -0.039, score: 0.92)
+            13: Self.measurement(tx: -0.039, score: 0.92),
+            14: Self.measurement(tx: -0.040, score: 0.91),
+            15: Self.measurement(tx: -0.040, score: 0.93)
         ])
         let analyzer = VideoClipAlignmentAnalyzer(extractor: extractor, evaluator: evaluator)
 
@@ -27,8 +29,8 @@ struct VideoClipAlignmentAnalyzerTests {
 
         #expect(plan.decision == .apply)
         #expect(abs((plan.corrections[movingID]?.transform.tx ?? 0) + 0.04) < 0.000_001)
-        #expect(await extractor.requestedFractions == [0.2, 0.5, 0.8, 0.2, 0.5, 0.8])
-        #expect(await evaluator.evaluatedPairs == 3)
+        #expect(await extractor.requestedFractions == [0.1, 0.3, 0.5, 0.7, 0.9, 0.1, 0.3, 0.5, 0.7, 0.9])
+        #expect(await evaluator.evaluatedPairs == 5)
     }
 
     @Test("one outlier is ignored but two incompatible samples reject the clip")
@@ -36,13 +38,15 @@ struct VideoClipAlignmentAnalyzerTests {
         let referenceID = UUID()
         let movingID = UUID()
         let extractor = ClipFrameExtractorStub(framesByURL: [
-            URL(fileURLWithPath: "/reference.mp4"): try Self.frames(markers: [1, 2, 3]),
-            URL(fileURLWithPath: "/moving.mp4"): try Self.frames(markers: [11, 12, 13])
+            URL(fileURLWithPath: "/reference.mp4"): try Self.frames(markers: [1, 2, 3, 4, 5]),
+            URL(fileURLWithPath: "/moving.mp4"): try Self.frames(markers: [11, 12, 13, 14, 15])
         ])
         let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
             11: Self.measurement(tx: -0.04, score: 0.9),
             12: Self.measurement(tx: -0.041, score: 0.9),
-            13: .rejected(reason: "possibleParallaxOrMotion")
+            13: .rejected(reason: "possibleParallaxOrMotion"),
+            14: Self.measurement(tx: -0.039, score: 0.9),
+            15: Self.measurement(tx: 0.25, score: 0.8)
         ])
         let accepted = try await VideoClipAlignmentAnalyzer(
             extractor: extractor,
@@ -56,7 +60,9 @@ struct VideoClipAlignmentAnalyzerTests {
         let rejectingEvaluator = ClipPairEvaluatorStub(measurementsByMarker: [
             11: Self.measurement(tx: -0.04, score: 0.9),
             12: .rejected(reason: "possibleParallaxOrMotion"),
-            13: .rejected(reason: "insufficientOverlap")
+            13: .rejected(reason: "insufficientOverlap"),
+            14: .rejected(reason: "highLocalResidual"),
+            15: Self.measurement(tx: 0.25, score: 0.8)
         ])
         let rejected = try await VideoClipAlignmentAnalyzer(
             extractor: extractor,
@@ -76,15 +82,17 @@ struct VideoClipAlignmentAnalyzerTests {
         let referenceURL = URL(fileURLWithPath: "/reference.mp4")
         let movingURL = URL(fileURLWithPath: "/moving.mp4")
         let extractor = ClipFrameExtractorStub(framesByURL: [
-            referenceURL: try Self.frames(markers: [1, 2, 3]),
-            movingURL: try Self.frames(markers: [11, 12, 13])
+            referenceURL: try Self.frames(markers: [1, 2, 3, 4, 5]),
+            movingURL: try Self.frames(markers: [11, 12, 13, 14, 15])
         ])
         let analyzer = VideoClipAlignmentAnalyzer(
             extractor: extractor,
             evaluator: ClipPairEvaluatorStub(measurementsByMarker: [
                 11: Self.measurement(tx: -0.04, score: 0.9),
                 12: Self.measurement(tx: -0.04, score: 0.9),
-                13: Self.measurement(tx: -0.04, score: 0.9)
+                13: Self.measurement(tx: -0.04, score: 0.9),
+                14: Self.measurement(tx: -0.04, score: 0.9),
+                15: Self.measurement(tx: -0.04, score: 0.9)
             ])
         )
         let initialSources = [
@@ -98,7 +106,7 @@ struct VideoClipAlignmentAnalyzerTests {
 
         _ = try await analyzer.analyze(sources: initialSources)
         _ = try await analyzer.analyze(sources: initialSources)
-        #expect(await extractor.requestedFractions.count == 6)
+        #expect(await extractor.requestedFractions.count == 10)
         #expect(await analyzer.lastDiagnostics.cacheHit)
 
         let changedSources = [
@@ -109,8 +117,8 @@ struct VideoClipAlignmentAnalyzerTests {
         ]
         _ = try await analyzer.analyze(sources: changedSources)
 
-        #expect(await extractor.requestedFractions.count == 12)
-        #expect(await analyzer.lastDiagnostics.evaluatedPairCount == 3)
+        #expect(await extractor.requestedFractions.count == 20)
+        #expect(await analyzer.lastDiagnostics.evaluatedPairCount == 5)
         #expect(!(await analyzer.lastDiagnostics.cacheHit))
     }
 
@@ -119,12 +127,14 @@ struct VideoClipAlignmentAnalyzerTests {
         let itemID = UUID()
         let videoURL = URL(fileURLWithPath: "/only-video.mp4")
         let extractor = ClipFrameExtractorStub(framesByURL: [
-            videoURL: try Self.frames(markers: [11, 12, 13])
+            videoURL: try Self.frames(markers: [11, 12, 13, 14, 15])
         ])
         let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
             11: Self.measurement(tx: -0.03, score: 0.91),
             12: Self.measurement(tx: -0.03, score: 0.94),
-            13: Self.measurement(tx: -0.03, score: 0.92)
+            13: Self.measurement(tx: -0.03, score: 0.92),
+            14: Self.measurement(tx: -0.03, score: 0.90),
+            15: Self.measurement(tx: -0.03, score: 0.93)
         ])
         let analyzer = VideoClipAlignmentAnalyzer(extractor: extractor, evaluator: evaluator)
         let referenceFrame = try #require(Self.frames(markers: [1]).first)
@@ -143,8 +153,8 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(plan.referenceItemID == itemID)
         #expect(plan.decision == .apply)
         #expect(abs((plan.corrections[itemID]?.transform.tx ?? 0) + 0.03) < 0.000_001)
-        #expect(await extractor.requestedFractions == [0.2, 0.5, 0.8])
-        #expect(await evaluator.evaluatedPairs == 3)
+        #expect(await extractor.requestedFractions == [0.1, 0.3, 0.5, 0.7, 0.9])
+        #expect(await evaluator.evaluatedPairs == 5)
     }
 
     @Test("replacing the project reference invalidates single-video analysis cache")
@@ -152,14 +162,16 @@ struct VideoClipAlignmentAnalyzerTests {
         let itemID = UUID()
         let videoURL = URL(fileURLWithPath: "/only-video.mp4")
         let extractor = ClipFrameExtractorStub(framesByURL: [
-            videoURL: try Self.frames(markers: [11, 12, 13])
+            videoURL: try Self.frames(markers: [11, 12, 13, 14, 15])
         ])
         let analyzer = VideoClipAlignmentAnalyzer(
             extractor: extractor,
             evaluator: ClipPairEvaluatorStub(measurementsByMarker: [
                 11: Self.measurement(tx: -0.02, score: 0.9),
                 12: Self.measurement(tx: -0.02, score: 0.9),
-                13: Self.measurement(tx: -0.02, score: 0.9)
+                13: Self.measurement(tx: -0.02, score: 0.9),
+                14: Self.measurement(tx: -0.02, score: 0.9),
+                15: Self.measurement(tx: -0.02, score: 0.9)
             ])
         )
         let referenceFrame = try #require(Self.frames(markers: [1]).first)
@@ -180,7 +192,7 @@ struct VideoClipAlignmentAnalyzerTests {
             referenceFingerprint: "reference-v1",
             source: source
         )
-        #expect(await extractor.requestedFractions.count == 3)
+        #expect(await extractor.requestedFractions.count == 5)
         #expect(await analyzer.lastDiagnostics.cacheHit)
 
         _ = try await analyzer.analyze(
@@ -188,7 +200,7 @@ struct VideoClipAlignmentAnalyzerTests {
             referenceFingerprint: "reference-v2",
             source: source
         )
-        #expect(await extractor.requestedFractions.count == 6)
+        #expect(await extractor.requestedFractions.count == 10)
         #expect(!(await analyzer.lastDiagnostics.cacheHit))
     }
 
