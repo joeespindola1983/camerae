@@ -6,6 +6,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+- Corrige o alinhamento de vídeos Repeatable para aceitar resultados de revisão dentro dos limites seguros selecionados, mantendo rejeições geométricas bloqueadas e adicionando diagnóstico estruturado por etapa.
+
 ## [8.5.1] - 2026-07-24
 
 **Status:** QA candidate

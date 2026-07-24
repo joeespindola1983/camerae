@@ -61,6 +61,58 @@ struct RepeatableSessionVideoAlignmentProcessorTests {
         #expect(transform.tx == 0.04)
         #expect(transform.ty == -0.02)
     }
+
+    @Test("a review plan with only soft warnings is exported within the selected crop limit")
+    func softReviewIsExported() async throws {
+        let fixture = try Fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let composer = AlignmentComposerStub()
+        let reviewPlan = fixture.plan.with(
+            decision: .review,
+            reasonCodes: ["largeCrop", "moderateMatchConsistency"]
+        )
+        let processor = RepeatableSessionVideoAlignmentProcessor(
+            probe: MediaProbeStub(),
+            referenceLoader: ReferenceFrameLoaderStub(frame: fixture.referenceFrame),
+            analyzer: ReferenceAnalyzerStub(plan: reviewPlan),
+            composer: composer
+        )
+
+        _ = try await processor.process(
+            summary: fixture.summary,
+            projectReferenceURL: fixture.referenceURL,
+            settings: .videoDefault
+        )
+
+        #expect(await composer.receivedAlignment?.decision == .apply)
+        #expect(await composer.receivedAlignment?.reasonCodes.contains("reviewAcceptedWithinUserLimits") == true)
+    }
+
+    @Test("a hard rejection is never exported")
+    func hardRejectionIsBlocked() async throws {
+        let fixture = try Fixture()
+        defer { try? FileManager.default.removeItem(at: fixture.directory) }
+        let composer = AlignmentComposerStub()
+        let rejectedPlan = fixture.plan.with(
+            decision: .reject,
+            reasonCodes: ["insufficientOverlap"]
+        )
+        let processor = RepeatableSessionVideoAlignmentProcessor(
+            probe: MediaProbeStub(),
+            referenceLoader: ReferenceFrameLoaderStub(frame: fixture.referenceFrame),
+            analyzer: ReferenceAnalyzerStub(plan: rejectedPlan),
+            composer: composer
+        )
+
+        await #expect(throws: RepeatableSessionVideoAlignmentError.alignmentNotApplicable(.reject)) {
+            _ = try await processor.process(
+                summary: fixture.summary,
+                projectReferenceURL: fixture.referenceURL,
+                settings: .videoDefault
+            )
+        }
+        #expect(await composer.receivedAlignment == nil)
+    }
 }
 
 private struct Fixture {
@@ -179,4 +231,19 @@ private actor AlignmentComposerStub: EditVideoComposing {
     }
 
     func cancel() async {}
+}
+
+private extension EditSpatialAlignmentPlan {
+    func with(
+        decision: ClipAlignmentDecision,
+        reasonCodes: [String]
+    ) -> EditSpatialAlignmentPlan {
+        EditSpatialAlignmentPlan(
+            referenceItemID: referenceItemID,
+            corrections: corrections,
+            commonCrop: commonCrop,
+            decision: decision,
+            reasonCodes: reasonCodes
+        )
+    }
 }
