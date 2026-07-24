@@ -121,6 +121,15 @@ enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
     }
 }
 
+enum CameraeNextSessionAlignmentReference {
+    static func resolve(
+        projectReferenceURL: URL?,
+        catalogReferenceURL: URL?
+    ) -> URL? {
+        catalogReferenceURL ?? projectReferenceURL
+    }
+}
+
 struct CameraeNextProjectTabs: View {
     @Binding var selection: CameraeNextProjectSection
     let theme: CameraeNextTheme
@@ -217,6 +226,12 @@ struct CameraeNextSessionCatalogView: View {
     private var theme: CameraeNextTheme { .init(workflow: project.module.designTheme) }
     private var presentation: CameraeNextSessionCatalogPresentation { .init(module: project.module) }
     private var catalog: CameraeNextSessionCatalogModel { .init(summaries: summaries) }
+    private var alignmentReferenceURL: URL? {
+        CameraeNextSessionAlignmentReference.resolve(
+            projectReferenceURL: project.referenceFrameURL,
+            catalogReferenceURL: catalog.referenceFrameURL
+        )
+    }
 
     var body: some View {
         Group {
@@ -557,7 +572,7 @@ struct CameraeNextSessionCatalogView: View {
                 Button("Processar alinhamento", systemImage: "viewfinder") {
                     switch CameraeNextSessionAlignmentAvailability(
                         summary: summary,
-                        projectReferenceURL: project.referenceFrameURL
+                        projectReferenceURL: alignmentReferenceURL
                     ) {
                     case .available:
                         pendingVideoAlignmentConfirmation = summary
@@ -647,7 +662,7 @@ struct CameraeNextSessionCatalogView: View {
                     Task { await render(summary.session) }
                 }
             } else if settings.isEnabled {
-                guard let referenceURL = project.referenceFrameURL else {
+                guard let referenceURL = alignmentReferenceURL else {
                     errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
                     return
                 }

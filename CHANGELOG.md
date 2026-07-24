@@ -17,6 +17,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Aligned recorded videos against the project reference image instead of depending on another video or timeline order.
 - Invalidated previously aligned video outputs when the project reference image is replaced.
 - Preserved original recorded videos and made the generated aligned MP4 the default playback and sharing artifact.
+- Used the reference image visible in the capture catalog when the project summary has not yet persisted that reference.
 
 ## [8.5.0] - 2026-07-23
 

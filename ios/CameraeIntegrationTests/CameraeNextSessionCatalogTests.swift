@@ -156,6 +156,25 @@ struct CameraeNextSessionCatalogTests {
         ) == .referenceUnavailable)
     }
 
+    @Test func visibleCatalogReferenceIsUsedWhenProjectSummaryHasNoReference() {
+        let visibleReferenceURL = URL(fileURLWithPath: "/tmp/first-captured-frame.jpg")
+
+        #expect(CameraeNextSessionAlignmentReference.resolve(
+            projectReferenceURL: nil,
+            catalogReferenceURL: visibleReferenceURL
+        ) == visibleReferenceURL)
+    }
+
+    @Test func visibleCatalogReferenceWinsOverAStaleProjectSummaryReference() {
+        let staleProjectURL = URL(fileURLWithPath: "/tmp/stale-reference.jpg")
+        let visibleReferenceURL = URL(fileURLWithPath: "/tmp/current-reference.jpg")
+
+        #expect(CameraeNextSessionAlignmentReference.resolve(
+            projectReferenceURL: staleProjectURL,
+            catalogReferenceURL: visibleReferenceURL
+        ) == visibleReferenceURL)
+    }
+
     @Test func astroCaptureKeepsProcessingDestination() {
         let summary = fixture(frameCount: 8, module: .astrophotography)
 
