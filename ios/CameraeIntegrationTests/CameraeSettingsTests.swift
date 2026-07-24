@@ -7,6 +7,36 @@ import Testing
 @Suite("Camerae settings")
 @MainActor
 struct CameraeSettingsTests {
+    @Test("4K 60 fps selects a real 4K format instead of the photo-session fallback")
+    func videoFormatSelectionHonorsResolutionAndFrameRate() {
+        let formats = [
+            CameraeVideoFormatCapability(width: 1720, height: 1290, minimumFPS: 1, maximumFPS: 60),
+            CameraeVideoFormatCapability(width: 3840, height: 2160, minimumFPS: 24, maximumFPS: 60),
+            CameraeVideoFormatCapability(width: 4032, height: 3024, minimumFPS: 1, maximumFPS: 30)
+        ]
+
+        #expect(
+            CameraeVideoCaptureFormatPolicy.preferredIndex(
+                capabilities: formats,
+                resolution: .ultraHD,
+                framesPerSecond: 60
+            ) == 1
+        )
+        #expect(
+            CameraeVideoCaptureFormatPolicy.preferredIndex(
+                capabilities: formats,
+                resolution: .ultraHD,
+                framesPerSecond: 120
+            ) == nil
+        )
+    }
+
+    @Test("video quality contributes to the actual encoder bitrate")
+    func videoQualityControlsEncoderBitrate() {
+        let settings = WorkflowVideoSettings(resolution: .fourK, fps: 60, quality: .high)
+        #expect(CameraeVideoEncodingPolicy.averageBitRate(settings: settings) == 120_000_000)
+    }
+
     @Test("photo capture quality never exceeds the output capability")
     func photoQualityIsClampedToOutputCapability() {
         #expect(

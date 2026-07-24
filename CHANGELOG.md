@@ -11,6 +11,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Expande os diagnósticos da exportação alinhada para registrar composição, preset, status, validação e os códigos de erro subjacentes da AVFoundation.
 - Corrige a exportação alinhada em portrait usando um preset sem geometria landscape fixa, preservando o preset 1080p para composições landscape.
 - Torna o alinhamento de vídeo mais robusto com cinco amostras temporais, consenso pelo maior grupo geometricamente coerente e diagnóstico individual de cada amostra.
+- Evita upscale durante a composição alinhada escolhendo a maior resolução padrão 9:16 ou 16:9 suportada pelas dimensões orientadas da mídia.
+- Faz resolução, FPS e qualidade selecionados chegarem à captura real de vídeo, escolhendo um formato compatível da câmera e configurando codec e bitrate antes da gravação.
 
 ## [8.5.1] - 2026-07-24
 

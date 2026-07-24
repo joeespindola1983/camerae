@@ -102,16 +102,59 @@ public struct EditCompositionPlanner: Sendable {
             cursor += descriptor.duration
         }
 
-        let size = document.canvas == .portrait9x16 ? (1080, 1920) : (1920, 1080)
+        let size = EditRenderSizePolicy.renderSize(
+            canvas: document.canvas,
+            sourceSizes: segments.map {
+                (width: $0.sourcePixelWidth, height: $0.sourcePixelHeight)
+            }
+        )
         return EditCompositionPlan(
             canvas: document.canvas,
-            renderWidth: size.0,
-            renderHeight: size.1,
+            renderWidth: size.width,
+            renderHeight: size.height,
             frameRate: 30,
             segments: segments,
             totalDuration: cursor,
             commonCrop: spatialAlignment?.commonCrop ?? .full
         )
+    }
+}
+
+enum EditRenderSizePolicy {
+    static func renderSize(
+        canvas: EditCanvas,
+        sourceSizes: [(width: Int, height: Int)]
+    ) -> (width: Int, height: Int) {
+        let normalized = sourceSizes.map {
+            (short: min($0.width, $0.height), long: max($0.width, $0.height))
+        }
+        let availableShort = normalized.map(\.short).min() ?? 2
+        let availableLong = normalized.map(\.long).min() ?? 2
+        let standardPortraitSizes = [
+            (width: 1080, height: 1920),
+            (width: 720, height: 1280),
+            (width: 540, height: 960),
+            (width: 360, height: 640)
+        ]
+        let portrait = standardPortraitSizes.first {
+            $0.width <= availableShort && $0.height <= availableLong
+        } ?? fittedPortraitSize(availableShort: availableShort, availableLong: availableLong)
+        return canvas == .portrait9x16
+            ? portrait
+            : (width: portrait.height, height: portrait.width)
+    }
+
+    private static func fittedPortraitSize(
+        availableShort: Int,
+        availableLong: Int
+    ) -> (width: Int, height: Int) {
+        let width = min(availableShort, Int(Double(availableLong) * 9 / 16))
+        let height = min(availableLong, Int(Double(width) * 16 / 9))
+        return (width: even(width), height: even(height))
+    }
+
+    private static func even(_ value: Int) -> Int {
+        max(2, value - value % 2)
     }
 }
 

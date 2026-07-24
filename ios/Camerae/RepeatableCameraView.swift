@@ -1251,7 +1251,7 @@ struct RepeatableCameraView: View {
                         if let preflight = planning.result {
                             camera.configureCapturePreflight(preflight)
                         }
-                        await camera.toggleVideoRecording(plan: plan)
+                        await camera.toggleVideoRecording(plan: plan, settings: videoSettings)
                     case .photo:
                         await camera.captureSinglePhoto()
                     }
@@ -1363,7 +1363,7 @@ struct RepeatableCameraView: View {
             if let preflight = planning.result {
                 camera.configureCapturePreflight(preflight)
             }
-            await camera.toggleVideoRecording(plan: plan)
+            await camera.toggleVideoRecording(plan: plan, settings: videoSettings)
         case .photo:
             await camera.captureSinglePhoto()
         }

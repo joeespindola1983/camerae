@@ -44,6 +44,62 @@ enum CameraePhotoQualityPrioritizationPolicy {
     }
 }
 
+struct CameraeVideoFormatCapability: Equatable, Sendable {
+    let width: Int
+    let height: Int
+    let minimumFPS: Double
+    let maximumFPS: Double
+}
+
+enum CameraeVideoCaptureFormatPolicy {
+    static func preferredIndex(
+        capabilities: [CameraeVideoFormatCapability],
+        resolution: CaptureResolution,
+        framesPerSecond: Int
+    ) -> Int? {
+        let fps = Double(framesPerSecond)
+        let compatible = capabilities.indices.filter {
+            capabilities[$0].minimumFPS <= fps && fps <= capabilities[$0].maximumFPS
+        }
+        guard !compatible.isEmpty else { return nil }
+        if resolution == .fullSensor {
+            return compatible.max {
+                capabilities[$0].width * capabilities[$0].height
+                    < capabilities[$1].width * capabilities[$1].height
+            }
+        }
+        let target: (short: Int, long: Int) = switch resolution {
+        case .highDefinition: (720, 1280)
+        case .fullHD: (1080, 1920)
+        case .ultraHD: (2160, 3840)
+        case .fullSensor: (0, 0)
+        }
+        return compatible
+            .filter {
+                min(capabilities[$0].width, capabilities[$0].height) >= target.short &&
+                    max(capabilities[$0].width, capabilities[$0].height) >= target.long
+            }
+            .min {
+                capabilities[$0].width * capabilities[$0].height
+                    < capabilities[$1].width * capabilities[$1].height
+            }
+    }
+}
+
+enum CameraeVideoEncodingPolicy {
+    static func averageBitRate(settings: WorkflowVideoSettings) -> Int {
+        let base: Double = switch settings.resolution {
+        case .preview: 16_000_000
+        case .fourK: 60_000_000
+        case .full: 80_000_000
+        }
+        return Int(
+            (base * max(Double(settings.fps) / 30, 1) * settings.quality.bitRateMultiplier)
+                .rounded()
+        )
+    }
+}
+
 @MainActor
 final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutputSampleBufferDelegate, CLLocationManagerDelegate {
     nonisolated(unsafe) let session = AVCaptureSession()
@@ -420,11 +476,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    func toggleVideoRecording(plan: CapturePlan) async {
+    func toggleVideoRecording(plan: CapturePlan, settings: WorkflowVideoSettings) async {
         if isVideoRecording {
             stopVideoRecording()
         } else {
-            await startVideoRecording(plan: plan)
+            await startVideoRecording(plan: plan, settings: settings)
         }
     }
 
@@ -1094,13 +1150,17 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    private func startVideoRecording(plan: CapturePlan) async {
+    private func startVideoRecording(
+        plan: CapturePlan,
+        settings: WorkflowVideoSettings
+    ) async {
         guard !isTimelapseRunning, !isSinglePhotoCaptureRunning, !isVideoRecording else { return }
 
         do {
             stoppedForStorage = false
             try await configureIfNeeded()
             guard movieOutput.isRecording == false else { return }
+            try await configureVideoRecording(plan: plan, settings: settings)
 
             let videoSession = try store.createSession(
                 captureKind: .video,
@@ -1155,6 +1215,103 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             isVideoRecording = false
             cameraeVisionCoordinator.resume(.videoRecording)
             status = "Video falhou: \(error.localizedDescription)"
+        }
+    }
+
+    private func configureVideoRecording(
+        plan: CapturePlan,
+        settings: WorkflowVideoSettings
+    ) async throws {
+        let expectedResolution: CaptureResolution = switch settings.resolution {
+        case .preview: .fullHD
+        case .fourK: .ultraHD
+        case .full: .fullSensor
+        }
+        guard plan.workflow == .repeatableVideo,
+              plan.captureFPS == settings.fps,
+              plan.resolution == expectedResolution else {
+            throw CameraError.unsupportedVideoConfiguration
+        }
+        try await withCheckedThrowingContinuation { continuation in
+            captureQueue.async {
+                do {
+                    guard let device = self.device else { throw CameraError.noCamera }
+                    let capabilities = device.formats.map { format in
+                        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                        let ranges = format.videoSupportedFrameRateRanges
+                        return CameraeVideoFormatCapability(
+                            width: Int(dimensions.width),
+                            height: Int(dimensions.height),
+                            minimumFPS: ranges.map(\.minFrameRate).min() ?? 0,
+                            maximumFPS: ranges.map(\.maxFrameRate).max() ?? 0
+                        )
+                    }
+                    guard let formatIndex = CameraeVideoCaptureFormatPolicy.preferredIndex(
+                        capabilities: capabilities,
+                        resolution: plan.resolution,
+                        framesPerSecond: settings.fps
+                    ) else {
+                        throw CameraError.unsupportedVideoConfiguration
+                    }
+
+                    self.session.beginConfiguration()
+                    defer { self.session.commitConfiguration() }
+                    if self.session.canSetSessionPreset(.inputPriority) {
+                        self.session.sessionPreset = .inputPriority
+                    }
+
+                    try device.lockForConfiguration()
+                    device.activeFormat = device.formats[formatIndex]
+                    if #available(iOS 18.0, *), device.isAutoVideoFrameRateEnabled {
+                        device.isAutoVideoFrameRateEnabled = false
+                    }
+                    let frameDuration = CMTime(
+                        value: 1,
+                        timescale: CMTimeScale(settings.fps)
+                    )
+                    device.activeVideoMinFrameDuration = frameDuration
+                    device.activeVideoMaxFrameDuration = frameDuration
+                    device.unlockForConfiguration()
+
+                    guard let connection = self.movieOutput.connection(with: .video) else {
+                        throw CameraError.unsupportedVideoConfiguration
+                    }
+                    let supportedKeys = Set(
+                        self.movieOutput.supportedOutputSettingsKeys(for: connection)
+                    )
+                    let codec: AVVideoCodecType = self.movieOutput.availableVideoCodecTypes.contains(.hevc)
+                        ? .hevc
+                        : .h264
+                    var outputSettings: [String: Any] = [:]
+                    if supportedKeys.contains(AVVideoCodecKey) {
+                        outputSettings[AVVideoCodecKey] = codec
+                    }
+                    if supportedKeys.contains(AVVideoCompressionPropertiesKey) {
+                        outputSettings[AVVideoCompressionPropertiesKey] = [
+                            AVVideoAverageBitRateKey: CameraeVideoEncodingPolicy.averageBitRate(
+                                settings: settings
+                            ),
+                            AVVideoMaxKeyFrameIntervalKey: settings.fps
+                        ]
+                    }
+                    if !outputSettings.isEmpty {
+                        self.movieOutput.setOutputSettings(outputSettings, for: connection)
+                    }
+
+                    let selected = capabilities[formatIndex]
+                    CameraeCaptureDiagnostics.event(
+                        "C19 video.configuration",
+                        "requested=\(settings.summary) actual=\(selected.width)x\(selected.height) fps=\(settings.fps) codec=\(codec.rawValue) bitrate=\(CameraeVideoEncodingPolicy.averageBitRate(settings: settings))"
+                    )
+                    continuation.resume(returning: ())
+                } catch {
+                    CameraeCaptureDiagnostics.error(
+                        "C96 video.configuration.failed",
+                        "\(error.localizedDescription)"
+                    )
+                    continuation.resume(throwing: error)
+                }
+            }
         }
     }
 
@@ -1995,6 +2152,7 @@ enum CameraError: LocalizedError {
     case photoEncodingFailed
     case missingSession
     case cancelled
+    case unsupportedVideoConfiguration
 
     var errorDescription: String? {
         switch self {
@@ -2008,6 +2166,8 @@ enum CameraError: LocalizedError {
             return "sessao nao criada"
         case .cancelled:
             return "captura cancelada"
+        case .unsupportedVideoConfiguration:
+            return "a câmera selecionada não suporta a resolução e o FPS solicitados"
         }
     }
 }

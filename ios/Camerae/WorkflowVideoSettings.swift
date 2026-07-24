@@ -2,7 +2,7 @@ import AVFoundation
 import CoreGraphics
 import Foundation
 
-enum WorkflowVideoResolution: String, CaseIterable, Identifiable, Codable, Hashable {
+enum WorkflowVideoResolution: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case full
     case fourK
     case preview
@@ -32,7 +32,7 @@ enum WorkflowVideoResolution: String, CaseIterable, Identifiable, Codable, Hasha
     }
 }
 
-enum WorkflowVideoQuality: String, CaseIterable, Identifiable, Codable, Hashable {
+enum WorkflowVideoQuality: String, CaseIterable, Identifiable, Codable, Hashable, Sendable {
     case standard
     case high
     case max
@@ -62,7 +62,7 @@ enum WorkflowVideoQuality: String, CaseIterable, Identifiable, Codable, Hashable
     }
 }
 
-struct WorkflowVideoSettings: Codable, Equatable, Hashable {
+struct WorkflowVideoSettings: Codable, Equatable, Hashable, Sendable {
     var resolution: WorkflowVideoResolution
     var fps: Int
     var quality: WorkflowVideoQuality

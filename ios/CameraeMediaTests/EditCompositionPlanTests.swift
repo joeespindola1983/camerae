@@ -5,6 +5,28 @@ import Testing
 
 @Suite("Edit composition planner")
 struct EditCompositionPlanTests {
+    @Test("render size never upscales a portrait source beyond its oriented pixels")
+    func adaptiveRenderSizeAvoidsUpscaling() {
+        #expect(
+            EditRenderSizePolicy.renderSize(
+                canvas: .portrait9x16,
+                sourceSizes: [(width: 1290, height: 1720)]
+            ) == (width: 720, height: 1280)
+        )
+        #expect(
+            EditRenderSizePolicy.renderSize(
+                canvas: .portrait9x16,
+                sourceSizes: [(width: 2160, height: 3840)]
+            ) == (width: 1080, height: 1920)
+        )
+        #expect(
+            EditRenderSizePolicy.renderSize(
+                canvas: .landscape16x9,
+                sourceSizes: [(width: 1720, height: 1290)]
+            ) == (width: 1280, height: 720)
+        )
+    }
+
     @Test("segments preserve timeline order and accumulate duration without gaps")
     func preservesOrderAndDuration() throws {
         let fixture = CompositionFixture()
