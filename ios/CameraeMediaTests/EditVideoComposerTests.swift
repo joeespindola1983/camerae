@@ -7,6 +7,36 @@ import Testing
 
 @Suite("Edit video composer")
 struct EditVideoComposerTests {
+    @Test("spatially aligned video uses the writer pipeline and produces a playable MP4")
+    func exportsSpatialAlignmentWithWriterPipeline() async throws {
+        let fixture = try VideoCompositionFixture()
+        defer { fixture.remove() }
+        let sourceURL = fixture.root.appendingPathComponent("portrait-source.mp4")
+        try await TinyVideoFactory.make(url: sourceURL, red: 80, green: 120, blue: 220)
+        let prepared = try await fixture.makeDocumentAndAssets(
+            urls: [sourceURL],
+            canvas: .portrait9x16
+        )
+        let itemID = try #require(prepared.document.items.first?.id)
+        let alignment = try ClipSpatialAlignmentPlanner().makePlan(
+            referenceItemID: itemID,
+            candidates: [.identity(itemID: itemID)]
+        )
+        let outputURL = fixture.root.appendingPathComponent("Exports/aligned.mp4")
+
+        let exported = try await EditVideoComposer().export(
+            project: prepared.document,
+            assets: prepared.assets,
+            spatialAlignment: alignment,
+            outputURL: outputURL,
+            progress: { _ in }
+        )
+
+        let asset = AVURLAsset(url: exported)
+        #expect(try await !asset.loadTracks(withMediaType: .video).isEmpty)
+        #expect(CMTimeGetSeconds(try await asset.load(.duration)) > 0)
+    }
+
     @Test("portrait compositions use an orientation-agnostic export preset")
     func portraitExportPresetDoesNotImposeLandscapeGeometry() {
         #expect(
@@ -101,7 +131,8 @@ private final class VideoCompositionFixture: @unchecked Sendable {
     }
 
     func makeDocumentAndAssets(
-        urls: [URL]
+        urls: [URL],
+        canvas: EditCanvas = .landscape16x9
     ) async throws -> (
         document: EditProjectDocument,
         assets: [MediaAssetID: ResolvedMediaAsset],
@@ -138,7 +169,7 @@ private final class VideoCompositionFixture: @unchecked Sendable {
         return (
             EditProjectDocument(
                 projectID: UUID(uuidString: "A3000000-0000-0000-0000-000000000001")!,
-                canvas: .landscape16x9,
+                canvas: canvas,
                 items: items,
                 updatedAt: Date(timeIntervalSince1970: 0)
             ),

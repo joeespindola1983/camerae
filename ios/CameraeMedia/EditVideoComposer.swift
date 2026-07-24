@@ -47,6 +47,8 @@ public actor EditVideoComposer: EditVideoComposing {
     private let planner: EditCompositionPlanner
     private let fileManager: FileManager
     private var exportSession: AVAssetExportSession?
+    private var assetReader: AVAssetReader?
+    private var assetWriter: AVAssetWriter?
 
     public init(
         planner: EditCompositionPlanner = EditCompositionPlanner(),
@@ -78,7 +80,9 @@ public actor EditVideoComposer: EditVideoComposing {
         outputURL: URL,
         progress: @escaping @Sendable (Double) async -> Void
     ) async throws -> URL {
-        guard exportSession == nil else { throw EditVideoComposerError.exportAlreadyRunning }
+        guard exportSession == nil, assetReader == nil, assetWriter == nil else {
+            throw EditVideoComposerError.exportAlreadyRunning
+        }
         EditVideoComposerDiagnostics.event("export.plan.started")
         let plan = try planner.makePlan(
             document: project,
@@ -98,17 +102,63 @@ public actor EditVideoComposer: EditVideoComposing {
         var shouldRemoveTemporary = true
         defer {
             exportSession = nil
+            assetReader = nil
+            assetWriter = nil
             if shouldRemoveTemporary {
                 try? fileManager.removeItem(at: temporaryURL)
             }
         }
 
+        if spatialAlignment != nil {
+            try await exportAlignedWithAssetWriter(
+                composition: built.composition,
+                videoComposition: built.videoComposition,
+                plan: plan,
+                outputURL: temporaryURL,
+                progress: progress
+            )
+        } else {
+            try await exportWithAssetExportSession(
+                composition: built.composition,
+                videoComposition: built.videoComposition,
+                plan: plan,
+                outputURL: temporaryURL,
+                progress: progress
+            )
+        }
+
+        EditVideoComposerDiagnostics.event("export.validation.started")
+        try await validateExport(at: temporaryURL)
+        EditVideoComposerDiagnostics.event("export.validation.completed")
+        if fileManager.fileExists(atPath: outputURL.path) {
+            try fileManager.removeItem(at: outputURL)
+        }
+        try fileManager.moveItem(at: temporaryURL, to: outputURL)
+        EditVideoComposerDiagnostics.event("export.publication.completed")
+        shouldRemoveTemporary = false
+        await progress(1)
+        return outputURL
+    }
+
+    public func cancel() {
+        exportSession?.cancelExport()
+        assetReader?.cancelReading()
+        assetWriter?.cancelWriting()
+    }
+
+    private func exportWithAssetExportSession(
+        composition: AVMutableComposition,
+        videoComposition: AVMutableVideoComposition,
+        plan: EditCompositionPlan,
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws {
         let presetName = EditVideoExportPresetPolicy.presetName(
             renderWidth: plan.renderWidth,
             renderHeight: plan.renderHeight
         )
         guard let exporter = AVAssetExportSession(
-            asset: built.composition,
+            asset: composition,
             presetName: presetName
         ) else {
             EditVideoComposerDiagnostics.event("export.session.unavailable")
@@ -121,9 +171,9 @@ public actor EditVideoComposer: EditVideoComposing {
             )
             throw EditVideoComposerError.mp4Unsupported
         }
-        exporter.outputURL = temporaryURL
+        exporter.outputURL = outputURL
         exporter.outputFileType = .mp4
-        exporter.videoComposition = built.videoComposition
+        exporter.videoComposition = videoComposition
         exporter.shouldOptimizeForNetworkUse = true
         exportSession = exporter
 
@@ -159,22 +209,108 @@ public actor EditVideoComposer: EditVideoComposing {
         default:
             throw EditVideoComposerError.exportFailed
         }
-
-        EditVideoComposerDiagnostics.event("export.validation.started")
-        try await validateExport(at: temporaryURL)
-        EditVideoComposerDiagnostics.event("export.validation.completed")
-        if fileManager.fileExists(atPath: outputURL.path) {
-            try fileManager.removeItem(at: outputURL)
-        }
-        try fileManager.moveItem(at: temporaryURL, to: outputURL)
-        EditVideoComposerDiagnostics.event("export.publication.completed")
-        shouldRemoveTemporary = false
-        await progress(1)
-        return outputURL
     }
 
-    public func cancel() {
-        exportSession?.cancelExport()
+    private func exportAlignedWithAssetWriter(
+        composition: AVMutableComposition,
+        videoComposition: AVMutableVideoComposition,
+        plan: EditCompositionPlan,
+        outputURL: URL,
+        progress: @escaping @Sendable (Double) async -> Void
+    ) async throws {
+        let reader = try AVAssetReader(asset: composition)
+        let videoOutput = AVAssetReaderVideoCompositionOutput(
+            videoTracks: composition.tracks(withMediaType: .video),
+            videoSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String:
+                    kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            ]
+        )
+        videoOutput.videoComposition = videoComposition
+        videoOutput.alwaysCopiesSampleData = false
+        guard reader.canAdd(videoOutput) else {
+            throw EditVideoComposerError.readerConfigurationFailed
+        }
+        reader.add(videoOutput)
+
+        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+        let averageBitRate = max(plan.renderWidth * plan.renderHeight * 6, 4_000_000)
+        let videoInput = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: plan.renderWidth,
+                AVVideoHeightKey: plan.renderHeight,
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: averageBitRate,
+                    AVVideoMaxKeyFrameIntervalKey: plan.frameRate,
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                ]
+            ]
+        )
+        videoInput.expectsMediaDataInRealTime = false
+        guard writer.canAdd(videoInput) else {
+            throw EditVideoComposerError.writerConfigurationFailed
+        }
+        writer.add(videoInput)
+        assetReader = reader
+        assetWriter = writer
+
+        guard writer.startWriting() else {
+            throw writer.error ?? EditVideoComposerError.writerConfigurationFailed
+        }
+        guard reader.startReading() else {
+            writer.cancelWriting()
+            throw reader.error ?? EditVideoComposerError.readerConfigurationFailed
+        }
+        writer.startSession(atSourceTime: .zero)
+        EditVideoComposerDiagnostics.event(
+            "export.writer.started",
+            "codec=h264 render=\(plan.renderWidth)x\(plan.renderHeight) bitrate=\(averageBitRate)"
+        )
+        await progress(0)
+
+        while reader.status == .reading {
+            try Task.checkCancellation()
+            guard videoInput.isReadyForMoreMediaData else {
+                try await Task.sleep(nanoseconds: 1_000_000)
+                continue
+            }
+            guard let sample = videoOutput.copyNextSampleBuffer() else { break }
+            guard videoInput.append(sample) else {
+                reader.cancelReading()
+                writer.cancelWriting()
+                throw writer.error ?? EditVideoComposerError.writerFailed
+            }
+            let seconds = CMTimeGetSeconds(CMSampleBufferGetPresentationTimeStamp(sample))
+            if seconds.isFinite, plan.totalDuration > 0 {
+                await progress(min(max(seconds / plan.totalDuration, 0), 0.99))
+            }
+        }
+        videoInput.markAsFinished()
+
+        if reader.status == .failed {
+            writer.cancelWriting()
+            throw reader.error ?? EditVideoComposerError.readerFailed
+        }
+        if Task.isCancelled {
+            reader.cancelReading()
+            writer.cancelWriting()
+            throw EditVideoComposerError.cancelled
+        }
+
+        await withCheckedContinuation { continuation in
+            writer.finishWriting {
+                continuation.resume()
+            }
+        }
+        EditVideoComposerDiagnostics.event(
+            "export.writer.finished",
+            "status=\(writer.status.rawValue) \(EditVideoComposerDiagnostics.describe(writer.error))"
+        )
+        guard writer.status == .completed else {
+            throw writer.error ?? EditVideoComposerError.writerFailed
+        }
     }
 
     private func buildComposition(
@@ -364,6 +500,10 @@ public enum EditVideoComposerError: LocalizedError, Equatable {
     case cancelled
     case emptyOutput
     case spatialAlignmentUnsupported
+    case readerConfigurationFailed
+    case readerFailed
+    case writerConfigurationFailed
+    case writerFailed
 
     public var errorDescription: String? {
         switch self {
@@ -376,6 +516,10 @@ public enum EditVideoComposerError: LocalizedError, Equatable {
         case .cancelled: return "exportação cancelada"
         case .emptyOutput: return "o MP4 exportado está vazio ou inválido"
         case .spatialAlignmentUnsupported: return "este compositor não aceita alinhamento espacial"
+        case .readerConfigurationFailed: return "não foi possível preparar a leitura do vídeo alinhado"
+        case .readerFailed: return "não foi possível ler os frames do vídeo alinhado"
+        case .writerConfigurationFailed: return "não foi possível preparar o codificador do vídeo alinhado"
+        case .writerFailed: return "não foi possível codificar o vídeo alinhado"
         }
     }
 }
