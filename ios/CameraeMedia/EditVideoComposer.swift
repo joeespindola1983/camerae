@@ -2,6 +2,7 @@ import AVFoundation
 import CameraeCore
 import CoreGraphics
 import Foundation
+import OSLog
 
 public protocol EditVideoComposing: Sendable {
     func export(
@@ -78,12 +79,18 @@ public actor EditVideoComposer: EditVideoComposing {
         progress: @escaping @Sendable (Double) async -> Void
     ) async throws -> URL {
         guard exportSession == nil else { throw EditVideoComposerError.exportAlreadyRunning }
+        EditVideoComposerDiagnostics.event("export.plan.started")
         let plan = try planner.makePlan(
             document: project,
             assets: assets,
             spatialAlignment: spatialAlignment
         )
+        EditVideoComposerDiagnostics.event(
+            "export.plan.completed",
+            "canvas=\(plan.canvas.rawValue) render=\(plan.renderWidth)x\(plan.renderHeight) fps=\(plan.frameRate) segments=\(plan.segments.count) duration=\(plan.totalDuration) crop=\(1 - plan.commonCrop.area)"
+        )
         let built = try await buildComposition(plan: plan, assets: assets)
+        EditVideoComposerDiagnostics.event("export.composition.completed")
         try fileManager.createDirectory(at: outputURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         let temporaryURL = outputURL.deletingLastPathComponent()
             .appendingPathComponent(".\(UUID().uuidString).tmp.mp4")
@@ -100,9 +107,14 @@ public actor EditVideoComposer: EditVideoComposing {
             asset: built.composition,
             presetName: AVAssetExportPreset1920x1080
         ) else {
+            EditVideoComposerDiagnostics.event("export.session.unavailable")
             throw EditVideoComposerError.exporterUnavailable
         }
         guard exporter.supportedFileTypes.contains(.mp4) else {
+            EditVideoComposerDiagnostics.event(
+                "export.mp4.unsupported",
+                "supported=\(exporter.supportedFileTypes.map(\.rawValue).joined(separator: ","))"
+            )
             throw EditVideoComposerError.mp4Unsupported
         }
         exporter.outputURL = temporaryURL
@@ -111,6 +123,10 @@ public actor EditVideoComposer: EditVideoComposing {
         exporter.shouldOptimizeForNetworkUse = true
         exportSession = exporter
 
+        EditVideoComposerDiagnostics.event(
+            "export.session.started",
+            "preset=\(AVAssetExportPreset1920x1080) fileType=\(AVFileType.mp4.rawValue)"
+        )
         await progress(0)
         let progressTask = Task {
             while !Task.isCancelled {
@@ -124,6 +140,10 @@ public actor EditVideoComposer: EditVideoComposing {
             }
         }
         progressTask.cancel()
+        EditVideoComposerDiagnostics.event(
+            "export.session.finished",
+            "status=\(exporter.status.rawValue) \(EditVideoComposerDiagnostics.describe(exporter.error))"
+        )
 
         switch exporter.status {
         case .completed:
@@ -136,11 +156,14 @@ public actor EditVideoComposer: EditVideoComposing {
             throw EditVideoComposerError.exportFailed
         }
 
+        EditVideoComposerDiagnostics.event("export.validation.started")
         try await validateExport(at: temporaryURL)
+        EditVideoComposerDiagnostics.event("export.validation.completed")
         if fileManager.fileExists(atPath: outputURL.path) {
             try fileManager.removeItem(at: outputURL)
         }
         try fileManager.moveItem(at: temporaryURL, to: outputURL)
+        EditVideoComposerDiagnostics.event("export.publication.completed")
         shouldRemoveTemporary = false
         await progress(1)
         return outputURL
@@ -231,6 +254,34 @@ public actor EditVideoComposer: EditVideoComposing {
         }
         let duration = CMTimeGetSeconds(try await asset.load(.duration))
         guard duration.isFinite, duration > 0 else { throw EditVideoComposerError.emptyOutput }
+    }
+}
+
+enum EditVideoComposerDiagnostics {
+    private static let logger = Logger(
+        subsystem: "com.espindola.camerae",
+        category: "CameraeAlignment"
+    )
+
+    nonisolated static func event(_ stage: String, _ detail: String = "") {
+        let suffix = detail.isEmpty ? "" : " | \(detail)"
+        logger.notice("[CameraeAlignment] \(stage, privacy: .public)\(suffix, privacy: .public)")
+    }
+
+    nonisolated static func describe(_ error: Error?) -> String {
+        guard let error else { return "error=none" }
+        let nsError = error as NSError
+        var parts = [
+            "domain=\(nsError.domain)",
+            "code=\(nsError.code)",
+            "message=\(nsError.localizedDescription)"
+        ]
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            parts.append("underlyingDomain=\(underlying.domain)")
+            parts.append("underlyingCode=\(underlying.code)")
+            parts.append("underlyingMessage=\(underlying.localizedDescription)")
+        }
+        return parts.joined(separator: " ")
     }
 }
 

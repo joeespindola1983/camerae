@@ -7,6 +7,30 @@ import Testing
 
 @Suite("Edit video composer")
 struct EditVideoComposerTests {
+    @Test("export diagnostics preserve AVFoundation domain, code, and underlying error")
+    func exportDiagnosticsPreserveSystemErrorIdentity() {
+        let underlying = NSError(
+            domain: "NSOSStatusErrorDomain",
+            code: -16976,
+            userInfo: [NSLocalizedDescriptionKey: "encoder stopped"]
+        )
+        let error = NSError(
+            domain: AVFoundationErrorDomain,
+            code: -11800,
+            userInfo: [
+                NSLocalizedDescriptionKey: "The operation could not be completed",
+                NSUnderlyingErrorKey: underlying
+            ]
+        )
+
+        let detail = EditVideoComposerDiagnostics.describe(error)
+
+        #expect(detail.contains("domain=AVFoundationErrorDomain"))
+        #expect(detail.contains("code=-11800"))
+        #expect(detail.contains("underlyingDomain=NSOSStatusErrorDomain"))
+        #expect(detail.contains("underlyingCode=-16976"))
+    }
+
     @Test("exports ordered clips to a validated 1080p MP4")
     func exportsPlayableMP4() async throws {
 #if targetEnvironment(simulator)
