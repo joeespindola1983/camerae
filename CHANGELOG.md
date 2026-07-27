@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Added the first offline plate-solving laboratory foundation to Camerae Vision, including gnomonic sky projection, deterministic synthetic star fields, OpenCV star centroid detection, annotated image evidence, and a versioned JSON report.
+- Added TDD coverage for celestial projection round trips, synthetic star recovery, negative blank images, and the laboratory report contract.
+
 ## [8.5.1] - 2026-07-24
 
 **Status:** QA candidate

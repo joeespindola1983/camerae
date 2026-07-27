@@ -21,6 +21,7 @@ android/**/build/
 processing/build/
 processing/out/
 processing/tmp/
+local-fixtures/plate-solving/
 
 # Local ML models are large and may have separate redistribution terms.
 ios/LocalModels/
