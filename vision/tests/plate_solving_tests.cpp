@@ -71,12 +71,36 @@ void testBlankImageDoesNotProduceStars() {
     require(result.stars.empty(), "blank images must not produce star candidates");
 }
 
+void testActiveImageRegionRemovesOnlyUniformLetterboxing() {
+    using namespace camerae_vision::plate_solving;
+
+    cv::Mat letterboxed(90, 160, CV_8UC3, cv::Scalar::all(0));
+    const cv::Rect content(20, 10, 120, 70);
+    letterboxed(content).setTo(cv::Scalar(12, 16, 20));
+    letterboxed.at<cv::Vec3b>(18, 80) = cv::Vec3b(220, 220, 220);
+
+    const ActiveImageRegion region = detectActiveImageRegion(letterboxed);
+    require(region.x == content.x && region.y == content.y,
+            "uniform black borders must be removed from the origin");
+    require(region.width == content.width && region.height == content.height,
+            "uniform black borders must be removed from the extent");
+
+    cv::Mat darkSky(90, 160, CV_8UC3, cv::Scalar::all(4));
+    darkSky.at<cv::Vec3b>(45, 80) = cv::Vec3b(220, 220, 220);
+    const ActiveImageRegion fullRegion = detectActiveImageRegion(darkSky);
+    require(fullRegion.x == 0 && fullRegion.y == 0 &&
+            fullRegion.width == darkSky.cols && fullRegion.height == darkSky.rows,
+            "a valid dark sky must not be mistaken for letterboxing");
+}
+
 void testJsonReportContract() {
     using namespace camerae_vision::plate_solving;
 
     PlateSolvingLabReport report;
-    report.schemaVersion = 1;
     report.imagePath = "fixture.png";
+    report.sourceImageWidth = 800;
+    report.sourceImageHeight = 480;
+    report.activeRegionX = 80;
     report.imageWidth = 640;
     report.imageHeight = 480;
     report.detectedStarCount = 42;
@@ -84,12 +108,44 @@ void testJsonReportContract() {
     report.status = PlateSolvingStatus::DetectionCompleted;
 
     const std::string json = serializeLabReport(report);
-    require(json.find("\"schemaVersion\": 1") != std::string::npos,
+    require(json.find("\"schemaVersion\": 2") != std::string::npos,
             "report must expose a stable schema version");
+    require(json.find("\"sourceImageWidth\": 800") != std::string::npos &&
+            json.find("\"activeRegionX\": 80") != std::string::npos,
+            "report must expose reproducible active-image cropping");
     require(json.find("\"detectedStarCount\": 42") != std::string::npos,
             "report must expose the detected star count");
     require(json.find("\"status\": \"detectionCompleted\"") != std::string::npos,
             "report must distinguish detection from a solved plate");
+}
+
+void testCompactCatalogRoundTripAndRejectsCorruption() {
+    using namespace camerae_vision::plate_solving;
+
+    const std::vector<CatalogStar> expected{
+        {"gaia-123", {266.4051, -28.936175}, 1.25},
+        {"β-centauri", {210.9558, -60.3730}, 0.61}
+    };
+    const std::vector<std::uint8_t> encoded = serializeCompactCatalog(expected);
+    const std::vector<CatalogStar> decoded = deserializeCompactCatalog(encoded);
+    require(decoded.size() == expected.size(),
+            "compact catalog must preserve its star count");
+    require(decoded[0].identifier == expected[0].identifier &&
+            std::abs(decoded[0].coordinate.rightAscensionDegrees -
+                     expected[0].coordinate.rightAscensionDegrees) < 0.0001 &&
+            std::abs(decoded[1].coordinate.declinationDegrees -
+                     expected[1].coordinate.declinationDegrees) < 0.0001,
+            "compact catalog must preserve identifiers and coordinates");
+
+    std::vector<std::uint8_t> truncated = encoded;
+    truncated.pop_back();
+    bool rejected = false;
+    try {
+        (void)deserializeCompactCatalog(truncated);
+    } catch (const std::invalid_argument&) {
+        rejected = true;
+    }
+    require(rejected, "truncated compact catalogs must be rejected");
 }
 
 std::vector<camerae_vision::plate_solving::CatalogStar> makeCatalogFixture() {
@@ -190,6 +246,60 @@ void testConstrainedPlateSolve() {
             "clean constrained solution must have a low residual");
     require(solution.confidence > 0.75,
             "well-supported geometry must produce high confidence");
+
+    LostInSpacePlateSolveRequest blindRequest;
+    blindRequest.detectedStars = detections;
+    blindRequest.imageWidth = imageWidth;
+    blindRequest.imageHeight = imageHeight;
+    blindRequest.catalog = catalog;
+    blindRequest.approximateHorizontalFieldOfViewDegrees = 11.0;
+    blindRequest.minimumMatches = 10;
+    blindRequest.matchTolerancePixels = 2.0;
+    blindRequest.patternCheckingStars = 12;
+
+    const PlateSolution blindSolution = solveLostInSpace(blindRequest);
+    require(blindSolution.status == PlateSolvingStatus::Solved,
+            "quad index must solve without an approximate sky center");
+    require(angularDifference(
+                blindSolution.center.rightAscensionDegrees,
+                expectedCenter.rightAscensionDegrees) < 0.02,
+            "lost-in-space solver must recover center right ascension");
+    require(std::abs(blindSolution.center.declinationDegrees -
+                     expectedCenter.declinationDegrees) < 0.02,
+            "lost-in-space solver must recover center declination");
+    require(blindSolution.matchedStars >= 20,
+            "lost-in-space solution must be supported by the complete field");
+
+    std::vector<DetectedStar> reflectedDetections;
+    reflectedDetections.reserve(catalog.size());
+    for (const CatalogStar& star : catalog) {
+        const TangentPlanePoint tangent =
+            projectGnomonic(star.coordinate, approximateCenter);
+        const double x = pixelsPerRadian *
+            (cosine * tangent.xRadians + sine * tangent.yRadians) + translation.x;
+        const double y = pixelsPerRadian *
+            (sine * tangent.xRadians - cosine * tangent.yRadians) + translation.y;
+        if (x < 10.0 || x >= imageWidth - 10.0 ||
+            y < 10.0 || y >= imageHeight - 10.0) {
+            continue;
+        }
+        reflectedDetections.push_back({
+            x,
+            y,
+            5000.0 - star.magnitude * 100.0,
+            20.0,
+            1.5
+        });
+    }
+
+    request.detectedStars = reflectedDetections;
+    const PlateSolution reflectedSolution = solveConstrained(request);
+    require(reflectedSolution.status == PlateSolvingStatus::Solved,
+            "image-coordinate parity must be supported");
+    require(reflectedSolution.parityInverted,
+            "reflected geometry must be reported in the solution");
+    require(reflectedSolution.matchedStars >= 20,
+            "reflected solution must retain the complete field");
 }
 
 void testConstrainedPlateSolveRejectsUnrelatedStars() {
@@ -216,6 +326,19 @@ void testConstrainedPlateSolveRejectsUnrelatedStars() {
     const PlateSolution solution = solveConstrained(request);
     require(solution.status == PlateSolvingStatus::NotSolved,
             "unrelated points must never produce a plate solution");
+
+    LostInSpacePlateSolveRequest blindRequest;
+    blindRequest.detectedStars = unrelated;
+    blindRequest.imageWidth = 1200;
+    blindRequest.imageHeight = 800;
+    blindRequest.catalog = makeCatalogFixture();
+    blindRequest.approximateHorizontalFieldOfViewDegrees = 11.0;
+    blindRequest.minimumMatches = 10;
+    blindRequest.matchTolerancePixels = 2.0;
+
+    const PlateSolution blindSolution = solveLostInSpace(blindRequest);
+    require(blindSolution.status == PlateSolvingStatus::NotSolved,
+            "quad index must reject an unrelated lost-in-space field");
 }
 
 void testSolvedJsonReportContract() {
@@ -232,6 +355,7 @@ void testSolvedJsonReportContract() {
     report.solution.rootMeanSquareErrorPixels = 0.3;
     report.solution.matchedStars = 18;
     report.solution.confidence = 0.95;
+    report.solution.parityInverted = true;
     report.solution.matches.push_back({
         "gaia-1",
         {266.5, -28.8},
@@ -245,6 +369,8 @@ void testSolvedJsonReportContract() {
             "solved report must expose center right ascension");
     require(json.find("\"matchedStars\": 18") != std::string::npos,
             "solved report must expose match support");
+    require(json.find("\"parityInverted\": true") != std::string::npos,
+            "solved report must expose image-coordinate parity");
     require(json.find("\"catalogIdentifier\": \"gaia-1\"") != std::string::npos,
             "solved report must expose auditable catalog matches");
 }
@@ -256,7 +382,9 @@ int main() {
         testTangentProjectionRoundTrip();
         testSyntheticStarDetection();
         testBlankImageDoesNotProduceStars();
+        testActiveImageRegionRemovesOnlyUniformLetterboxing();
         testJsonReportContract();
+        testCompactCatalogRoundTripAndRejectsCorruption();
         testConstrainedPlateSolve();
         testConstrainedPlateSolveRejectsUnrelatedStars();
         testSolvedJsonReportContract();

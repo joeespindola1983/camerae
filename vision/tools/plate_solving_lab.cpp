@@ -23,14 +23,18 @@ struct Arguments {
     double approximateFieldOfView = 0.0;
     bool hasApproximateRightAscension = false;
     bool hasApproximateDeclination = false;
+    bool lostInSpace = false;
+    double matchTolerancePixels = 5.0;
+    int minimumMatches = 8;
 };
 
 void printUsage() {
     std::cout
         << "Usage: camerae-plate-solve-lab --image <path> --output <directory> "
            "[--max-dimension <pixels>] [--minimum-snr <value>] "
-           "[--catalog <csv> --approx-ra <degrees> --approx-dec <degrees> "
-           "--approx-fov <degrees>]\n";
+           "[--catalog <csv|camcat> --approx-ra <degrees> --approx-dec <degrees> "
+           "--approx-fov <degrees>] "
+           "[--catalog <csv|camcat> --lost-in-space --approx-fov <degrees>]\n";
 }
 
 Arguments parseArguments(int argc, char** argv) {
@@ -40,6 +44,10 @@ Arguments parseArguments(int argc, char** argv) {
         if (option == "--help" || option == "-h") {
             printUsage();
             std::exit(0);
+        }
+        if (option == "--lost-in-space") {
+            arguments.lostInSpace = true;
+            continue;
         }
         if (index + 1 >= argc) {
             throw std::invalid_argument("missing value for " + option);
@@ -63,6 +71,10 @@ Arguments parseArguments(int argc, char** argv) {
             arguments.hasApproximateDeclination = true;
         } else if (option == "--approx-fov") {
             arguments.approximateFieldOfView = std::stod(value);
+        } else if (option == "--match-tolerance") {
+            arguments.matchTolerancePixels = std::stod(value);
+        } else if (option == "--minimum-matches") {
+            arguments.minimumMatches = std::stoi(value);
         } else {
             throw std::invalid_argument("unknown option: " + option);
         }
@@ -71,10 +83,17 @@ Arguments parseArguments(int argc, char** argv) {
         throw std::invalid_argument("--image and --output are required");
     }
     const bool requestedSolve = !arguments.catalogPath.empty();
-    if (requestedSolve &&
+    if (requestedSolve && arguments.approximateFieldOfView <= 0.0) {
+        throw std::invalid_argument("--catalog requires --approx-fov");
+    }
+    if (arguments.matchTolerancePixels <= 0.0 || arguments.minimumMatches < 4) {
+        throw std::invalid_argument(
+            "--match-tolerance must be positive and --minimum-matches at least four"
+        );
+    }
+    if (requestedSolve && !arguments.lostInSpace &&
         (!arguments.hasApproximateRightAscension ||
-         !arguments.hasApproximateDeclination ||
-         arguments.approximateFieldOfView <= 0.0)) {
+         !arguments.hasApproximateDeclination)) {
         throw std::invalid_argument(
             "--catalog requires --approx-ra, --approx-dec, and --approx-fov"
         );
@@ -86,6 +105,19 @@ std::vector<camerae_vision::plate_solving::CatalogStar> loadCatalog(
     const std::string& path
 ) {
     using camerae_vision::plate_solving::CatalogStar;
+    using camerae_vision::plate_solving::deserializeCompactCatalog;
+
+    if (std::filesystem::path(path).extension() == ".camcat") {
+        std::ifstream binary(path, std::ios::binary);
+        if (!binary) {
+            throw std::runtime_error("could not open catalog: " + path);
+        }
+        const std::vector<std::uint8_t> bytes{
+            std::istreambuf_iterator<char>(binary),
+            std::istreambuf_iterator<char>()
+        };
+        return deserializeCompactCatalog(bytes);
+    }
 
     std::ifstream file(path);
     if (!file) {
@@ -148,10 +180,18 @@ int main(int argc, char** argv) {
             throw std::runtime_error("could not decode input image");
         }
 
+        const ActiveImageRegion activeRegion = detectActiveImageRegion(image);
+        const cv::Mat activeImage = image(cv::Rect(
+            activeRegion.x,
+            activeRegion.y,
+            activeRegion.width,
+            activeRegion.height
+        )).clone();
+
         StarDetectorSettings settings;
         settings.maxDimension = arguments.maxDimension;
         settings.minimumSignalToNoise = arguments.minimumSignalToNoise;
-        const StarDetectionResult detection = detectStars(image, settings);
+        const StarDetectionResult detection = detectStars(activeImage, settings);
 
         filesystem::create_directories(arguments.outputDirectory);
         const filesystem::path output(arguments.outputDirectory);
@@ -160,6 +200,10 @@ int main(int argc, char** argv) {
 
         PlateSolvingLabReport report;
         report.imagePath = arguments.imagePath;
+        report.sourceImageWidth = image.cols;
+        report.sourceImageHeight = image.rows;
+        report.activeRegionX = activeRegion.x;
+        report.activeRegionY = activeRegion.y;
         report.imageWidth = detection.imageWidth;
         report.imageHeight = detection.imageHeight;
         report.detectedStarCount = static_cast<int>(detection.stars.size());
@@ -176,29 +220,46 @@ int main(int argc, char** argv) {
 
         cv::Mat overlay;
         if (!arguments.catalogPath.empty()) {
-            ConstrainedPlateSolveRequest solveRequest;
-            solveRequest.detectedStars = detection.stars;
-            solveRequest.imageWidth = detection.imageWidth;
-            solveRequest.imageHeight = detection.imageHeight;
-            solveRequest.catalog = loadCatalog(arguments.catalogPath);
-            solveRequest.approximateCenter = {
-                arguments.approximateRightAscension,
-                arguments.approximateDeclination
-            };
-            solveRequest.approximateHorizontalFieldOfViewDegrees =
-                arguments.approximateFieldOfView;
-            const PlateSolution solution = solveConstrained(solveRequest);
+            const std::vector<CatalogStar> catalog = loadCatalog(arguments.catalogPath);
+            PlateSolution solution;
+            if (arguments.lostInSpace) {
+                LostInSpacePlateSolveRequest solveRequest;
+                solveRequest.detectedStars = detection.stars;
+                solveRequest.imageWidth = detection.imageWidth;
+                solveRequest.imageHeight = detection.imageHeight;
+                solveRequest.catalog = catalog;
+                solveRequest.approximateHorizontalFieldOfViewDegrees =
+                    arguments.approximateFieldOfView;
+                solveRequest.matchTolerancePixels = arguments.matchTolerancePixels;
+                solveRequest.minimumMatches = arguments.minimumMatches;
+                solution = solveLostInSpace(solveRequest);
+            } else {
+                ConstrainedPlateSolveRequest solveRequest;
+                solveRequest.detectedStars = detection.stars;
+                solveRequest.imageWidth = detection.imageWidth;
+                solveRequest.imageHeight = detection.imageHeight;
+                solveRequest.catalog = catalog;
+                solveRequest.approximateCenter = {
+                    arguments.approximateRightAscension,
+                    arguments.approximateDeclination
+                };
+                solveRequest.approximateHorizontalFieldOfViewDegrees =
+                    arguments.approximateFieldOfView;
+                solveRequest.matchTolerancePixels = arguments.matchTolerancePixels;
+                solveRequest.minimumMatches = arguments.minimumMatches;
+                solution = solveConstrained(solveRequest);
+            }
             report.status = solution.status;
             report.message = solution.message;
             report.solution = solution;
-            overlay = renderPlateSolutionOverlay(image, detection, solution);
+            overlay = renderPlateSolutionOverlay(activeImage, detection, solution);
             std::cout << "[CameraePlateSolve] solve.completed"
                       << " | status=" << plateSolvingStatusName(solution.status)
                       << " matches=" << solution.matchedStars
                       << " confidence=" << solution.confidence
                       << " rmse=" << solution.rootMeanSquareErrorPixels << "\n";
         } else {
-            overlay = renderStarDetectionOverlay(image, detection);
+            overlay = renderStarDetectionOverlay(activeImage, detection);
         }
 
         if (!cv::imwrite(overlayPath.string(), overlay)) {

@@ -12,6 +12,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added TDD coverage for celestial projection round trips, synthetic star recovery, negative blank images, and the laboratory report contract.
 - Added constrained catalog matching with validated RA/Dec center, camera roll, field of view, plate scale, residuals, confidence, and auditable star correspondences.
 - Added conservative rejection tests proving that unrelated point fields do not produce a celestial solution.
+- Added reflection-aware constrained matching and conservative offline lost-in-space solving with quad fingerprints.
+- Added automatic letterbox detection, compact offline star catalogs, a deterministic catalog generator, and repeatable multi-image performance evidence.
+- Added an isolated Objective-C++ plate-solving bridge for future Swift integration without enabling the feature in capture or UI.
 
 ## [8.5.1] - 2026-07-24
 

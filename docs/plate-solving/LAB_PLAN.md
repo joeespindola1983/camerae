@@ -1,6 +1,7 @@
 # Camerae Plate-Solving Laboratory
 
-Status: Phases 1 and 2 implemented
+Status: Native laboratory, conservative lost-in-space solver, compact catalog,
+and isolated iOS bridge implemented
 
 The laboratory is an offline, UI-independent environment for developing Camerae's
 future plate-solving capability. It belongs to the shared C++ `camerae_vision`
@@ -28,6 +29,19 @@ Phase 2 provides:
   confidence;
 - auditable catalog-to-image matches in JSON and in the annotated image;
 - a negative regression proving that unrelated point fields are not solved.
+
+The current laboratory also provides:
+
+- reflection-aware matching for the parity change between tangent-plane and
+  image coordinates;
+- quad fingerprints for an offline lost-in-space search;
+- automatic removal of uniform near-black letterboxing without cropping a
+  valid dark sky;
+- a compact `CAMCAT01` catalog format and deterministic Gaia/BSC-compatible CSV
+  converter;
+- a fixture-matrix runner for repeatable accuracy and performance evidence;
+- an Objective-C++ bridge in `CameraeVision`, intentionally not connected to
+  camera capture or SwiftUI yet.
 
 Without a catalog the laboratory reports `detectionCompleted`. It reports `solved`
 only after catalog matching passes the support and residual policies.
@@ -77,6 +91,32 @@ Coordinates use ICRS degrees and lower magnitude means a brighter source. Gaia
 column names are accepted directly. Catalog preparation may access an official
 archive, but detection and solving never use the network.
 
+For a lost-in-space attempt, omit the sky center:
+
+```bash
+vision/tools/run_plate_solving_lab.sh \
+  --image /absolute/path/to/sky.png \
+  --output /tmp/camerae-plate-solving \
+  --catalog /absolute/path/to/bright-stars.camcat \
+  --lost-in-space \
+  --approx-fov 70 \
+  --minimum-matches 8 \
+  --match-tolerance 16
+```
+
+Build the compact catalog from an authorized CSV export:
+
+```bash
+vision/tools/build_compact_star_catalog.py \
+  --input /absolute/path/to/catalog.csv \
+  --output /tmp/bright-stars.camcat \
+  --maximum-magnitude 7
+```
+
+`CAMCAT01` stores a versioned signature, star count, float32 ICRS coordinates
+and magnitude, plus a UTF-8 source identifier. The reference 1,170-star BSC5
+validation export occupies about 20 KB instead of 47 KB as CSV.
+
 ## Fixture policy
 
 Real photographs belong in `local-fixtures/plate-solving/`, which is ignored by
@@ -84,17 +124,31 @@ Git. A fixture may be committed later only after its redistribution rights and
 location metadata have been reviewed. Production diagnostics must never include
 the image, file path, location, observation time, or celestial coordinates.
 
+The current external calibration matrix contains six non-versioned photographs:
+two wide Milky Way fields, two portrait/letterboxed fields, and two difficult
+low-contrast fields with foreground or sky glow. On the development Mac, all
+six produced 572–927 candidates in 20–32 ms after active-region detection.
+The solver accepts only reviewed fields with at least eight inliers; difficult
+fields remain `notSolved` rather than returning a low-support false coordinate.
+
+Run the same detection matrix without copying images into Git:
+
+```bash
+vision/tools/run_plate_solving_fixture_matrix.sh \
+  /path/to/camerae-plate-solve-lab \
+  /tmp/plate-fixture-matrix \
+  /absolute/path/to/fixture-1.png \
+  /absolute/path/to/fixture-2.png
+```
+
 ## Next phases
 
-1. Define a compact, versioned binary bright-star catalog format.
-2. Build deterministic triangle/quad invariants from catalog stars.
-3. Expand constrained matching with optional location/time and lens hints.
-4. Implement blind lost-in-space matching.
-5. Fit and validate lens
-   distortion.
-6. Add several positive and negative golden fixtures.
-7. Add an Objective-C++ bridge only after native accuracy and performance gates
-   pass.
+1. Replace the runtime quad construction with a pre-indexed catalog lookup.
+2. Expand constrained matching with optional location/time and lens hints.
+3. Fit and validate radial lens distortion.
+4. Obtain redistribution clearance for positive and negative golden fixtures.
+5. Benchmark on reference iPhone hardware and establish memory/thermal gates.
+6. Expose the bridge through a Swift service only after the hardware gates pass.
 
 ## Catalog provenance
 
