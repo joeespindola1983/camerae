@@ -81,6 +81,206 @@ cv::Mat grayscale8(const cv::Mat& image) {
     return gray;
 }
 
+struct ProjectedCatalogStar {
+    CatalogStar star;
+    cv::Point2d tangent;
+};
+
+struct SimilarityTransform {
+    double a = 1.0;
+    double b = 0.0;
+    double translateX = 0.0;
+    double translateY = 0.0;
+
+    cv::Point2d apply(const cv::Point2d& point) const {
+        return {
+            a * point.x - b * point.y + translateX,
+            b * point.x + a * point.y + translateY
+        };
+    }
+
+    cv::Point2d invert(const cv::Point2d& point) const {
+        const double denominator = a * a + b * b;
+        if (denominator <= std::numeric_limits<double>::epsilon()) {
+            throw std::runtime_error("cannot invert a degenerate plate transform");
+        }
+        const double x = point.x - translateX;
+        const double y = point.y - translateY;
+        return {
+            (a * x + b * y) / denominator,
+            (-b * x + a * y) / denominator
+        };
+    }
+
+    double scale() const {
+        return std::hypot(a, b);
+    }
+};
+
+struct MatchCandidate {
+    int catalogIndex = -1;
+    int detectionIndex = -1;
+    double residual = 0.0;
+};
+
+struct EvaluatedTransform {
+    SimilarityTransform transform;
+    std::vector<MatchCandidate> matches;
+    double rootMeanSquareError = std::numeric_limits<double>::infinity();
+};
+
+SimilarityTransform transformFromPairs(
+    const cv::Point2d& catalogFirst,
+    const cv::Point2d& catalogSecond,
+    const cv::Point2d& imageFirst,
+    const cv::Point2d& imageSecond
+) {
+    const cv::Point2d catalogDelta = catalogSecond - catalogFirst;
+    const cv::Point2d imageDelta = imageSecond - imageFirst;
+    const double denominator =
+        catalogDelta.x * catalogDelta.x + catalogDelta.y * catalogDelta.y;
+    if (denominator <= std::numeric_limits<double>::epsilon()) {
+        return {};
+    }
+
+    SimilarityTransform transform;
+    transform.a =
+        (imageDelta.x * catalogDelta.x + imageDelta.y * catalogDelta.y) / denominator;
+    transform.b =
+        (imageDelta.y * catalogDelta.x - imageDelta.x * catalogDelta.y) / denominator;
+    const cv::Point2d transformedFirst = transform.apply(catalogFirst);
+    transform.translateX = imageFirst.x - transformedFirst.x;
+    transform.translateY = imageFirst.y - transformedFirst.y;
+    return transform;
+}
+
+EvaluatedTransform evaluateTransform(
+    const SimilarityTransform& transform,
+    const std::vector<ProjectedCatalogStar>& catalog,
+    const std::vector<DetectedStar>& detections,
+    double tolerancePixels,
+    int imageWidth,
+    int imageHeight
+) {
+    std::vector<MatchCandidate> possible;
+    const double toleranceSquared = tolerancePixels * tolerancePixels;
+
+    for (int catalogIndex = 0; catalogIndex < static_cast<int>(catalog.size()); ++catalogIndex) {
+        const cv::Point2d predicted = transform.apply(catalog[catalogIndex].tangent);
+        if (predicted.x < -tolerancePixels ||
+            predicted.y < -tolerancePixels ||
+            predicted.x >= imageWidth + tolerancePixels ||
+            predicted.y >= imageHeight + tolerancePixels) {
+            continue;
+        }
+
+        for (int detectionIndex = 0;
+             detectionIndex < static_cast<int>(detections.size());
+             ++detectionIndex) {
+            const double deltaX = predicted.x - detections[detectionIndex].x;
+            const double deltaY = predicted.y - detections[detectionIndex].y;
+            const double distanceSquared = deltaX * deltaX + deltaY * deltaY;
+            if (distanceSquared <= toleranceSquared) {
+                possible.push_back({
+                    catalogIndex,
+                    detectionIndex,
+                    std::sqrt(distanceSquared)
+                });
+            }
+        }
+    }
+
+    std::sort(possible.begin(), possible.end(), [](const MatchCandidate& lhs,
+                                                    const MatchCandidate& rhs) {
+        return lhs.residual < rhs.residual;
+    });
+
+    std::vector<bool> usedCatalog(catalog.size(), false);
+    std::vector<bool> usedDetections(detections.size(), false);
+    EvaluatedTransform evaluated;
+    evaluated.transform = transform;
+    double squaredError = 0.0;
+
+    for (const MatchCandidate& candidate : possible) {
+        if (usedCatalog[candidate.catalogIndex] ||
+            usedDetections[candidate.detectionIndex]) {
+            continue;
+        }
+        usedCatalog[candidate.catalogIndex] = true;
+        usedDetections[candidate.detectionIndex] = true;
+        evaluated.matches.push_back(candidate);
+        squaredError += candidate.residual * candidate.residual;
+    }
+
+    if (!evaluated.matches.empty()) {
+        evaluated.rootMeanSquareError =
+            std::sqrt(squaredError / evaluated.matches.size());
+    }
+    return evaluated;
+}
+
+SimilarityTransform refineTransform(
+    const EvaluatedTransform& evaluated,
+    const std::vector<ProjectedCatalogStar>& catalog,
+    const std::vector<DetectedStar>& detections
+) {
+    if (evaluated.matches.size() < 2) {
+        return evaluated.transform;
+    }
+
+    cv::Point2d catalogMean;
+    cv::Point2d imageMean;
+    for (const MatchCandidate& match : evaluated.matches) {
+        catalogMean += catalog[match.catalogIndex].tangent;
+        imageMean += cv::Point2d(
+            detections[match.detectionIndex].x,
+            detections[match.detectionIndex].y
+        );
+    }
+    catalogMean *= 1.0 / evaluated.matches.size();
+    imageMean *= 1.0 / evaluated.matches.size();
+
+    double numeratorA = 0.0;
+    double numeratorB = 0.0;
+    double denominator = 0.0;
+    for (const MatchCandidate& match : evaluated.matches) {
+        const cv::Point2d catalogPoint =
+            catalog[match.catalogIndex].tangent - catalogMean;
+        const cv::Point2d imagePoint = cv::Point2d(
+            detections[match.detectionIndex].x,
+            detections[match.detectionIndex].y
+        ) - imageMean;
+        numeratorA +=
+            imagePoint.x * catalogPoint.x + imagePoint.y * catalogPoint.y;
+        numeratorB +=
+            imagePoint.y * catalogPoint.x - imagePoint.x * catalogPoint.y;
+        denominator +=
+            catalogPoint.x * catalogPoint.x + catalogPoint.y * catalogPoint.y;
+    }
+
+    if (denominator <= std::numeric_limits<double>::epsilon()) {
+        return evaluated.transform;
+    }
+
+    SimilarityTransform refined;
+    refined.a = numeratorA / denominator;
+    refined.b = numeratorB / denominator;
+    const cv::Point2d transformedMean = refined.apply(catalogMean);
+    refined.translateX = imageMean.x - transformedMean.x;
+    refined.translateY = imageMean.y - transformedMean.y;
+    return refined;
+}
+
+bool isBetterEvaluation(
+    const EvaluatedTransform& candidate,
+    const EvaluatedTransform& current
+) {
+    if (candidate.matches.size() != current.matches.size()) {
+        return candidate.matches.size() > current.matches.size();
+    }
+    return candidate.rootMeanSquareError < current.rootMeanSquareError;
+}
+
 } // namespace
 
 TangentPlanePoint projectGnomonic(
@@ -314,6 +514,224 @@ SyntheticStarField makeSyntheticStarField(const SyntheticStarFieldSettings& sett
     return {image, std::move(stars)};
 }
 
+PlateSolution solveConstrained(const ConstrainedPlateSolveRequest& request) {
+    PlateSolution notSolved;
+    notSolved.status = PlateSolvingStatus::NotSolved;
+    notSolved.message = "No catalog geometry met the constrained solution policy.";
+
+    if (request.imageWidth <= 0 ||
+        request.imageHeight <= 0 ||
+        request.detectedStars.size() < 2 ||
+        request.catalog.size() < 2 ||
+        request.approximateHorizontalFieldOfViewDegrees <= 0.0 ||
+        request.approximateHorizontalFieldOfViewDegrees >= 179.0 ||
+        request.minimumMatches < 2 ||
+        request.matchTolerancePixels <= 0.0) {
+        notSolved.status = PlateSolvingStatus::InvalidInput;
+        notSolved.message = "Invalid constrained plate-solving request.";
+        return notSolved;
+    }
+
+    std::vector<DetectedStar> detections = request.detectedStars;
+    std::sort(detections.begin(), detections.end(), [](const DetectedStar& lhs,
+                                                       const DetectedStar& rhs) {
+        return lhs.flux > rhs.flux;
+    });
+    if (request.maximumDetectedStars > 0 &&
+        detections.size() > static_cast<std::size_t>(request.maximumDetectedStars)) {
+        detections.resize(static_cast<std::size_t>(request.maximumDetectedStars));
+    }
+
+    std::vector<CatalogStar> orderedCatalog = request.catalog;
+    std::sort(orderedCatalog.begin(), orderedCatalog.end(), [](const CatalogStar& lhs,
+                                                               const CatalogStar& rhs) {
+        return lhs.magnitude < rhs.magnitude;
+    });
+
+    const double approximateHalfFieldRadians =
+        radians(request.approximateHorizontalFieldOfViewDegrees * 0.75);
+    const double tangentLimit = std::tan(approximateHalfFieldRadians);
+    const double verticalTangentLimit =
+        tangentLimit * request.imageHeight / request.imageWidth;
+
+    std::vector<ProjectedCatalogStar> catalog;
+    catalog.reserve(orderedCatalog.size());
+    for (const CatalogStar& star : orderedCatalog) {
+        try {
+            const TangentPlanePoint point =
+                projectGnomonic(star.coordinate, request.approximateCenter);
+            if (std::abs(point.xRadians) > tangentLimit ||
+                std::abs(point.yRadians) > verticalTangentLimit) {
+                continue;
+            }
+            catalog.push_back({
+                star,
+                cv::Point2d(point.xRadians, point.yRadians)
+            });
+        } catch (const std::invalid_argument&) {
+            continue;
+        }
+        if (request.maximumCatalogStars > 0 &&
+            catalog.size() >= static_cast<std::size_t>(request.maximumCatalogStars)) {
+            break;
+        }
+    }
+
+    if (catalog.size() < static_cast<std::size_t>(request.minimumMatches) ||
+        detections.size() < static_cast<std::size_t>(request.minimumMatches)) {
+        notSolved.message = "Not enough visible stars for the requested match policy.";
+        return notSolved;
+    }
+
+    const double expectedPixelsPerRadian =
+        request.imageWidth /
+        (2.0 * std::tan(radians(request.approximateHorizontalFieldOfViewDegrees) / 2.0));
+    const double minimumScale = expectedPixelsPerRadian * 0.65;
+    const double maximumScale = expectedPixelsPerRadian * 1.55;
+    EvaluatedTransform best;
+
+    for (int catalogFirst = 0;
+         catalogFirst < static_cast<int>(catalog.size()) - 1;
+         ++catalogFirst) {
+        for (int catalogSecond = catalogFirst + 1;
+             catalogSecond < static_cast<int>(catalog.size());
+             ++catalogSecond) {
+            const double catalogDistance = cv::norm(
+                catalog[catalogSecond].tangent - catalog[catalogFirst].tangent
+            );
+            if (catalogDistance < 0.001) {
+                continue;
+            }
+
+            for (int detectionFirst = 0;
+                 detectionFirst < static_cast<int>(detections.size()) - 1;
+                 ++detectionFirst) {
+                for (int detectionSecond = detectionFirst + 1;
+                     detectionSecond < static_cast<int>(detections.size());
+                     ++detectionSecond) {
+                    const cv::Point2d firstImage(
+                        detections[detectionFirst].x,
+                        detections[detectionFirst].y
+                    );
+                    const cv::Point2d secondImage(
+                        detections[detectionSecond].x,
+                        detections[detectionSecond].y
+                    );
+                    const double imageDistance = cv::norm(secondImage - firstImage);
+                    const double scale = imageDistance / catalogDistance;
+                    if (scale < minimumScale || scale > maximumScale) {
+                        continue;
+                    }
+
+                    for (int direction = 0; direction < 2; ++direction) {
+                        const cv::Point2d& mappedFirst =
+                            direction == 0 ? firstImage : secondImage;
+                        const cv::Point2d& mappedSecond =
+                            direction == 0 ? secondImage : firstImage;
+                        const SimilarityTransform hypothesis = transformFromPairs(
+                            catalog[catalogFirst].tangent,
+                            catalog[catalogSecond].tangent,
+                            mappedFirst,
+                            mappedSecond
+                        );
+                        EvaluatedTransform evaluated = evaluateTransform(
+                            hypothesis,
+                            catalog,
+                            detections,
+                            request.matchTolerancePixels,
+                            request.imageWidth,
+                            request.imageHeight
+                        );
+                        if (isBetterEvaluation(evaluated, best)) {
+                            best = std::move(evaluated);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (best.matches.size() < static_cast<std::size_t>(request.minimumMatches)) {
+        return notSolved;
+    }
+
+    for (int iteration = 0; iteration < 2; ++iteration) {
+        const SimilarityTransform refined = refineTransform(best, catalog, detections);
+        best = evaluateTransform(
+            refined,
+            catalog,
+            detections,
+            request.matchTolerancePixels,
+            request.imageWidth,
+            request.imageHeight
+        );
+    }
+
+    if (best.matches.size() < static_cast<std::size_t>(request.minimumMatches) ||
+        best.rootMeanSquareError > request.matchTolerancePixels * 0.65) {
+        return notSolved;
+    }
+
+    const double scale = best.transform.scale();
+    if (scale <= std::numeric_limits<double>::epsilon()) {
+        return notSolved;
+    }
+
+    const cv::Point2d opticalCenterTangent = best.transform.invert({
+        request.imageWidth / 2.0,
+        request.imageHeight / 2.0
+    });
+
+    PlateSolution solution;
+    solution.status = PlateSolvingStatus::Solved;
+    solution.center = unprojectGnomonic(
+        {opticalCenterTangent.x, opticalCenterTangent.y},
+        request.approximateCenter
+    );
+    solution.rollDegrees = degrees(std::atan2(best.transform.b, best.transform.a));
+    solution.horizontalFieldOfViewDegrees =
+        degrees(2.0 * std::atan(request.imageWidth / (2.0 * scale)));
+    solution.verticalFieldOfViewDegrees =
+        degrees(2.0 * std::atan(request.imageHeight / (2.0 * scale)));
+    solution.plateScaleArcsecondsPerPixel = degrees(1.0 / scale) * 3600.0;
+    solution.rootMeanSquareErrorPixels = best.rootMeanSquareError;
+    solution.matchedStars = static_cast<int>(best.matches.size());
+
+    const double matchCoverage = std::min(
+        1.0,
+        static_cast<double>(solution.matchedStars) /
+            std::max(request.minimumMatches, std::min(
+                static_cast<int>(catalog.size()),
+                static_cast<int>(detections.size())
+            ))
+    );
+    const double residualScore = std::clamp(
+        1.0 - solution.rootMeanSquareErrorPixels / request.matchTolerancePixels,
+        0.0,
+        1.0
+    );
+    solution.confidence = std::clamp(
+        0.72 * matchCoverage + 0.28 * residualScore,
+        0.0,
+        1.0
+    );
+    solution.message = "Constrained catalog geometry solved and validated.";
+
+    for (const MatchCandidate& match : best.matches) {
+        const cv::Point2d predicted =
+            best.transform.apply(catalog[match.catalogIndex].tangent);
+        const DetectedStar& detection = detections[match.detectionIndex];
+        solution.matches.push_back({
+            catalog[match.catalogIndex].star.identifier,
+            catalog[match.catalogIndex].star.coordinate,
+            detection.x,
+            detection.y,
+            cv::norm(predicted - cv::Point2d(detection.x, detection.y))
+        });
+    }
+    return solution;
+}
+
 std::string plateSolvingStatusName(PlateSolvingStatus status) {
     switch (status) {
     case PlateSolvingStatus::DetectionCompleted: return "detectionCompleted";
@@ -355,6 +773,49 @@ std::string serializeLabReport(const PlateSolvingLabReport& report) {
         json << "\n";
     }
     json << "  ]\n}\n";
+    if (report.status == PlateSolvingStatus::Solved) {
+        const PlateSolution& solution = report.solution;
+        std::ostringstream solved;
+        const std::string current = json.str();
+        const std::size_t closing = current.rfind("\n}\n");
+        solved << current.substr(0, closing)
+               << ",\n  \"solution\": {\n"
+               << "    \"centerRightAscensionDegrees\": "
+               << solution.center.rightAscensionDegrees << ",\n"
+               << "    \"centerDeclinationDegrees\": "
+               << solution.center.declinationDegrees << ",\n"
+               << "    \"rollDegrees\": " << solution.rollDegrees << ",\n"
+               << "    \"horizontalFieldOfViewDegrees\": "
+               << solution.horizontalFieldOfViewDegrees << ",\n"
+               << "    \"verticalFieldOfViewDegrees\": "
+               << solution.verticalFieldOfViewDegrees << ",\n"
+               << "    \"plateScaleArcsecondsPerPixel\": "
+               << solution.plateScaleArcsecondsPerPixel << ",\n"
+               << "    \"rootMeanSquareErrorPixels\": "
+               << solution.rootMeanSquareErrorPixels << ",\n"
+               << "    \"matchedStars\": " << solution.matchedStars << ",\n"
+               << "    \"confidence\": " << solution.confidence << ",\n"
+               << "    \"matches\": [";
+        for (std::size_t index = 0; index < solution.matches.size(); ++index) {
+            const PlateStarMatch& match = solution.matches[index];
+            solved << (index == 0 ? "\n" : "")
+                   << "      {\"catalogIdentifier\": \""
+                   << escapeJson(match.catalogIdentifier)
+                   << "\", \"rightAscensionDegrees\": "
+                   << match.coordinate.rightAscensionDegrees
+                   << ", \"declinationDegrees\": "
+                   << match.coordinate.declinationDegrees
+                   << ", \"imageX\": " << match.imageX
+                   << ", \"imageY\": " << match.imageY
+                   << ", \"residualPixels\": " << match.residualPixels << "}";
+            if (index + 1 < solution.matches.size()) {
+                solved << ",";
+            }
+            solved << "\n";
+        }
+        solved << "    ]\n  }\n}\n";
+        return solved.str();
+    }
     return json.str();
 }
 
@@ -407,6 +868,63 @@ cv::Mat renderStarDetectionOverlay(
         cv::FONT_HERSHEY_SIMPLEX,
         0.9,
         cv::Scalar(255, 255, 255),
+        1,
+        cv::LINE_AA
+    );
+    return overlay;
+}
+
+cv::Mat renderPlateSolutionOverlay(
+    const cv::Mat& image,
+    const StarDetectionResult& detection,
+    const PlateSolution& solution
+) {
+    cv::Mat overlay = renderStarDetectionOverlay(image, detection);
+    if (solution.status != PlateSolvingStatus::Solved) {
+        return overlay;
+    }
+
+    for (const PlateStarMatch& match : solution.matches) {
+        const cv::Point center(
+            static_cast<int>(std::round(match.imageX)),
+            static_cast<int>(std::round(match.imageY))
+        );
+        cv::circle(overlay, center, 10, cv::Scalar(80, 255, 80), 2, cv::LINE_AA);
+        cv::putText(
+            overlay,
+            match.catalogIdentifier,
+            center + cv::Point(12, -8),
+            cv::FONT_HERSHEY_SIMPLEX,
+            0.45,
+            cv::Scalar(80, 255, 80),
+            1,
+            cv::LINE_AA
+        );
+    }
+
+    std::ostringstream label;
+    label << std::fixed << std::setprecision(3)
+          << "SOLVED | RA " << solution.center.rightAscensionDegrees
+          << " Dec " << solution.center.declinationDegrees
+          << " Roll " << solution.rollDegrees
+          << " Matches " << solution.matchedStars;
+    cv::putText(
+        overlay,
+        label.str(),
+        cv::Point(24, 78),
+        cv::FONT_HERSHEY_SIMPLEX,
+        0.72,
+        cv::Scalar(0, 0, 0),
+        4,
+        cv::LINE_AA
+    );
+    cv::putText(
+        overlay,
+        label.str(),
+        cv::Point(24, 78),
+        cv::FONT_HERSHEY_SIMPLEX,
+        0.72,
+        cv::Scalar(80, 255, 80),
         1,
         cv::LINE_AA
     );

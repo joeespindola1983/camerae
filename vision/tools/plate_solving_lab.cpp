@@ -3,8 +3,10 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <stdexcept>
 #include <string>
+#include <vector>
 
 #include <opencv2/imgcodecs.hpp>
 
@@ -15,12 +17,20 @@ struct Arguments {
     std::string outputDirectory;
     int maxDimension = 1600;
     double minimumSignalToNoise = 4.5;
+    std::string catalogPath;
+    double approximateRightAscension = 0.0;
+    double approximateDeclination = 0.0;
+    double approximateFieldOfView = 0.0;
+    bool hasApproximateRightAscension = false;
+    bool hasApproximateDeclination = false;
 };
 
 void printUsage() {
     std::cout
         << "Usage: camerae-plate-solve-lab --image <path> --output <directory> "
-           "[--max-dimension <pixels>] [--minimum-snr <value>]\n";
+           "[--max-dimension <pixels>] [--minimum-snr <value>] "
+           "[--catalog <csv> --approx-ra <degrees> --approx-dec <degrees> "
+           "--approx-fov <degrees>]\n";
 }
 
 Arguments parseArguments(int argc, char** argv) {
@@ -43,6 +53,16 @@ Arguments parseArguments(int argc, char** argv) {
             arguments.maxDimension = std::stoi(value);
         } else if (option == "--minimum-snr") {
             arguments.minimumSignalToNoise = std::stod(value);
+        } else if (option == "--catalog") {
+            arguments.catalogPath = value;
+        } else if (option == "--approx-ra") {
+            arguments.approximateRightAscension = std::stod(value);
+            arguments.hasApproximateRightAscension = true;
+        } else if (option == "--approx-dec") {
+            arguments.approximateDeclination = std::stod(value);
+            arguments.hasApproximateDeclination = true;
+        } else if (option == "--approx-fov") {
+            arguments.approximateFieldOfView = std::stod(value);
         } else {
             throw std::invalid_argument("unknown option: " + option);
         }
@@ -50,7 +70,69 @@ Arguments parseArguments(int argc, char** argv) {
     if (arguments.imagePath.empty() || arguments.outputDirectory.empty()) {
         throw std::invalid_argument("--image and --output are required");
     }
+    const bool requestedSolve = !arguments.catalogPath.empty();
+    if (requestedSolve &&
+        (!arguments.hasApproximateRightAscension ||
+         !arguments.hasApproximateDeclination ||
+         arguments.approximateFieldOfView <= 0.0)) {
+        throw std::invalid_argument(
+            "--catalog requires --approx-ra, --approx-dec, and --approx-fov"
+        );
+    }
     return arguments;
+}
+
+std::vector<camerae_vision::plate_solving::CatalogStar> loadCatalog(
+    const std::string& path
+) {
+    using camerae_vision::plate_solving::CatalogStar;
+
+    std::ifstream file(path);
+    if (!file) {
+        throw std::runtime_error("could not open catalog: " + path);
+    }
+
+    std::vector<CatalogStar> catalog;
+    std::string line;
+    int lineNumber = 0;
+    while (std::getline(file, line)) {
+        ++lineNumber;
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        std::stringstream stream(line);
+        std::string identifier;
+        std::string rightAscension;
+        std::string declination;
+        std::string magnitude;
+        if (!std::getline(stream, identifier, ',') ||
+            !std::getline(stream, rightAscension, ',') ||
+            !std::getline(stream, declination, ',') ||
+            !std::getline(stream, magnitude, ',')) {
+            if (lineNumber == 1 && line.find("rightAscension") != std::string::npos) {
+                continue;
+            }
+            throw std::runtime_error(
+                "invalid catalog row at line " + std::to_string(lineNumber)
+            );
+        }
+        if (lineNumber == 1 &&
+            (identifier == "source_id" ||
+             rightAscension == "ra" ||
+             rightAscension.find("rightAscension") != std::string::npos)) {
+            continue;
+        }
+        catalog.push_back({
+            identifier,
+            {std::stod(rightAscension), std::stod(declination)},
+            std::stod(magnitude)
+        });
+    }
+    if (catalog.empty()) {
+        throw std::runtime_error("catalog contains no stars");
+    }
+    return catalog;
 }
 
 } // namespace
@@ -76,10 +158,6 @@ int main(int argc, char** argv) {
         const filesystem::path overlayPath = output / "detected-stars.png";
         const filesystem::path reportPath = output / "report.json";
 
-        if (!cv::imwrite(overlayPath.string(), renderStarDetectionOverlay(image, detection))) {
-            throw std::runtime_error("could not write detection overlay");
-        }
-
         PlateSolvingLabReport report;
         report.imagePath = arguments.imagePath;
         report.imageWidth = detection.imageWidth;
@@ -95,6 +173,37 @@ int main(int argc, char** argv) {
             detection.stars.begin(),
             detection.stars.begin() + reportStarCount
         );
+
+        cv::Mat overlay;
+        if (!arguments.catalogPath.empty()) {
+            ConstrainedPlateSolveRequest solveRequest;
+            solveRequest.detectedStars = detection.stars;
+            solveRequest.imageWidth = detection.imageWidth;
+            solveRequest.imageHeight = detection.imageHeight;
+            solveRequest.catalog = loadCatalog(arguments.catalogPath);
+            solveRequest.approximateCenter = {
+                arguments.approximateRightAscension,
+                arguments.approximateDeclination
+            };
+            solveRequest.approximateHorizontalFieldOfViewDegrees =
+                arguments.approximateFieldOfView;
+            const PlateSolution solution = solveConstrained(solveRequest);
+            report.status = solution.status;
+            report.message = solution.message;
+            report.solution = solution;
+            overlay = renderPlateSolutionOverlay(image, detection, solution);
+            std::cout << "[CameraePlateSolve] solve.completed"
+                      << " | status=" << plateSolvingStatusName(solution.status)
+                      << " matches=" << solution.matchedStars
+                      << " confidence=" << solution.confidence
+                      << " rmse=" << solution.rootMeanSquareErrorPixels << "\n";
+        } else {
+            overlay = renderStarDetectionOverlay(image, detection);
+        }
+
+        if (!cv::imwrite(overlayPath.string(), overlay)) {
+            throw std::runtime_error("could not write detection overlay");
+        }
 
         std::ofstream reportFile(reportPath);
         if (!reportFile) {
