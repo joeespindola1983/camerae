@@ -15,6 +15,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added reflection-aware constrained matching and conservative offline lost-in-space solving with quad fingerprints.
 - Added automatic letterbox detection, compact offline star catalogs, a deterministic catalog generator, and repeatable multi-image performance evidence.
 - Added an isolated Objective-C++ plate-solving bridge for future Swift integration without enabling the feature in capture or UI.
+- Added Astro Photo as a first-class capture mode with finite 5, 10, 20, or 30-image stacks, defaulting to 10 DNG originals.
+- Added a dedicated Astro photo result and celestial-identification editor with independently selectable planet, nebula, and galaxy layers.
+- Added an offline 20,000-star Gaia DR3 catalog, principal deep-sky objects, low-precision offline planetary ephemerides, image-space projection, and non-destructive JSON annotation sidecars.
+
+### Changed
+
+- Separated Astro Photo, Timelapse, and Video configuration contracts so photo stacking no longer depends on a duration-based batch workflow.
+- Preserved every Astro Photo original while producing one aligned and stacked result for review, sharing, and optional identification.
 
 ## [8.5.1] - 2026-07-24
 

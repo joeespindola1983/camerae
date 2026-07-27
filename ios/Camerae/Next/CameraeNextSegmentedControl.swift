@@ -52,6 +52,7 @@ struct CameraeNextSegmentedControl<Value: Hashable>: View {
 }
 
 enum CameraeNextCaptureModeOption: String, Hashable, Sendable {
+    case photo
     case video
     case timelapse
     case automatic
@@ -63,7 +64,8 @@ enum CameraeNextCaptureModeOption: String, Hashable, Sendable {
     ] }
 
     static var astroItems: [CameraeNextSegmentItem<Self>] { [
-        CameraeNextSegmentItem(value: Self.automatic, label: CameraeL10n.automatic),
-        CameraeNextSegmentItem(value: Self.manual, label: CameraeL10n.manual)
+        CameraeNextSegmentItem(value: Self.photo, label: "Foto"),
+        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse),
+        CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video)
     ] }
 }
