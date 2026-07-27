@@ -80,6 +80,49 @@ enum class PlateSolvingStatus {
     InvalidInput
 };
 
+struct CatalogStar {
+    std::string identifier;
+    SkyCoordinate coordinate;
+    double magnitude = 0.0;
+};
+
+struct PlateStarMatch {
+    std::string catalogIdentifier;
+    SkyCoordinate coordinate;
+    double imageX = 0.0;
+    double imageY = 0.0;
+    double residualPixels = 0.0;
+};
+
+struct ConstrainedPlateSolveRequest {
+    std::vector<DetectedStar> detectedStars;
+    int imageWidth = 0;
+    int imageHeight = 0;
+    std::vector<CatalogStar> catalog;
+    SkyCoordinate approximateCenter;
+    double approximateHorizontalFieldOfViewDegrees = 0.0;
+    int minimumMatches = 8;
+    double matchTolerancePixels = 3.0;
+    int maximumDetectedStars = 20;
+    int maximumCatalogStars = 30;
+};
+
+struct PlateSolution {
+    PlateSolvingStatus status = PlateSolvingStatus::NotSolved;
+    SkyCoordinate center;
+    double rollDegrees = 0.0;
+    double horizontalFieldOfViewDegrees = 0.0;
+    double verticalFieldOfViewDegrees = 0.0;
+    double plateScaleArcsecondsPerPixel = 0.0;
+    double rootMeanSquareErrorPixels = 0.0;
+    int matchedStars = 0;
+    double confidence = 0.0;
+    std::string message;
+    std::vector<PlateStarMatch> matches;
+};
+
+PlateSolution solveConstrained(const ConstrainedPlateSolveRequest& request);
+
 struct PlateSolvingLabReport {
     int schemaVersion = 1;
     std::string imagePath;
@@ -91,6 +134,7 @@ struct PlateSolvingLabReport {
     PlateSolvingStatus status = PlateSolvingStatus::DetectionCompleted;
     std::string message;
     std::vector<DetectedStar> brightestStars;
+    PlateSolution solution;
 };
 
 std::string plateSolvingStatusName(PlateSolvingStatus status);
@@ -98,6 +142,11 @@ std::string serializeLabReport(const PlateSolvingLabReport& report);
 cv::Mat renderStarDetectionOverlay(
     const cv::Mat& image,
     const StarDetectionResult& detection
+);
+cv::Mat renderPlateSolutionOverlay(
+    const cv::Mat& image,
+    const StarDetectionResult& detection,
+    const PlateSolution& solution
 );
 
 } // namespace camerae_vision::plate_solving
