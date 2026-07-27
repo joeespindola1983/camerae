@@ -8,13 +8,16 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 - `develop`: integration branch and base for the next version.
 - `qa`: environment branch used to generate Firebase App Distribution builds from an active release candidate.
 - `release/*`: stabilization branches cut from `develop`, for example `release/v5.0.0`.
-- `feature/*` or `codex/*`: optional short-lived implementation branches.
+- `feature/*`, `fix/*`, or `codex/*`: required short-lived implementation branches.
 - `hotfix/*`: urgent production fixes cut from `main`.
 
 ## Invariants
 
-- Normal development always starts from current `develop`. Direct commits to `develop` are allowed while Camerae has a single developer; pull requests and feature branches are optional.
-- When a feature branch is useful, it starts from current `develop` and merges back to `develop`.
+- Normal development always starts from current `develop`, uses a short-lived branch, and returns through a pull request.
+- Product and process changes never commit directly to `develop`.
+- Normal feature, improvement, maintenance, documentation, and process PRs target `develop`.
+- Stabilization fixes start from the active release commit and target the active `release/vX.Y.Z` branch.
+- A Draft PR is work in progress or a candidate not yet selected for the next version. Ready for review means the scope is selected and full CI should run.
 - `qa` is a deployment target, never the source branch for features or the next release.
 - Release fixes are committed to `release/*` and promoted again to `qa`.
 - Every QA-approved candidate is returned to `develop` immediately. Development never continues from a `develop` that is behind the approved QA candidate.
@@ -24,15 +27,18 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 
 ## Flow
 
-1. Switch to synchronized `develop`. Commit there directly, or optionally create `feature/*` or `codex/*` from it and merge completed work back.
-2. Cut `release/vX.Y.Z` from `develop` when the version enters stabilization.
-3. Bump versions, move the applicable `CHANGELOG.md` entries from `Unreleased` into a dated version section, finalize release notes, and merge or fast-forward the release candidate into `qa`.
-4. From a synchronized local `qa`, run `ios/scripts/release-gate.sh firebase --publish` and validate the Firebase build.
-5. After QA approves the candidate, merge or fast-forward that exact release commit into `develop`.
-6. Apply every later stabilization fix to `release/vX.Y.Z`, update `qa`, repeat validation, and reconcile each newly approved candidate into `develop`.
-7. After production approval, merge or fast-forward the release into `main` and tag that exact commit as `vX.Y.Z`.
-8. Align `develop` and `qa` with the approved production commit.
-9. Verify that the tag is reachable from `main`, `qa`, and `develop` before starting the next version.
+1. Record candidate functionality or improvement in a structured GitHub issue.
+2. Switch to synchronized `develop`, create a short-lived branch, and open a Draft PR targeting `develop`.
+3. Keep candidate work in Draft while its scope or version is undecided. When selected, assign the intended milestone, complete the PR template, add `CHANGELOG.md` coverage, and mark it ready.
+4. Merge a ready PR only after required checks pass. The merged commit becomes part of the next-version integration history on `develop`.
+5. Cut `release/vX.Y.Z` from `develop` when the selected version enters stabilization.
+6. Bump versions, move the applicable `CHANGELOG.md` entries from `Unreleased` into a dated version section, finalize release notes, and merge or fast-forward the release candidate into `qa`.
+7. From a synchronized local `qa`, run `ios/scripts/release-gate.sh firebase --publish` and validate the Firebase build.
+8. After QA approves the candidate, merge or fast-forward that exact release commit into `develop`.
+9. Apply every later stabilization fix through a PR targeting the active `release/vX.Y.Z`, update `qa`, repeat validation, and reconcile each newly approved candidate into `develop`.
+10. After production approval, merge or fast-forward the release into `main` and tag that exact commit as `vX.Y.Z`.
+11. Align `develop` and `qa` with the approved production commit.
+12. Verify that the tag is reachable from `main`, `qa`, and `develop` before starting the next version.
 
 QA builds that are not production releases may use prerelease tags such as `vX.Y.Z-qa.N`. Merely setting `MARKETING_VERSION` to `X.Y.Z` on `qa` does not make that commit the final tagged release.
 
@@ -40,15 +46,45 @@ QA builds that are not production releases may use prerelease tags such as `vX.Y
 
 Hotfixes start from `main`, are released and tagged through the same validation gates, and are merged back into both `develop` and `qa`.
 
-## Solo-development commands
+## Decision queue
 
-Pull requests are intentionally optional while the repository has a single developer. The safe default for a new task is:
+GitHub state makes release selection explicit:
+
+- An issue is a candidate or backlog item.
+- A Draft PR is active exploration and does not reserve a place in the next version.
+- A ready PR with the intended milestone is selected for review and full CI.
+- A PR merged into `develop` is committed to the next release cut unless explicitly reverted.
+- An unmerged Draft PR can remain open, move to a later milestone, or close without contaminating `develop`.
+
+This keeps independent features, improvements, and experiments reviewable without forcing them into the same major release.
+
+## Pull request routing
+
+| Change | Source | PR base |
+| --- | --- | --- |
+| Feature, improvement, maintenance, docs, process | synchronized `develop` | `develop` |
+| Stabilization fix | active `release/vX.Y.Z` | active `release/vX.Y.Z` |
+| Urgent production hotfix | `main` | `main` |
+| Release promotion | exact approved release commit | performed by the release process, never feature work |
+
+PRs never target `qa` for product development. Promotion to `qa` must preserve the exact release-candidate commit used for Firebase validation.
+
+## Development commands
+
+The safe default for a new task is:
 
 ```sh
 git fetch origin
 git switch develop
 git pull --ff-only origin develop
+git switch -c codex/<short-description>
+git push -u origin codex/<short-description>
+gh pr create --draft --base develop
 ```
+
+Complete the PR template when opening the draft. Mark it ready only after deciding
+that the change belongs in the intended version and after relevant local tests
+pass.
 
 Before creating a release, confirm that work started from `develop` and cut the stabilization branch from it:
 
@@ -85,7 +121,21 @@ O gate bloqueia publicação quando há alterações rastreadas, arquivos não r
 
 O gate roda `pod install --deployment`, fronteiras de arquitetura, testes Swift, testes C++ e build genérico sem assinatura antes de chamar o archive assinado. Evidências visuais são opcionais para não atrasar mudanças sem impacto de interface: use `--ui-evidence` para gerar e arquivar a matriz de iPhone e iPad nos seis idiomas suportados. A matriz completa também pode ser executada diretamente com `./scripts/generate-ui-evidence.sh --all-devices --all-locales --archive-tracked`. As evidências temporárias ficam em `ios/build/ui-evidence`; PNGs, manifesto e galeria HTML são copiados para `docs/ui-evidence/`, usando sufixos de device e idioma como `-ipad`, `-de` e `-ipad-ru`, e devem ser commitados após a publicação. IPA, ZIP e dados derivados continuam locais. O gate usa `Camerae.xcworkspace`; o `.xcodeproj` isolado não contém as dependências CocoaPods.
 
-Os workflows GitHub Actions permanecem disponíveis somente por `workflow_dispatch` como ferramenta manual de diagnóstico. Não publicam nem compilam automaticamente em pushes, PRs ou tags.
+O workflow `iOS Build` valida a política em todo Draft PR direcionado a `develop` ou `release/*`. Quando o PR é marcado como pronto, também executa testes e build iOS no macOS e os testes C++ no Linux. Execuções antigas do mesmo PR são canceladas quando um novo commit chega. O acionamento manual por `workflow_dispatch` continua disponível para diagnóstico.
+
+Os workflows de Firebase e App Store permanecem somente por `workflow_dispatch`. Nenhum workflow publica automaticamente em pushes, PRs ou tags.
+
+## GitHub repository settings
+
+After this workflow exists on `develop`, protect `develop` with a GitHub ruleset:
+
+- require a pull request before merging;
+- require the `Validate PR workflow`, `Build and test Camerae`, and `Test C++ processing core` checks;
+- require the branch to be up to date before merge;
+- block force pushes and branch deletion;
+- allow repository administrators to bypass only for documented release recovery.
+
+Keep `qa` and `main` governed by the release-promotion invariants above. Do not configure an automatic merge from feature branches into either branch.
 
 Android automation is intentionally paused while Camerae is developed and validated on iOS.
 

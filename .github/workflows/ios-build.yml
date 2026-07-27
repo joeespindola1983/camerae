@@ -1,11 +1,40 @@
 name: iOS Build
 
 on:
+  pull_request:
+    branches:
+      - develop
+      - 'release/**'
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  policy:
+    name: Validate PR workflow
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate PR workflow contract
+        run: bash ios/scripts/tests/pr-workflow-tests.sh
+
   build:
     name: Build and test Camerae
+    needs: policy
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: macos-latest
 
     steps:
@@ -61,6 +90,8 @@ jobs:
 
   processing-tests:
     name: Test C++ processing core
+    needs: policy
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
 
     steps:

@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Changed
+
+- Replaced optional direct development commits with short-lived branches, structured Draft PR selection, required review-ready CI, and documented pull request routing for `develop` and release stabilization.
+
 ## [8.5.1] - 2026-07-24
 
 **Status:** QA candidate
