@@ -1,13 +1,18 @@
 #include "camerae_vision/plate_solving.hpp"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <iomanip>
 #include <limits>
+#include <numeric>
 #include <random>
+#include <set>
 #include <sstream>
 #include <stdexcept>
+#include <type_traits>
 
 #include <opencv2/imgproc.hpp>
 
@@ -63,6 +68,25 @@ std::string escapeJson(const std::string& input) {
     return output.str();
 }
 
+template <typename Value>
+void appendBinary(std::vector<std::uint8_t>& output, Value value) {
+    static_assert(std::is_trivially_copyable_v<Value>);
+    const auto* bytes = reinterpret_cast<const std::uint8_t*>(&value);
+    output.insert(output.end(), bytes, bytes + sizeof(Value));
+}
+
+template <typename Value>
+Value readBinary(const std::vector<std::uint8_t>& input, std::size_t& offset) {
+    static_assert(std::is_trivially_copyable_v<Value>);
+    if (offset + sizeof(Value) > input.size()) {
+        throw std::invalid_argument("truncated compact star catalog");
+    }
+    Value value;
+    std::memcpy(&value, input.data() + offset, sizeof(Value));
+    offset += sizeof(Value);
+    return value;
+}
+
 cv::Mat grayscale8(const cv::Mat& image) {
     cv::Mat gray;
     if (image.channels() == 1) {
@@ -91,8 +115,15 @@ struct SimilarityTransform {
     double b = 0.0;
     double translateX = 0.0;
     double translateY = 0.0;
+    bool reflected = false;
 
     cv::Point2d apply(const cv::Point2d& point) const {
+        if (reflected) {
+            return {
+                a * point.x + b * point.y + translateX,
+                b * point.x - a * point.y + translateY
+            };
+        }
         return {
             a * point.x - b * point.y + translateX,
             b * point.x + a * point.y + translateY
@@ -106,6 +137,12 @@ struct SimilarityTransform {
         }
         const double x = point.x - translateX;
         const double y = point.y - translateY;
+        if (reflected) {
+            return {
+                (a * x + b * y) / denominator,
+                (b * x - a * y) / denominator
+            };
+        }
         return {
             (a * x + b * y) / denominator,
             (-b * x + a * y) / denominator
@@ -129,11 +166,204 @@ struct EvaluatedTransform {
     double rootMeanSquareError = std::numeric_limits<double>::infinity();
 };
 
+struct UnitVector3 {
+    double x = 0.0;
+    double y = 0.0;
+    double z = 0.0;
+};
+
+struct QuadFingerprint {
+    std::array<double, 5> ratios{};
+    double largestEdge = 0.0;
+};
+
+struct CatalogQuad {
+    std::array<int, 4> indices{};
+    QuadFingerprint fingerprint;
+    SkyCoordinate center;
+};
+
+struct CenterCandidate {
+    SkyCoordinate center;
+    double fingerprintError = 0.0;
+};
+
+UnitVector3 unitVector(const SkyCoordinate& coordinate) {
+    const double rightAscension = radians(coordinate.rightAscensionDegrees);
+    const double declination = radians(coordinate.declinationDegrees);
+    return {
+        std::cos(declination) * std::cos(rightAscension),
+        std::cos(declination) * std::sin(rightAscension),
+        std::sin(declination)
+    };
+}
+
+SkyCoordinate coordinate(const UnitVector3& input) {
+    const double length = std::sqrt(
+        input.x * input.x + input.y * input.y + input.z * input.z
+    );
+    if (length <= std::numeric_limits<double>::epsilon()) {
+        return {};
+    }
+    return {
+        normalizeRightAscension(degrees(std::atan2(input.y, input.x))),
+        degrees(std::asin(std::clamp(input.z / length, -1.0, 1.0)))
+    };
+}
+
+double angularDistance(const UnitVector3& lhs, const UnitVector3& rhs) {
+    const double chord = std::sqrt(
+        (lhs.x - rhs.x) * (lhs.x - rhs.x) +
+        (lhs.y - rhs.y) * (lhs.y - rhs.y) +
+        (lhs.z - rhs.z) * (lhs.z - rhs.z)
+    );
+    return 2.0 * std::asin(std::clamp(chord * 0.5, 0.0, 1.0));
+}
+
+QuadFingerprint fingerprintFromDistances(std::array<double, 6> distances) {
+    std::sort(distances.begin(), distances.end());
+    QuadFingerprint fingerprint;
+    fingerprint.largestEdge = distances.back();
+    if (fingerprint.largestEdge <= std::numeric_limits<double>::epsilon()) {
+        return fingerprint;
+    }
+    for (std::size_t index = 0; index < fingerprint.ratios.size(); ++index) {
+        fingerprint.ratios[index] = distances[index] / fingerprint.largestEdge;
+    }
+    return fingerprint;
+}
+
+QuadFingerprint imageQuadFingerprint(
+    const std::array<int, 4>& indices,
+    const std::vector<DetectedStar>& detections
+) {
+    std::array<double, 6> distances{};
+    std::size_t distanceIndex = 0;
+    for (int first = 0; first < 3; ++first) {
+        for (int second = first + 1; second < 4; ++second) {
+            distances[distanceIndex++] = std::hypot(
+                detections[indices[first]].x - detections[indices[second]].x,
+                detections[indices[first]].y - detections[indices[second]].y
+            );
+        }
+    }
+    return fingerprintFromDistances(distances);
+}
+
+QuadFingerprint catalogQuadFingerprint(
+    const std::array<int, 4>& indices,
+    const std::vector<UnitVector3>& vectors
+) {
+    std::array<double, 6> distances{};
+    std::size_t distanceIndex = 0;
+    for (int first = 0; first < 3; ++first) {
+        for (int second = first + 1; second < 4; ++second) {
+            distances[distanceIndex++] =
+                angularDistance(vectors[indices[first]], vectors[indices[second]]);
+        }
+    }
+    return fingerprintFromDistances(distances);
+}
+
+double fingerprintError(const QuadFingerprint& lhs, const QuadFingerprint& rhs) {
+    double maximum = 0.0;
+    for (std::size_t index = 0; index < lhs.ratios.size(); ++index) {
+        maximum = std::max(maximum, std::abs(lhs.ratios[index] - rhs.ratios[index]));
+    }
+    return maximum;
+}
+
+SkyCoordinate quadCenter(
+    const std::array<int, 4>& indices,
+    const std::vector<UnitVector3>& vectors
+) {
+    UnitVector3 sum;
+    for (const int index : indices) {
+        sum.x += vectors[index].x;
+        sum.y += vectors[index].y;
+        sum.z += vectors[index].z;
+    }
+    return coordinate(sum);
+}
+
+std::vector<CatalogQuad> buildCatalogQuads(
+    const std::vector<CatalogStar>& catalog,
+    int maximumStars,
+    int neighborCount,
+    double maximumEdgeRadians
+) {
+    const int starCount = std::min(maximumStars, static_cast<int>(catalog.size()));
+    std::vector<UnitVector3> vectors;
+    vectors.reserve(starCount);
+    for (int index = 0; index < starCount; ++index) {
+        vectors.push_back(unitVector(catalog[index].coordinate));
+    }
+
+    std::set<std::array<int, 4>> uniquePatterns;
+    for (int anchor = 0; anchor < starCount; ++anchor) {
+        std::vector<std::pair<double, int>> nearest;
+        nearest.reserve(starCount - 1);
+        for (int candidate = 0; candidate < starCount; ++candidate) {
+            if (candidate == anchor) {
+                continue;
+            }
+            const double distance = angularDistance(vectors[anchor], vectors[candidate]);
+            if (distance <= maximumEdgeRadians) {
+                nearest.emplace_back(distance, candidate);
+            }
+        }
+        std::sort(nearest.begin(), nearest.end());
+        if (nearest.size() > static_cast<std::size_t>(neighborCount)) {
+            nearest.resize(static_cast<std::size_t>(neighborCount));
+        }
+
+        for (int first = 0; first < static_cast<int>(nearest.size()) - 2; ++first) {
+            for (int second = first + 1;
+                 second < static_cast<int>(nearest.size()) - 1;
+                 ++second) {
+                for (int third = second + 1;
+                     third < static_cast<int>(nearest.size());
+                     ++third) {
+                    std::array<int, 4> indices{
+                        anchor,
+                        nearest[first].second,
+                        nearest[second].second,
+                        nearest[third].second
+                    };
+                    std::sort(indices.begin(), indices.end());
+                    uniquePatterns.insert(indices);
+                }
+            }
+        }
+    }
+
+    std::vector<CatalogQuad> patterns;
+    patterns.reserve(uniquePatterns.size());
+    for (const std::array<int, 4>& indices : uniquePatterns) {
+        const QuadFingerprint fingerprint = catalogQuadFingerprint(indices, vectors);
+        if (fingerprint.largestEdge <= 0.0 ||
+            fingerprint.largestEdge > maximumEdgeRadians) {
+            continue;
+        }
+        patterns.push_back({
+            indices,
+            fingerprint,
+            quadCenter(indices, vectors)
+        });
+    }
+    return patterns;
+}
+
+double skySeparationDegrees(const SkyCoordinate& lhs, const SkyCoordinate& rhs) {
+    return degrees(angularDistance(unitVector(lhs), unitVector(rhs)));
+}
+
 SimilarityTransform transformFromPairs(
     const cv::Point2d& catalogFirst,
     const cv::Point2d& catalogSecond,
     const cv::Point2d& imageFirst,
-    const cv::Point2d& imageSecond
+    const cv::Point2d& imageSecond,
+    bool reflected
 ) {
     const cv::Point2d catalogDelta = catalogSecond - catalogFirst;
     const cv::Point2d imageDelta = imageSecond - imageFirst;
@@ -144,10 +374,22 @@ SimilarityTransform transformFromPairs(
     }
 
     SimilarityTransform transform;
-    transform.a =
-        (imageDelta.x * catalogDelta.x + imageDelta.y * catalogDelta.y) / denominator;
-    transform.b =
-        (imageDelta.y * catalogDelta.x - imageDelta.x * catalogDelta.y) / denominator;
+    transform.reflected = reflected;
+    if (reflected) {
+        transform.a =
+            (imageDelta.x * catalogDelta.x -
+             imageDelta.y * catalogDelta.y) / denominator;
+        transform.b =
+            (imageDelta.x * catalogDelta.y +
+             imageDelta.y * catalogDelta.x) / denominator;
+    } else {
+        transform.a =
+            (imageDelta.x * catalogDelta.x +
+             imageDelta.y * catalogDelta.y) / denominator;
+        transform.b =
+            (imageDelta.y * catalogDelta.x -
+             imageDelta.x * catalogDelta.y) / denominator;
+    }
     const cv::Point2d transformedFirst = transform.apply(catalogFirst);
     transform.translateX = imageFirst.x - transformedFirst.x;
     transform.translateY = imageFirst.y - transformedFirst.y;
@@ -263,6 +505,23 @@ SimilarityTransform refineTransform(
     }
 
     SimilarityTransform refined;
+    refined.reflected = evaluated.transform.reflected;
+    if (refined.reflected) {
+        numeratorA = 0.0;
+        numeratorB = 0.0;
+        for (const MatchCandidate& match : evaluated.matches) {
+            const cv::Point2d catalogPoint =
+                catalog[match.catalogIndex].tangent - catalogMean;
+            const cv::Point2d imagePoint = cv::Point2d(
+                detections[match.detectionIndex].x,
+                detections[match.detectionIndex].y
+            ) - imageMean;
+            numeratorA +=
+                imagePoint.x * catalogPoint.x - imagePoint.y * catalogPoint.y;
+            numeratorB +=
+                imagePoint.x * catalogPoint.y + imagePoint.y * catalogPoint.x;
+        }
+    }
     refined.a = numeratorA / denominator;
     refined.b = numeratorB / denominator;
     const cv::Point2d transformedMean = refined.apply(catalogMean);
@@ -340,6 +599,134 @@ SkyCoordinate unprojectGnomonic(
         normalizeRightAscension(degrees(rightAscension)),
         degrees(declination)
     };
+}
+
+std::vector<std::uint8_t> serializeCompactCatalog(
+    const std::vector<CatalogStar>& catalog
+) {
+    constexpr std::array<std::uint8_t, 8> magic{
+        'C', 'A', 'M', 'C', 'A', 'T', '0', '1'
+    };
+    if (catalog.size() > std::numeric_limits<std::uint32_t>::max()) {
+        throw std::invalid_argument("compact star catalog is too large");
+    }
+
+    std::vector<std::uint8_t> output(magic.begin(), magic.end());
+    appendBinary(output, static_cast<std::uint32_t>(catalog.size()));
+    for (const CatalogStar& star : catalog) {
+        if (star.identifier.size() > std::numeric_limits<std::uint16_t>::max()) {
+            throw std::invalid_argument("catalog identifier is too long");
+        }
+        appendBinary(output, static_cast<float>(star.coordinate.rightAscensionDegrees));
+        appendBinary(output, static_cast<float>(star.coordinate.declinationDegrees));
+        appendBinary(output, static_cast<float>(star.magnitude));
+        appendBinary(output, static_cast<std::uint16_t>(star.identifier.size()));
+        output.insert(output.end(), star.identifier.begin(), star.identifier.end());
+    }
+    return output;
+}
+
+std::vector<CatalogStar> deserializeCompactCatalog(
+    const std::vector<std::uint8_t>& bytes
+) {
+    constexpr std::array<std::uint8_t, 8> magic{
+        'C', 'A', 'M', 'C', 'A', 'T', '0', '1'
+    };
+    if (bytes.size() < magic.size() ||
+        !std::equal(magic.begin(), magic.end(), bytes.begin())) {
+        throw std::invalid_argument("invalid compact star catalog signature");
+    }
+
+    std::size_t offset = magic.size();
+    const std::uint32_t count = readBinary<std::uint32_t>(bytes, offset);
+    if (count > 1'000'000) {
+        throw std::invalid_argument("compact star catalog count is unsafe");
+    }
+
+    std::vector<CatalogStar> catalog;
+    catalog.reserve(count);
+    for (std::uint32_t index = 0; index < count; ++index) {
+        const float rightAscension = readBinary<float>(bytes, offset);
+        const float declination = readBinary<float>(bytes, offset);
+        const float magnitude = readBinary<float>(bytes, offset);
+        const std::uint16_t identifierLength =
+            readBinary<std::uint16_t>(bytes, offset);
+        if (offset + identifierLength > bytes.size()) {
+            throw std::invalid_argument("truncated compact star identifier");
+        }
+        const std::string identifier(
+            reinterpret_cast<const char*>(bytes.data() + offset),
+            identifierLength
+        );
+        offset += identifierLength;
+        catalog.push_back({
+            identifier,
+            {rightAscension, declination},
+            magnitude
+        });
+    }
+    if (offset != bytes.size()) {
+        throw std::invalid_argument("compact star catalog has trailing data");
+    }
+    return catalog;
+}
+
+ActiveImageRegion detectActiveImageRegion(
+    const cv::Mat& image,
+    int nearBlackThreshold,
+    double minimumActiveFraction
+) {
+    if (image.empty()) {
+        throw std::invalid_argument("active image region requires a non-empty image");
+    }
+    if (nearBlackThreshold < 0 || nearBlackThreshold > 255 ||
+        minimumActiveFraction <= 0.0 || minimumActiveFraction > 1.0) {
+        throw std::invalid_argument("invalid active image region settings");
+    }
+
+    const cv::Mat gray = grayscale8(image);
+    cv::Mat active;
+    cv::threshold(gray, active, nearBlackThreshold, 1.0, cv::THRESH_BINARY);
+
+    cv::Mat columnCounts;
+    cv::Mat rowCounts;
+    cv::reduce(active, columnCounts, 0, cv::REDUCE_SUM, CV_32S);
+    cv::reduce(active, rowCounts, 1, cv::REDUCE_SUM, CV_32S);
+
+    const int minimumColumnPixels = std::max(
+        1,
+        static_cast<int>(std::ceil(gray.rows * minimumActiveFraction))
+    );
+    const int minimumRowPixels = std::max(
+        1,
+        static_cast<int>(std::ceil(gray.cols * minimumActiveFraction))
+    );
+
+    int left = 0;
+    while (left < gray.cols &&
+           columnCounts.at<int>(0, left) < minimumColumnPixels) {
+        ++left;
+    }
+    int right = gray.cols - 1;
+    while (right >= left &&
+           columnCounts.at<int>(0, right) < minimumColumnPixels) {
+        --right;
+    }
+    int top = 0;
+    while (top < gray.rows &&
+           rowCounts.at<int>(top, 0) < minimumRowPixels) {
+        ++top;
+    }
+    int bottom = gray.rows - 1;
+    while (bottom >= top &&
+           rowCounts.at<int>(bottom, 0) < minimumRowPixels) {
+        --bottom;
+    }
+
+    if (left > right || top > bottom) {
+        return {0, 0, gray.cols, gray.rows};
+    }
+    return {left, top, right - left + 1, bottom - top + 1};
 }
 
 StarDetectionResult detectStars(
@@ -623,27 +1010,30 @@ PlateSolution solveConstrained(const ConstrainedPlateSolveRequest& request) {
                         continue;
                     }
 
-                    for (int direction = 0; direction < 2; ++direction) {
-                        const cv::Point2d& mappedFirst =
-                            direction == 0 ? firstImage : secondImage;
-                        const cv::Point2d& mappedSecond =
-                            direction == 0 ? secondImage : firstImage;
-                        const SimilarityTransform hypothesis = transformFromPairs(
-                            catalog[catalogFirst].tangent,
-                            catalog[catalogSecond].tangent,
-                            mappedFirst,
-                            mappedSecond
-                        );
-                        EvaluatedTransform evaluated = evaluateTransform(
-                            hypothesis,
-                            catalog,
-                            detections,
-                            request.matchTolerancePixels,
-                            request.imageWidth,
-                            request.imageHeight
-                        );
-                        if (isBetterEvaluation(evaluated, best)) {
-                            best = std::move(evaluated);
+                    for (int parity = 0; parity < 2; ++parity) {
+                        for (int direction = 0; direction < 2; ++direction) {
+                            const cv::Point2d& mappedFirst =
+                                direction == 0 ? firstImage : secondImage;
+                            const cv::Point2d& mappedSecond =
+                                direction == 0 ? secondImage : firstImage;
+                            const SimilarityTransform hypothesis = transformFromPairs(
+                                catalog[catalogFirst].tangent,
+                                catalog[catalogSecond].tangent,
+                                mappedFirst,
+                                mappedSecond,
+                                parity == 1
+                            );
+                            EvaluatedTransform evaluated = evaluateTransform(
+                                hypothesis,
+                                catalog,
+                                detections,
+                                request.matchTolerancePixels,
+                                request.imageWidth,
+                                request.imageHeight
+                            );
+                            if (isBetterEvaluation(evaluated, best)) {
+                                best = std::move(evaluated);
+                            }
                         }
                     }
                 }
@@ -715,6 +1105,7 @@ PlateSolution solveConstrained(const ConstrainedPlateSolveRequest& request) {
         0.0,
         1.0
     );
+    solution.parityInverted = best.transform.reflected;
     solution.message = "Constrained catalog geometry solved and validated.";
 
     for (const MatchCandidate& match : best.matches) {
@@ -730,6 +1121,156 @@ PlateSolution solveConstrained(const ConstrainedPlateSolveRequest& request) {
         });
     }
     return solution;
+}
+
+PlateSolution solveLostInSpace(const LostInSpacePlateSolveRequest& request) {
+    PlateSolution notSolved;
+    notSolved.status = PlateSolvingStatus::NotSolved;
+    notSolved.message = "No quad fingerprint produced a validated celestial solution.";
+
+    if (request.imageWidth <= 0 ||
+        request.imageHeight <= 0 ||
+        request.approximateHorizontalFieldOfViewDegrees <= 0.0 ||
+        request.approximateHorizontalFieldOfViewDegrees >= 179.0 ||
+        request.detectedStars.size() <
+            static_cast<std::size_t>(std::max(4, request.minimumMatches)) ||
+        request.catalog.size() <
+            static_cast<std::size_t>(std::max(4, request.minimumMatches)) ||
+        request.patternCheckingStars < 4 ||
+        request.patternNeighbors < 3 ||
+        request.maximumCandidateCenters < 1) {
+        notSolved.status = PlateSolvingStatus::InvalidInput;
+        notSolved.message = "Invalid lost-in-space plate-solving request.";
+        return notSolved;
+    }
+
+    std::vector<DetectedStar> detections = request.detectedStars;
+    std::sort(detections.begin(), detections.end(), [](const DetectedStar& lhs,
+                                                       const DetectedStar& rhs) {
+        return lhs.flux > rhs.flux;
+    });
+    if (detections.size() > static_cast<std::size_t>(request.patternCheckingStars)) {
+        detections.resize(static_cast<std::size_t>(request.patternCheckingStars));
+    }
+
+    std::vector<CatalogStar> catalog = request.catalog;
+    std::sort(catalog.begin(), catalog.end(), [](const CatalogStar& lhs,
+                                                 const CatalogStar& rhs) {
+        return lhs.magnitude < rhs.magnitude;
+    });
+
+    const double maximumPatternEdge = radians(
+        request.approximateHorizontalFieldOfViewDegrees *
+        (1.0 + request.fieldOfViewToleranceFraction)
+    );
+    const std::vector<CatalogQuad> catalogQuads = buildCatalogQuads(
+        catalog,
+        request.catalogPatternStars,
+        request.patternNeighbors,
+        maximumPatternEdge
+    );
+    if (catalogQuads.empty()) {
+        notSolved.message = "Catalog did not produce quad patterns for the requested FOV.";
+        return notSolved;
+    }
+
+    std::vector<CenterCandidate> candidates;
+    const double tangentHalfField = std::tan(
+        radians(request.approximateHorizontalFieldOfViewDegrees) / 2.0
+    );
+
+    for (int first = 0; first < static_cast<int>(detections.size()) - 3; ++first) {
+        for (int second = first + 1;
+             second < static_cast<int>(detections.size()) - 2;
+             ++second) {
+            for (int third = second + 1;
+                 third < static_cast<int>(detections.size()) - 1;
+                 ++third) {
+                for (int fourth = third + 1;
+                     fourth < static_cast<int>(detections.size());
+                     ++fourth) {
+                    const QuadFingerprint imageFingerprint = imageQuadFingerprint(
+                        {first, second, third, fourth},
+                        detections
+                    );
+                    if (imageFingerprint.largestEdge < request.imageWidth * 0.08) {
+                        continue;
+                    }
+                    const double normalizedImageEdge =
+                        imageFingerprint.largestEdge / request.imageWidth;
+                    const double expectedAngularEdge =
+                        2.0 * std::atan(normalizedImageEdge * tangentHalfField);
+
+                    for (const CatalogQuad& catalogQuad : catalogQuads) {
+                        const double edgeRatio =
+                            catalogQuad.fingerprint.largestEdge /
+                            std::max(expectedAngularEdge, 1e-8);
+                        if (edgeRatio < 1.0 - request.fieldOfViewToleranceFraction ||
+                            edgeRatio > 1.0 + request.fieldOfViewToleranceFraction) {
+                            continue;
+                        }
+                        const double error =
+                            fingerprintError(imageFingerprint, catalogQuad.fingerprint);
+                        if (error <= request.fingerprintTolerance) {
+                            candidates.push_back({catalogQuad.center, error});
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const CenterCandidate& lhs,
+                                                       const CenterCandidate& rhs) {
+        return lhs.fingerprintError < rhs.fingerprintError;
+    });
+
+    std::vector<CenterCandidate> uniqueCandidates;
+    for (const CenterCandidate& candidate : candidates) {
+        const bool duplicate = std::any_of(
+            uniqueCandidates.begin(),
+            uniqueCandidates.end(),
+            [&](const CenterCandidate& existing) {
+                return skySeparationDegrees(candidate.center, existing.center) <
+                    request.approximateHorizontalFieldOfViewDegrees * 0.15;
+            }
+        );
+        if (!duplicate) {
+            uniqueCandidates.push_back(candidate);
+        }
+        if (uniqueCandidates.size() >=
+            static_cast<std::size_t>(request.maximumCandidateCenters)) {
+            break;
+        }
+    }
+
+    PlateSolution best = notSolved;
+    for (const CenterCandidate& candidate : uniqueCandidates) {
+        ConstrainedPlateSolveRequest constrained;
+        constrained.detectedStars = request.detectedStars;
+        constrained.imageWidth = request.imageWidth;
+        constrained.imageHeight = request.imageHeight;
+        constrained.catalog = catalog;
+        constrained.approximateCenter = candidate.center;
+        constrained.approximateHorizontalFieldOfViewDegrees =
+            request.approximateHorizontalFieldOfViewDegrees;
+        constrained.minimumMatches = request.minimumMatches;
+        constrained.matchTolerancePixels = request.matchTolerancePixels;
+        constrained.maximumDetectedStars = std::max(20, request.patternCheckingStars + 8);
+        constrained.maximumCatalogStars = 36;
+
+        PlateSolution solution = solveConstrained(constrained);
+        if (solution.status == PlateSolvingStatus::Solved &&
+            (best.status != PlateSolvingStatus::Solved ||
+             solution.confidence > best.confidence ||
+             (solution.confidence == best.confidence &&
+              solution.rootMeanSquareErrorPixels <
+                  best.rootMeanSquareErrorPixels))) {
+            solution.message = "Lost-in-space quad fingerprint solved and validated.";
+            best = std::move(solution);
+        }
+    }
+    return best;
 }
 
 std::string plateSolvingStatusName(PlateSolvingStatus status) {
@@ -749,6 +1290,10 @@ std::string serializeLabReport(const PlateSolvingLabReport& report) {
          << "  \"schemaVersion\": " << report.schemaVersion << ",\n"
          << "  \"status\": \"" << plateSolvingStatusName(report.status) << "\",\n"
          << "  \"imagePath\": \"" << escapeJson(report.imagePath) << "\",\n"
+         << "  \"sourceImageWidth\": " << report.sourceImageWidth << ",\n"
+         << "  \"sourceImageHeight\": " << report.sourceImageHeight << ",\n"
+         << "  \"activeRegionX\": " << report.activeRegionX << ",\n"
+         << "  \"activeRegionY\": " << report.activeRegionY << ",\n"
          << "  \"imageWidth\": " << report.imageWidth << ",\n"
          << "  \"imageHeight\": " << report.imageHeight << ",\n"
          << "  \"detectedStarCount\": " << report.detectedStarCount << ",\n"
@@ -795,6 +1340,8 @@ std::string serializeLabReport(const PlateSolvingLabReport& report) {
                << solution.rootMeanSquareErrorPixels << ",\n"
                << "    \"matchedStars\": " << solution.matchedStars << ",\n"
                << "    \"confidence\": " << solution.confidence << ",\n"
+               << "    \"parityInverted\": "
+               << (solution.parityInverted ? "true" : "false") << ",\n"
                << "    \"matches\": [";
         for (std::size_t index = 0; index < solution.matches.size(); ++index) {
             const PlateStarMatch& match = solution.matches[index];

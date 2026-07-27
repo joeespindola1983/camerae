@@ -53,6 +53,19 @@ struct StarDetectionResult {
     std::vector<DetectedStar> stars;
 };
 
+struct ActiveImageRegion {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+};
+
+ActiveImageRegion detectActiveImageRegion(
+    const cv::Mat& image,
+    int nearBlackThreshold = 3,
+    double minimumActiveFraction = 0.005
+);
+
 StarDetectionResult detectStars(
     const cv::Mat& image,
     const StarDetectorSettings& settings
@@ -86,6 +99,14 @@ struct CatalogStar {
     double magnitude = 0.0;
 };
 
+std::vector<std::uint8_t> serializeCompactCatalog(
+    const std::vector<CatalogStar>& catalog
+);
+
+std::vector<CatalogStar> deserializeCompactCatalog(
+    const std::vector<std::uint8_t>& bytes
+);
+
 struct PlateStarMatch {
     std::string catalogIdentifier;
     SkyCoordinate coordinate;
@@ -117,15 +138,38 @@ struct PlateSolution {
     double rootMeanSquareErrorPixels = 0.0;
     int matchedStars = 0;
     double confidence = 0.0;
+    bool parityInverted = false;
     std::string message;
     std::vector<PlateStarMatch> matches;
 };
 
 PlateSolution solveConstrained(const ConstrainedPlateSolveRequest& request);
 
+struct LostInSpacePlateSolveRequest {
+    std::vector<DetectedStar> detectedStars;
+    int imageWidth = 0;
+    int imageHeight = 0;
+    std::vector<CatalogStar> catalog;
+    double approximateHorizontalFieldOfViewDegrees = 0.0;
+    double fieldOfViewToleranceFraction = 0.35;
+    int minimumMatches = 8;
+    double matchTolerancePixels = 3.0;
+    int patternCheckingStars = 12;
+    int catalogPatternStars = 160;
+    int patternNeighbors = 9;
+    double fingerprintTolerance = 0.012;
+    int maximumCandidateCenters = 8;
+};
+
+PlateSolution solveLostInSpace(const LostInSpacePlateSolveRequest& request);
+
 struct PlateSolvingLabReport {
-    int schemaVersion = 1;
+    int schemaVersion = 2;
     std::string imagePath;
+    int sourceImageWidth = 0;
+    int sourceImageHeight = 0;
+    int activeRegionX = 0;
+    int activeRegionY = 0;
     int imageWidth = 0;
     int imageHeight = 0;
     int detectedStarCount = 0;
