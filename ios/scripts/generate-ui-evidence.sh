@@ -140,6 +140,7 @@ xcrun simctl bootstatus "$SIMULATOR_UDID" -b >/dev/null
 test_passed=0
 for attempt in 1 2 3; do
   xcrun simctl uninstall "$SIMULATOR_UDID" com.espindola.camerae >/dev/null 2>&1 || true
+  xcrun simctl uninstall "$SIMULATOR_UDID" com.espindola.camerae.qa >/dev/null 2>&1 || true
   find "$OUTPUT_DIR" -maxdepth 1 -type f -delete
 
   if (cd "$IOS_DIR" && xcodebuild test \

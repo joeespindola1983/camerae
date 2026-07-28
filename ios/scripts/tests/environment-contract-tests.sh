@@ -107,6 +107,8 @@ rg -q '^\*\.mobileprovision$' "$ROOT_DIR/.gitignore" \
 
 rg -q 'environment-contract-tests\.sh' "$IOS_DIR/scripts/release-gate.sh" \
   || fail "release gate must validate environment separation"
+rg -q 'simctl uninstall "\$SIMULATOR_UDID" com\.espindola\.camerae\.qa' "$IOS_DIR/scripts/generate-ui-evidence.sh" \
+  || fail "UI evidence must reset the QA bundle before deterministic screenshots"
 
 QA_ICON_DIR="$IOS_DIR/Camerae/Assets.xcassets/AppIconQA.appiconset"
 [[ -f "$QA_ICON_DIR/Contents.json" ]] || fail "QA app icon set is missing"

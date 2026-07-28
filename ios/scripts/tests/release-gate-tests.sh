@@ -71,8 +71,17 @@ if rg -n '^ +"\$\{(provisioning_args|build_settings)\[@\]\}" \\$' "$IOS_DIR/scri
   echo "Firebase distribution must not expand optional empty arrays under set -u" >&2
   exit 1
 fi
-if rg -n '^  (push|pull_request):' "$ROOT_DIR/.github/workflows"/*.yml; then
-  echo "Release workflows must not run automatically" >&2
+for release_workflow in \
+  "$ROOT_DIR/.github/workflows/ios-appstore-release.yml" \
+  "$ROOT_DIR/.github/workflows/ios-firebase-distribution.yml"
+do
+  if rg -n '^  (push|pull_request):' "$release_workflow"; then
+    echo "Publication workflows must remain manual: $release_workflow" >&2
+    exit 1
+  fi
+done
+if rg -n '^  push:' "$ROOT_DIR/.github/workflows/ios-build.yml"; then
+  echo "iOS Build must validate selected PRs without running on every push" >&2
   exit 1
 fi
 if ! rg -q 'verify-opencv-xcframework\.sh' "$SCRIPT"; then

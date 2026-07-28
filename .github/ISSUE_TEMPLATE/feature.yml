@@ -1,0 +1,65 @@
+name: Funcionalidade ou melhoria
+description: Proponha e priorize trabalho candidato para uma próxima versão.
+title: "[Produto] "
+body:
+  - type: dropdown
+    id: tipo
+    attributes:
+      label: Tipo
+      description: Como este trabalho deve ser classificado?
+      options:
+        - Nova funcionalidade
+        - Melhoria de experiência
+        - Melhoria técnica
+        - Processo de release
+    validations:
+      required: true
+
+  - type: textarea
+    id: problema
+    attributes:
+      label: Problema ou oportunidade
+      description: O que acontece hoje e por que merece atenção?
+      placeholder: Descreva o problema do ponto de vista de quem usa ou mantém o Camerae.
+    validations:
+      required: true
+
+  - type: textarea
+    id: resultado
+    attributes:
+      label: Resultado desejado
+      description: Qual mudança observável indicará que o trabalho está concluído?
+      placeholder: Depois desta mudança, será possível...
+    validations:
+      required: true
+
+  - type: textarea
+    id: criterios
+    attributes:
+      label: Critérios de aceitação
+      description: Liste comportamentos verificáveis, sem antecipar a implementação.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: versao
+    attributes:
+      label: Intenção de versão
+      description: Isto é uma preferência inicial; a decisão final acontece no PR.
+      options:
+        - Próxima versão
+        - Backlog
+        - Ainda não definido
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidencias
+    attributes:
+      label: Contexto e evidências
+      description: Inclua imagens, vídeos, logs, referências ou alternativas consideradas.
+    validations:
+      required: false

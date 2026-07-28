@@ -14,8 +14,8 @@ fail() {
 
 [[ -f "$PLIST" ]] || fail "missing $PLIST; run scripts/build-opencv-xcframework.sh"
 [[ -f "$MANIFEST" ]] || fail "missing version manifest"
-rg -q '"opencvVersion": "4\.13\.0"' "$MANIFEST" || fail "manifest version is not 4.13.0"
-rg -q '"opencvCommit": "fe38fc608f6acb8b68953438a62305d8318f4fcd"' "$MANIFEST" || \
+grep -Eq '"opencvVersion": "4\.13\.0"' "$MANIFEST" || fail "manifest version is not 4.13.0"
+grep -Eq '"opencvCommit": "fe38fc608f6acb8b68953438a62305d8318f4fcd"' "$MANIFEST" || \
   fail "manifest commit is not the pinned OpenCV source"
 
 plist_text="$(plutil -convert xml1 -o - "$PLIST")"
@@ -29,8 +29,8 @@ for identifier in ios-arm64 ios-arm64-simulator; do
   [[ -f "$binary" ]] || fail "missing binary for $identifier"
   [[ "$(lipo -archs "$binary")" == "arm64" ]] || fail "unexpected architectures for $identifier"
   [[ -f "$version_header" ]] || fail "missing OpenCV version header for $identifier"
-  rg -q '^#define CV_VERSION_MAJOR +4$' "$version_header" || fail "unexpected OpenCV major version"
-  rg -q '^#define CV_VERSION_MINOR +13$' "$version_header" || fail "unexpected OpenCV minor version"
+  grep -Eq '^#define CV_VERSION_MAJOR +4$' "$version_header" || fail "unexpected OpenCV major version"
+  grep -Eq '^#define CV_VERSION_MINOR +13$' "$version_header" || fail "unexpected OpenCV minor version"
 done
 
 echo "OpenCV 4.13.0 XCFramework verified for iPhoneOS arm64 and iPhoneSimulator arm64."

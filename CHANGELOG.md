@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [9.0.0] - 2026-07-27
 
 **Status:** QA candidate
-**Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision, QA environment
+**Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision, QA environment, App Store
 
 ### Added
 
@@ -27,16 +27,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added a dedicated QA-badged application icon derived from the production mark.
 - Added build-time Firebase environment selection and fail-closed IPA/archive validation.
 - Added TDD contracts that prevent QA builds, Firebase apps, provisioning assets, and App Store archives from crossing environments.
+- Added PT-BR App Store screenshot candidates for 6.9-inch iPhone and 13-inch iPad, combining authentic Astro results with Home, Astro, and Repeatable screens captured from the v9 interface.
 
 ### Changed
 
 - Separated Astro Photo, Timelapse, and Video configuration contracts so photo stacking no longer depends on a duration-based batch workflow.
 - Preserved every Astro Photo original while producing one aligned and stacked result for review, sharing, and optional identification.
+- Replaced optional direct development commits with short-lived branches, structured Draft PR selection, required review-ready CI, and documented pull request routing for `develop` and release stabilization.
 - Required detailed, non-empty release notes for every Firebase App Distribution publication and documented the enforced QA contract.
 - Made Debug builds use the QA identity so local Xcode runs no longer replace the installed App Store application.
 - Made Firebase App Distribution archive the dedicated QA scheme and Firebase application by default.
 - Expanded Crashlytics symbol uploads to signed QA archives while retaining the separate `qa` release channel.
-- Documented pull requests as mandatory for product, build, and release-process changes.
 
 ## [8.5.1] - 2026-07-24
 
