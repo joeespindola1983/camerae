@@ -68,6 +68,15 @@ struct CameraeNextProjectCatalogTests {
         #expect(layout.thumbnailRange.upperBound <= layout.informationRange.lowerBound)
     }
 
+    @Test("every project card keeps reversible archive and destructive delete capabilities")
+    func projectCardCapabilities() {
+        let active = makeProject(name: "Active", module: .repeatable, day: 1)
+        let archived = makeProject(name: "Archived", module: .repeatable, day: 2, archived: true)
+
+        #expect(ProjectCatalogActionPolicy.actions(for: active) == [.archive, .delete])
+        #expect(ProjectCatalogActionPolicy.actions(for: archived) == [.unarchive, .delete])
+    }
+
     private func makeProject(
         name: String,
         module: CameraModule,

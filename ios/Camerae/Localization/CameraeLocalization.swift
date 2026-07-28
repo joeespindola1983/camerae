@@ -60,6 +60,10 @@ enum CameraeL10n {
     static var startFirstProject: String { text("project.empty.action", "Comece seu primeiro projeto") }
     static var emptyTemporaryProject: String { text("project.temporary.empty.title", "Projeto temporário vazio") }
     static var removeProject: String { text("project.remove", "Remover projeto") }
+    static var deleteProject: String { text("project.delete", "Excluir projeto") }
+    static var deleteProjectConfirmation: String {
+        text("project.delete.confirmation", "Todo o conteúdo do projeto será removido permanentemente.")
+    }
     static var emptyTemporaryProjectMessage: String {
         text(
             "project.temporary.empty.message",

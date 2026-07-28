@@ -1,5 +1,17 @@
 import SwiftUI
 
+enum ProjectCatalogAction: Hashable, Sendable {
+    case archive
+    case unarchive
+    case delete
+}
+
+enum ProjectCatalogActionPolicy {
+    static func actions(for project: CameraProject) -> [ProjectCatalogAction] {
+        [project.isArchived ? .unarchive : .archive, .delete]
+    }
+}
+
 enum CameraeNextProjectCatalogFilter: String, CaseIterable, Identifiable, Sendable {
     case recent
     case withCaptures
@@ -89,6 +101,7 @@ struct CameraeNextProjectCatalogView: View {
     @State private var errorMessage: String?
     @State private var pendingTemporaryProject: CameraeNextPendingTemporaryProject?
     @State private var emptyProjectToRemove: CameraProject?
+    @State private var projectToDelete: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
@@ -122,6 +135,9 @@ struct CameraeNextProjectCatalogView: View {
                         .buttonStyle(.plain)
                         .contextMenu {
                             archiveButton(for: featured)
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            actionsMenu(for: featured)
                         }
                         .padding(.top, 12)
                     } else {
@@ -160,6 +176,9 @@ struct CameraeNextProjectCatalogView: View {
                                 }
                                 .contextMenu {
                                     archiveButton(for: project)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    actionsMenu(for: project)
                                 }
                             }
                         }
@@ -234,6 +253,17 @@ struct CameraeNextProjectCatalogView: View {
         } message: {
             Text(CameraeL10n.emptyTemporaryProjectMessage)
         }
+        .alert(CameraeL10n.deleteProject, isPresented: Binding(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button(CameraeL10n.cancel, role: .cancel) {
+                projectToDelete = nil
+            }
+            Button(CameraeL10n.deleteProject, role: .destructive, action: deleteSelectedProject)
+        } message: {
+            Text(CameraeL10n.deleteProjectConfirmation)
+        }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
             projectStore.reload()
@@ -277,6 +307,19 @@ struct CameraeNextProjectCatalogView: View {
                 systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
             )
         }
+    }
+
+    private func actionsMenu(for project: CameraProject) -> some View {
+        ProjectCatalogActionsMenu(
+            project: project,
+            theme: theme,
+            setArchived: { isArchived in
+                setArchived(project, isArchived)
+            },
+            requestDelete: {
+                projectToDelete = project
+            }
+        )
     }
 
     private func beginCreatingProject() {
@@ -336,6 +379,18 @@ struct CameraeNextProjectCatalogView: View {
         Task {
             do {
                 try await projectStore.setArchived(project, isArchived: isArchived)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deleteSelectedProject() {
+        guard let project = projectToDelete else { return }
+        projectToDelete = nil
+        Task {
+            do {
+                try await projectStore.deleteProject(project)
             } catch {
                 errorMessage = error.localizedDescription
             }

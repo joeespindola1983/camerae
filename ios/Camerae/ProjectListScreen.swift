@@ -12,6 +12,7 @@ struct ProjectListScreen: View {
     @State private var errorMessage: String?
     @State private var pendingTemporaryProject: PendingTemporaryProject?
     @State private var emptyProjectToRemove: CameraProject?
+    @State private var projectToDelete: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var catalog: CameraeNextProjectCatalogModel {
@@ -46,6 +47,9 @@ struct ProjectListScreen: View {
                         .buttonStyle(.plain)
                         .contextMenu {
                             archiveButton(for: lastOpenedProject)
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            actionsMenu(for: lastOpenedProject)
                         }
                         .padding(.top, 12)
                     } else {
@@ -84,6 +88,9 @@ struct ProjectListScreen: View {
                                 }
                                 .contextMenu {
                                     archiveButton(for: project)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    actionsMenu(for: project)
                                 }
                             }
                         }
@@ -160,6 +167,17 @@ struct ProjectListScreen: View {
             }
         } message: {
             Text("Nenhuma captura foi criada. Este projeto temporário será removido para manter sua lista organizada.")
+        }
+        .alert(CameraeL10n.deleteProject, isPresented: Binding(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button(CameraeL10n.cancel, role: .cancel) {
+                projectToDelete = nil
+            }
+            Button(CameraeL10n.deleteProject, role: .destructive, action: deleteSelectedProject)
+        } message: {
+            Text(CameraeL10n.deleteProjectConfirmation)
         }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
@@ -274,6 +292,31 @@ struct ProjectListScreen: View {
             )
         }
     }
+
+    private func actionsMenu(for project: CameraProject) -> some View {
+        ProjectCatalogActionsMenu(
+            project: project,
+            theme: theme,
+            setArchived: { isArchived in
+                setArchived(project, isArchived)
+            },
+            requestDelete: {
+                projectToDelete = project
+            }
+        )
+    }
+
+    private func deleteSelectedProject() {
+        guard let project = projectToDelete else { return }
+        projectToDelete = nil
+        Task {
+            do {
+                try await projectStore.deleteProject(project)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
 }
 
 private struct PendingTemporaryProject {
@@ -304,6 +347,46 @@ struct ProjectListTheme {
         isAstro
             ? [Color(red: 0.01, green: 0.02, blue: 0.09), Color(red: 0.08, green: 0.13, blue: 0.52), Color(red: 0.30, green: 0.48, blue: 1)]
             : [Color(red: 0.24, green: 0.03, blue: 0), accent, Color(red: 1, green: 0.62, blue: 0.22)]
+    }
+}
+
+struct ProjectCatalogActionsMenu: View {
+    let project: CameraProject
+    let theme: ProjectListTheme
+    let setArchived: (Bool) -> Void
+    let requestDelete: () -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(ProjectCatalogActionPolicy.actions(for: project), id: \.self) { action in
+                switch action {
+                case .archive:
+                    Button {
+                        setArchived(true)
+                    } label: {
+                        Label(CameraeL10n.archive, systemImage: "archivebox")
+                    }
+                case .unarchive:
+                    Button {
+                        setArchived(false)
+                    } label: {
+                        Label(CameraeL10n.unarchive, systemImage: "archivebox.fill")
+                    }
+                case .delete:
+                    Button(role: .destructive, action: requestDelete) {
+                        Label(CameraeL10n.deleteProject, systemImage: "trash")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 42, height: 42)
+                .background(.black.opacity(0.58), in: Circle())
+                .padding(10)
+        }
+        .accessibilityLabel("Opções do projeto \(project.name)")
     }
 }
 
