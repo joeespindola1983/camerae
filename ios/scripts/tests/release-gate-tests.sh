@@ -21,7 +21,7 @@ check_plan="$($SCRIPT check --plan)"
 expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
-expect_contains "$check_plan" "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
+expect_contains "$check_plan" "tests: environment separation, localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
 expect_contains "$check_plan" "visual evidence: skipped; enable with --ui-evidence"
 expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
 
@@ -93,6 +93,10 @@ if ! rg -q 'localization-tests\.sh' "$SCRIPT"; then
 fi
 if ! rg -q 'crashlytics-contract-tests\.sh' "$SCRIPT"; then
   echo "Release gate must validate Crashlytics privacy and build settings" >&2
+  exit 1
+fi
+if ! rg -q 'environment-contract-tests\.sh' "$SCRIPT"; then
+  echo "Release gate must validate QA and production environment separation" >&2
   exit 1
 fi
 if ! rg -q 'CHANGELOG\.md' "$SCRIPT"; then
