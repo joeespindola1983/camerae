@@ -126,11 +126,18 @@ struct CameraeNextCaptureCompletionView: View {
         .onAppear { AppOrientationLock.shared.restorePortrait() }
         .fullScreenCover(isPresented: $isPresentingProcessing) {
             if let session = capture.session {
-                NavigationStack {
+                if session.captureKind == .photo {
+                    CameraeNextAstroPhotoResultView(session: session) {
+                        isPresentingProcessing = false
+                        onDone()
+                    }
+                } else {
+                    NavigationStack {
                     CameraeNextAstroProcessingView(session: session) {
                         isPresentingProcessing = false
                         onDone()
                     }
+                }
                 }
             }
         }

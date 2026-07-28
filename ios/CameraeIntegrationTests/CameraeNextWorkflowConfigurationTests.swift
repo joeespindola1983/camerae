@@ -17,19 +17,20 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(configuration.referenceOpacity == 0.5)
     }
 
-    @Test("Astro starts from the manual session defaults")
+    @Test("Astro starts from the photo stacking defaults")
     func astroDefaults() {
         let configuration = CameraeNextCaptureConfiguration.astroDefault
 
         #expect(configuration.module == .astrophotography)
+        #expect(configuration.repeatableKind == .photo)
         #expect(!configuration.usesAutomaticAstroExposure)
-        #expect(configuration.durationMinutes == 30)
         #expect(configuration.cameraLens == .wide)
         #expect(configuration.cameraZoomFactor == 1)
         #expect(configuration.sourceFormat == .dng)
         #expect(configuration.astroExposureSeconds == 8)
         #expect(configuration.intervalSeconds == 8)
-        #expect(configuration.astroCapturesPerFrame == 3)
+        #expect(configuration.astroPhotoStackCount == .ten)
+        #expect(configuration.estimatedFrameCount == 10)
     }
 
     @Test("estimated frame count follows each workflow interval")
@@ -40,6 +41,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(repeatable.estimatedFrameCount == 180)
 
         var astro = CameraeNextCaptureConfiguration.astroDefault
+        astro.repeatableKind = .timelapse
         astro.durationMinutes = 30
         astro.astroExposureSeconds = 8
         astro.astroCapturesPerFrame = 3
@@ -70,6 +72,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(videoPresentation.navigationTitle == CameraeL10n.newVideo)
         #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
         #expect(videoPresentation.adjustmentTitles == ["EV"])
+        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
         #expect(videoPresentation.showsVideoSettings)
         #expect(!videoPresentation.showsInterval)
         #expect(video.estimatedFrameCount == video.videoDurationSeconds * video.videoSettings.fps)
@@ -79,7 +82,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(timelapsePresentation.showsInterval)
     }
 
-    @Test("Astro presentation uses its compact locked camera status")
+    @Test("Astro photo presentation uses stacking instead of a duration")
     func astroPresentation() {
         let presentation = CameraeNextWorkflowConfigurationPresentation(
             configuration: .astroDefault
@@ -89,8 +92,28 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(presentation.primaryActionTitle == CameraeL10n.openCamera)
         #expect(presentation.captureSectionTitle == CameraeL10n.sessionSection)
         #expect(presentation.adjustmentsSectionTitle == CameraeL10n.astroCaptureSection)
-        #expect(presentation.adjustmentTitles == [CameraeL10n.exposure, CameraeL10n.interval, CameraeL10n.capturesPerFrame])
+        #expect(presentation.adjustmentTitles == [CameraeL10n.exposure])
+        #expect(presentation.durationLabels.isEmpty)
+        #expect(presentation.showsAstroPhotoStacking)
         #expect(presentation.cameraPresentation == .lockedStatus(lens: "Wide", zoom: "1×"))
+    }
+
+    @Test("Astro modes expose distinct conditional controls")
+    func astroModeContracts() {
+        var timelapse = CameraeNextCaptureConfiguration.astroDefault
+        timelapse.repeatableKind = .timelapse
+        let timelapsePresentation = CameraeNextWorkflowConfigurationPresentation(configuration: timelapse)
+
+        var video = CameraeNextCaptureConfiguration.astroDefault
+        video.repeatableKind = .video
+        let videoPresentation = CameraeNextWorkflowConfigurationPresentation(configuration: video)
+
+        #expect(timelapsePresentation.durationLabels == ["15 min", "30 min", "1 h", CameraeL10n.customDurationShort])
+        #expect(timelapsePresentation.showsInterval)
+        #expect(!timelapsePresentation.showsVideoSettings)
+        #expect(videoPresentation.adjustmentTitles == ["EV"])
+        #expect(videoPresentation.showsVideoSettings)
+        #expect(!videoPresentation.showsInterval)
     }
 
     @Test("Duration options preserve the Figma labels for each workflow")
@@ -101,7 +124,7 @@ struct CameraeNextWorkflowConfigurationTests {
         )
         #expect(
             CameraeNextWorkflowConfigurationPresentation(configuration: .astroDefault)
-                .durationLabels == ["15 min", "30 min", "1 h", "Personal."]
+                .durationLabels.isEmpty
         )
     }
 

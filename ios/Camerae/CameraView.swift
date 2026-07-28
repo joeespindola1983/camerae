@@ -14,6 +14,11 @@ struct CameraView: View {
     @State private var timelapseIntervalSeconds = 5.0
     @State private var astroIntervalSeconds = 1.0
     @State private var astroBatchSize = 30.0
+    @State private var astroPhotoStackCount = AstroPhotoStackCount.defaultValue
+    @State private var captureKind = RepeatableCaptureKind.timelapse
+    @State private var videoSettings = WorkflowVideoSettings.astroDefault
+    @State private var videoDurationSeconds = 30
+    @State private var exposureBias = 0.0
     @State private var usesAutomaticAstroExposure = true
     @State private var isControlsVisible = true
     @State private var isShowingExportedArchives = false
@@ -58,6 +63,11 @@ struct CameraView: View {
         if let nextConfiguration {
             _astroIntervalSeconds = State(initialValue: nextConfiguration.astroExposureSeconds)
             _astroBatchSize = State(initialValue: Double(nextConfiguration.astroCapturesPerFrame))
+            _astroPhotoStackCount = State(initialValue: nextConfiguration.astroPhotoStackCount)
+            _captureKind = State(initialValue: nextConfiguration.repeatableKind)
+            _videoSettings = State(initialValue: nextConfiguration.videoSettings)
+            _videoDurationSeconds = State(initialValue: nextConfiguration.videoDurationSeconds)
+            _exposureBias = State(initialValue: nextConfiguration.exposureBias)
             _usesAutomaticAstroExposure = State(initialValue: nextConfiguration.usesAutomaticAstroExposure)
             _durationOption = State(initialValue: .custom)
             _customDurationMinutes = State(initialValue: max(1, nextConfiguration.durationMinutes))
@@ -393,6 +403,9 @@ struct CameraView: View {
         let orientation = size.width > size.height
             ? CameraeCapturePanelOrientation.landscape
             : .portrait
+        let isRunning = captureKind == .video
+            ? camera.isVideoRecording
+            : camera.isTimelapseRunning
         let presentation = CameraeNextCaptureSessionPresentation.astro(
             originalCount: camera.frameCount,
             acceptedCount: camera.astroCompositeFrameCount,
@@ -400,7 +413,9 @@ struct CameraView: View {
             phase: camera.astroExposurePhaseLabel,
             baseExposure: camera.baseExposureLabel,
             lastExposure: camera.lastCapturedExposureLabel,
-            isRunning: camera.isTimelapseRunning
+            isRunning: isRunning,
+            captureKind: captureKind,
+            targetCount: astroPhotoStackCount.rawValue
         )
 
         return CameraeCaptureSessionPanel(
@@ -410,7 +425,7 @@ struct CameraView: View {
             actionTitle: presentation.actionTitle,
             actionSystemImage: presentation.actionSystemImage,
             isRunning: presentation.isRunning,
-            isActionDisabled: !camera.isTimelapseRunning && !canStartCapture,
+            isActionDisabled: !isRunning && !canStartCapture,
             showsLandscapePreview: presentation.showsLandscapePreview,
             action: {
                 Task { await toggleAstroCapture() }
@@ -440,17 +455,36 @@ struct CameraView: View {
             performanceMode: CameraeSettingsStore.shared.performanceMode,
             showsLowStorageWarnings: CameraeSettingsStore.shared.lowStorageWarningEnabled
         )
-        await camera.toggleAstroBatchCapture(
-            timelapseInterval: timelapseIntervalSeconds,
-            astroInterval: astroIntervalSeconds,
-            batchSize: Int(astroBatchSize),
-            usesAutomaticExposure: usesAutomaticAstroExposure,
-            plan: plan
-        )
+        switch captureKind {
+        case .photo:
+            await camera.toggleAstroPhotoStack(
+                stackCount: astroPhotoStackCount,
+                usesAutomaticExposure: usesAutomaticAstroExposure,
+                plan: plan
+            )
+        case .timelapse:
+            await camera.toggleAstroBatchCapture(
+                timelapseInterval: timelapseIntervalSeconds,
+                astroInterval: astroIntervalSeconds,
+                batchSize: Int(astroBatchSize),
+                usesAutomaticExposure: usesAutomaticAstroExposure,
+                plan: plan
+            )
+        case .video:
+            await camera.setExposureBias(exposureBias)
+            await camera.toggleVideoRecording(plan: plan, settings: videoSettings)
+        }
     }
 
     private var plannedDuration: TimeInterval {
-        durationOption.duration ?? TimeInterval(customDurationMinutes * 60)
+        switch captureKind {
+        case .photo:
+            max(astroIntervalSeconds * Double(astroPhotoStackCount.rawValue), 1)
+        case .video:
+            TimeInterval(videoDurationSeconds)
+        case .timelapse:
+            durationOption.duration ?? TimeInterval(customDurationMinutes * 60)
+        }
     }
 
     private var planningInput: AstroPlanningInput {
@@ -459,7 +493,11 @@ struct CameraView: View {
             interval: astroIntervalSeconds,
             format: sourceFormat,
             batchSize: Int(astroBatchSize),
-            supportedFormats: camera.supportedSourceFormats
+            supportedFormats: camera.supportedSourceFormats,
+            captureKind: captureKind,
+            photoStackCount: astroPhotoStackCount,
+            videoSettings: videoSettings,
+            videoDurationSeconds: videoDurationSeconds
         )
     }
 
@@ -470,27 +508,50 @@ struct CameraView: View {
 
     private func refreshPreflight() async {
         do {
+            let workflow: CaptureWorkflow = captureKind == .video ? .repeatableVideo : .astro
+            let captureInterval: TimeInterval? = switch captureKind {
+            case .photo: max(astroIntervalSeconds, 0.1)
+            case .timelapse: max(astroIntervalSeconds, 0.1)
+            case .video: nil
+            }
+            let resolution: CaptureResolution = if captureKind == .video {
+                switch videoSettings.resolution {
+                case .preview: .fullHD
+                case .fourK: .ultraHD
+                case .full: .fullSensor
+                }
+            } else {
+                .fullSensor
+            }
             let plan = try CapturePlan(
-                workflow: .astro,
+                workflow: workflow,
                 plannedDuration: plannedDuration,
-                captureInterval: astroIntervalSeconds,
+                captureInterval: captureInterval,
                 sourceFormat: sourceFormat,
-                captureFPS: nil,
-                renderFPS: 30,
-                resolution: .fullSensor,
-                astroPipeline: resolvedAstroPipeline
+                captureFPS: captureKind == .video ? videoSettings.fps : nil,
+                renderFPS: captureKind == .video ? nil : videoSettings.fps,
+                resolution: resolution,
+                astroPipeline: captureKind == .video ? nil : resolvedAstroPipeline
             )
             let bytesPerFrame: UInt64 = sourceFormat == .heic ? 4_000_000 : 8_000_000
-            await planning.evaluate(
-                plan: plan,
-                sizeProfile: .init(
+            let sizeProfile: CaptureSizeProfile = if captureKind == .video {
+                .init(
+                    videoBitsPerSecondUpperBound: 90_000_000,
+                    publicationOverheadFraction: 0.10
+                )
+            } else {
+                .init(
                     bytesPerFrameUpperBound: bytesPerFrame,
                     processingOverheadFraction: 0.5,
                     publicationOverheadFraction: 0.25
-                ),
+                )
+            }
+            await planning.evaluate(
+                plan: plan,
+                sizeProfile: sizeProfile,
                 capabilityProfile: .init(
                     supportedSourceFormats: camera.supportedSourceFormats,
-                    supportedAstroPipelines: [resolvedAstroPipeline]
+                    supportedAstroPipelines: captureKind == .video ? [] : [resolvedAstroPipeline]
                 ),
                 observedDrainPerHour: 0.20
             )
@@ -552,6 +613,10 @@ private struct AstroPlanningInput: Hashable {
     let format: CaptureSourceFormat
     let batchSize: Int
     let supportedFormats: Set<CaptureSourceFormat>
+    let captureKind: RepeatableCaptureKind
+    let photoStackCount: AstroPhotoStackCount
+    let videoSettings: WorkflowVideoSettings
+    let videoDurationSeconds: Int
 }
 
 private struct AstroBatchPreview: View {

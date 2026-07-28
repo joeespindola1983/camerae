@@ -14,6 +14,7 @@ add_library(camerae_vision
     src/automatic_alignment.cpp
     src/capture_alignment_session.cpp
     src/diagnostics.cpp
+    src/plate_solving.cpp
     src/opencv/alignment.cpp
     src/opencv/alignment_quality.cpp
     src/capture_support.cpp
@@ -35,6 +36,15 @@ add_executable(camerae-alignment-preview
 )
 
 target_link_libraries(camerae-alignment-preview
+    PRIVATE
+        camerae_vision
+)
+
+add_executable(camerae-plate-solve-lab
+    tools/plate_solving_lab.cpp
+)
+
+target_link_libraries(camerae-plate-solve-lab
     PRIVATE
         camerae_vision
 )
@@ -96,6 +106,17 @@ if(BUILD_TESTING)
     )
 
     add_test(NAME camerae_vision_tests COMMAND camerae_vision_tests)
+
+    add_executable(camerae_plate_solving_tests
+        tests/plate_solving_tests.cpp
+    )
+
+    target_link_libraries(camerae_plate_solving_tests
+        PRIVATE
+            camerae_vision
+    )
+
+    add_test(NAME camerae_plate_solving_tests COMMAND camerae_plate_solving_tests)
 
     add_executable(camerae_alignment_quality_tests
         tests/alignment_quality_tests.cpp
