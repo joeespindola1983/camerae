@@ -375,6 +375,41 @@ struct AppCompositionTests {
         #expect(differingBytes == 0)
     }
 
+    @Test("inverting the edge overlay produces a different contrast raster")
+    func edgeOverlayInversionChangesContrast() throws {
+        let rendererFormat = UIGraphicsImageRendererFormat.default()
+        rendererFormat.scale = 1
+        let source = UIGraphicsImageRenderer(
+            size: CGSize(width: 64, height: 40),
+            format: rendererFormat
+        ).image { context in
+            UIColor.black.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 64, height: 40))
+            UIColor.white.setFill()
+            context.cgContext.fill(CGRect(x: 8, y: 6, width: 42, height: 23))
+        }
+        let normal = try #require(EdgeOverlayRenderer.render(
+            image: source,
+            options: EdgeOverlayOptions(inverted: false, maxPixelDimension: 200)
+        ))
+        let inverted = try #require(EdgeOverlayRenderer.render(
+            image: source,
+            options: EdgeOverlayOptions(inverted: true, maxPixelDimension: 200)
+        ))
+        let normalRaster = try rgbaRaster(normal)
+        let invertedRaster = try rgbaRaster(inverted)
+        let differingBytes = zip(normalRaster.bytes, invertedRaster.bytes)
+            .reduce(into: 0) { count, pair in
+                if pair.0 != pair.1 {
+                    count += 1
+                }
+            }
+
+        #expect(normalRaster.width == invertedRaster.width)
+        #expect(normalRaster.height == invertedRaster.height)
+        #expect(differingBytes > 0)
+    }
+
     private func testImage(color: UIColor) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
             color.setFill()

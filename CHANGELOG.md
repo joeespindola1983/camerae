@@ -10,6 +10,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Corrected EXIF-oriented Repeatable references and preserved that orientation in the derived contour-line overlay.
 
+### Added
+
+- Added a live normal/inverted contrast control to the Repeatable contour-line tool.
+
 ## [9.1.0] - 2026-07-28
 
 **Status:** QA candidate

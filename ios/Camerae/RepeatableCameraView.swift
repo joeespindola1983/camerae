@@ -24,6 +24,7 @@ struct RepeatableCameraView: View {
     @State private var edgeReferenceImage: UIImage?
     @State private var edgeOverlayTint = EdgeOverlayTint.green
     @State private var edgeOverlayStroke = EdgeOverlayStroke()
+    @State private var isEdgeOverlayInverted = false
     @State private var isReferenceBlinking = false
     @State private var isReferenceBlinkVisible = true
     @State private var referenceBlinkInterval = CameraeNextReferenceBlinkInterval.two
@@ -685,6 +686,18 @@ struct RepeatableCameraView: View {
                         ) {
                             alignmentOverlayStyle = alignmentOverlayStyle.isEdgeEnabled ? .normal : .referenceEdges
                             refreshReferenceOverlay()
+                        }
+
+                        hudToggleButton(
+                            systemImage: "circle.lefthalf.filled",
+                            isOn: isEdgeOverlayInverted,
+                            accessibilityLabel: "Inverter contraste do traco",
+                            tint: edgeOverlayTint.swiftUIColor
+                        ) {
+                            isEdgeOverlayInverted.toggle()
+                            if let referenceImage {
+                                renderEdgeReferenceImage(from: referenceImage)
+                            }
                         }
 
                         ForEach(EdgeOverlayTint.allCases, id: \.self) { tint in
@@ -1575,12 +1588,13 @@ struct RepeatableCameraView: View {
         let renderID = UUID()
         let tint = edgeOverlayTint
         let stroke = edgeOverlayStroke
+        let inverted = isEdgeOverlayInverted
         edgeReferenceRenderID = renderID
 
         Task.detached(priority: .userInitiated) {
             let rendered = EdgeOverlayRenderer.render(
                 image: image,
-                options: EdgeOverlayOptions(tint: tint, stroke: stroke, inverted: false)
+                options: EdgeOverlayOptions(tint: tint, stroke: stroke, inverted: inverted)
             )
 
             await MainActor.run {
