@@ -121,11 +121,11 @@ struct CameraeNextHomeView: View {
             }
             .frame(width: compact ? 111 : 120, height: compact ? 79 : 121)
             .contentShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .accessibilityIdentifier(CameraeAccessibility.openModule(module))
         }
         .buttonStyle(.plain)
         .accessibilityLabel(CameraeL10n.openModule(module.title))
         .accessibilityValue(CameraeL10n.projectCount(projectStore.projects(for: module).count))
+        .accessibilityIdentifier(CameraeAccessibility.openModule(module))
     }
 }
 

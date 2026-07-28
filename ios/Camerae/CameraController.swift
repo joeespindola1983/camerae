@@ -2136,7 +2136,10 @@ enum RepeatableCameraLens: String, CaseIterable, Codable, Hashable, Identifiable
     }
 
     static func availableBackLenses() -> [RepeatableCameraLens] {
-        allCases.filter { lens in
+        if ProcessInfo.processInfo.arguments.contains("-ui-testing") {
+            return [.wide]
+        }
+        return allCases.filter { lens in
             AVCaptureDevice.default(lens.deviceType, for: .video, position: .back) != nil
         }
     }
