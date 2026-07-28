@@ -221,6 +221,7 @@ final class ProjectStore: ObservableObject {
                         }
                         let sessions = try await SessionCatalog(project: record).loadSummaries()
                         let firstReference = sessions
+                            .filter { $0.session.purpose == .projectReference }
                             .sorted { $0.session.createdAt < $1.session.createdAt }
                             .compactMap { summary -> String? in
                                 guard let file = summary.frameSummary.firstFileName else { return nil }
@@ -230,7 +231,13 @@ final class ProjectStore: ObservableObject {
                         let current = snapshot.summary(for: record.id)
                         let stableSummary = ProjectSummary(
                             sessionCount: sessions.count,
-                            mediaCount: sessions.reduce(0) { $0 + $1.frameSummary.count },
+                            mediaCount: sessions.reduce(0) { result, session in
+                                let hasFinalArtifact =
+                                    session.videoSummary?.videoFileName != nil ||
+                                    session.videoSummary?.clipFileName != nil ||
+                                    session.astroSummary?.hasRenderedClip == true
+                                return result + max(session.frameSummary.count, hasFinalArtifact ? 1 : 0)
+                            },
                             referenceThumbnailKey: firstReference,
                             latestSessionAt: sessions.map(\.session.createdAt).max(),
                             totalKnownBytes: storage.totalBytes,

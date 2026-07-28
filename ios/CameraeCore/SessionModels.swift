@@ -119,6 +119,18 @@ public struct FrameSummary: Codable, Equatable, Hashable, Sendable {
     )
 }
 
+public struct OriginalFrameRemovalSummary: Equatable, Hashable, Sendable {
+    public let frameCount: Int
+    public let knownBytes: UInt64
+
+    public init(frameCount: Int, knownBytes: UInt64) {
+        self.frameCount = frameCount
+        self.knownBytes = knownBytes
+    }
+
+    public static let empty = OriginalFrameRemovalSummary(frameCount: 0, knownBytes: 0)
+}
+
 public struct AstroSessionSummary: Codable, Equatable, Hashable, Sendable {
     public let frameCount: Int
     public let hasRenderedClip: Bool

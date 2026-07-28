@@ -57,8 +57,8 @@ struct CameraeNextProjectCatalogModel: Equatable {
 }
 
 enum CameraeNextTemporaryProjectPolicy {
-    static func shouldOfferRemoval(hasCapturedMedia: Bool) -> Bool {
-        !hasCapturedMedia
+    static func shouldAutomaticallyDiscard(hasDurableContent: Bool) -> Bool {
+        !hasDurableContent
     }
 }
 
@@ -88,7 +88,8 @@ struct CameraeNextProjectCatalogView: View {
     @State private var projectName = ""
     @State private var errorMessage: String?
     @State private var pendingTemporaryProject: CameraeNextPendingTemporaryProject?
-    @State private var emptyProjectToRemove: CameraProject?
+    @State private var projectForStorageManagement: CameraProject?
+    @State private var projectToDelete: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
@@ -116,10 +117,15 @@ struct CameraeNextProjectCatalogView: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if let featured = catalog.featuredProject {
-                        NavigationLink(value: featured) {
-                            ProjectListHeroCard(project: featured, theme: theme)
+                        ZStack(alignment: .topTrailing) {
+                            NavigationLink(value: featured) {
+                                ProjectListHeroCard(project: featured, theme: theme)
+                            }
+                            .buttonStyle(.plain)
+
+                            projectActionsMenu(featured)
+                                .padding(12)
                         }
-                        .buttonStyle(.plain)
                         .padding(.top, 12)
                     } else {
                         ProjectListEmptyHero(theme: theme, createAction: beginCreatingProject)
@@ -147,11 +153,29 @@ struct CameraeNextProjectCatalogView: View {
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(catalog.remainingProjects) { project in
-                                NavigationLink(value: project) {
-                                    ProjectListRow(project: project, theme: theme)
+                                ZStack(alignment: .trailing) {
+                                    NavigationLink(value: project) {
+                                        ProjectListRow(project: project, theme: theme)
+                                    }
+                                    .buttonStyle(.plain)
+
+                                    projectActionsMenu(project)
+                                        .padding(.trailing, 12)
                                 }
-                                .buttonStyle(.plain)
                                 .swipeActions(edge: .trailing) {
+                                    Button {
+                                        projectForStorageManagement = project
+                                    } label: {
+                                        Label("Armazenamento", systemImage: "externaldrive")
+                                    }
+                                    .tint(theme.accent)
+
+                                    Button(role: .destructive) {
+                                        projectToDelete = project
+                                    } label: {
+                                        Label("Excluir", systemImage: "trash")
+                                    }
+
                                     Button {
                                         setArchived(project, true)
                                     } label: {
@@ -216,6 +240,26 @@ struct CameraeNextProjectCatalogView: View {
                 createAction: createProject
             )
         }
+        .sheet(item: $projectForStorageManagement) { project in
+            CameraeNextProjectStorageView(project: project) {
+                projectForStorageManagement = nil
+                projectStore.reload()
+            } onRequestProjectDeletion: {
+                projectForStorageManagement = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    projectToDelete = project
+                }
+            }
+        }
+        .alert("Excluir “\(projectToDelete?.name ?? "")”?", isPresented: Binding(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button("Excluir projeto permanentemente", role: .destructive, action: deletePendingProject)
+            Button(CameraeL10n.cancel, role: .cancel) { projectToDelete = nil }
+        } message: {
+            Text("A referência, os frames, fotos, vídeos e arquivos exportados serão removidos permanentemente.")
+        }
         .alert(CameraeL10n.error, isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -223,14 +267,6 @@ struct CameraeNextProjectCatalogView: View {
             Button(CameraeL10n.okay, role: .cancel) {}
         } message: {
             Text(errorMessage ?? "")
-        }
-        .alert(CameraeL10n.emptyTemporaryProject, isPresented: Binding(
-            get: { emptyProjectToRemove != nil },
-            set: { if !$0 { emptyProjectToRemove = nil } }
-        )) {
-            Button(CameraeL10n.removeProject, role: .destructive, action: removeEmptyTemporaryProject)
-        } message: {
-            Text(CameraeL10n.emptyTemporaryProjectMessage)
         }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
@@ -265,6 +301,24 @@ struct CameraeNextProjectCatalogView: View {
         .padding(.vertical, 20)
     }
 
+    private func projectActionsMenu(_ project: CameraProject) -> some View {
+        Menu {
+            Button("Gerenciar armazenamento", systemImage: "externaldrive") {
+                projectForStorageManagement = project
+            }
+            Button("Excluir projeto", systemImage: "trash", role: .destructive) {
+                projectToDelete = project
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(theme.text)
+                .frame(width: 44, height: 44)
+                .background(theme.surface, in: Circle())
+        }
+        .accessibilityLabel("Ações do projeto \(project.name)")
+    }
+
     private func beginCreatingProject() {
         projectName = ""
         isCreatingProject = true
@@ -289,29 +343,15 @@ struct CameraeNextProjectCatalogView: View {
 
         Task {
             do {
-                let sessions = try await TimelapseSessionStore(project: pendingTemporaryProject.project)
-                    .sessionSummariesFromCatalog()
-                let hasCapturedMedia = sessions.contains {
-                    $0.frameCount > 0 || $0.videoURL != nil || $0.videoClipURL != nil
+                let hasDurableContent = try await TimelapseSessionStore(
+                    project: pendingTemporaryProject.project
+                ).hasDurableProjectContent()
+                if CameraeNextTemporaryProjectPolicy.shouldAutomaticallyDiscard(
+                    hasDurableContent: hasDurableContent
+                ) {
+                    try await projectStore.deleteProject(pendingTemporaryProject.project)
                 }
-                if CameraeNextTemporaryProjectPolicy.shouldOfferRemoval(hasCapturedMedia: hasCapturedMedia) {
-                    emptyProjectToRemove = pendingTemporaryProject.project
-                } else {
-                    self.pendingTemporaryProject = nil
-                }
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func removeEmptyTemporaryProject() {
-        guard let project = emptyProjectToRemove else { return }
-        emptyProjectToRemove = nil
-        Task {
-            do {
-                try await projectStore.deleteProject(project)
-                pendingTemporaryProject = nil
+                self.pendingTemporaryProject = nil
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -322,6 +362,18 @@ struct CameraeNextProjectCatalogView: View {
         Task {
             do {
                 try await projectStore.setArchived(project, isArchived: isArchived)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deletePendingProject() {
+        guard let project = projectToDelete else { return }
+        projectToDelete = nil
+        Task {
+            do {
+                try await projectStore.deleteProject(project)
             } catch {
                 errorMessage = error.localizedDescription
             }
