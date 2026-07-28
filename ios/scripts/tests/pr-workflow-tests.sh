@@ -8,6 +8,7 @@ PR_TEMPLATE="$ROOT_DIR/.github/pull_request_template.md"
 FEATURE_TEMPLATE="$ROOT_DIR/.github/ISSUE_TEMPLATE/feature.yml"
 AGENT_RULES="$ROOT_DIR/AGENTS.md"
 GITFLOW="$ROOT_DIR/docs/GITFLOW.md"
+OPENCV_VERIFIER="$ROOT_DIR/ios/scripts/verify-opencv-xcframework.sh"
 
 fail() {
   echo "PR workflow contract failed: $*" >&2
@@ -30,6 +31,7 @@ require_file "$PR_TEMPLATE"
 require_file "$FEATURE_TEMPLATE"
 require_file "$AGENT_RULES"
 require_file "$GITFLOW"
+require_file "$OPENCV_VERIFIER"
 
 require_text "$WORKFLOW" '^  pull_request:$' "iOS Build must run for pull requests"
 require_text "$WORKFLOW" '^      - develop$' "iOS Build must validate PRs targeting develop"
@@ -62,5 +64,10 @@ require_text "$GITFLOW" 'Draft PR' "GitFlow must document draft PRs"
 require_text "$GITFLOW" 'Decision queue' "GitFlow must explain how work is selected"
 require_text "$GITFLOW" 'target `develop`' "GitFlow must identify the normal PR base"
 require_text "$GITFLOW" 'target the active `release/' "GitFlow must route stabilization fixes correctly"
+
+if grep -Eq '(^|[[:space:]])rg([[:space:]]|$)' "$OPENCV_VERIFIER"; then
+  fail "OpenCV verification must not depend on ripgrep on GitHub macOS runners"
+fi
+require_text "$OPENCV_VERIFIER" 'grep -Eq' "OpenCV verification must use a runner-portable matcher"
 
 echo "PR workflow contract passed"
