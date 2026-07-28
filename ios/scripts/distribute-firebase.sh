@@ -9,8 +9,8 @@ Usage:
 Options:
   --groups GROUPS           Firebase tester groups, comma-separated.
   --testers EMAILS          Firebase tester emails, comma-separated.
-  --release-notes TEXT      Release notes text.
-  --release-notes-file FILE Release notes file.
+  --release-notes TEXT      Required release notes text.
+  --release-notes-file FILE Required release notes file alternative.
   --export-method METHOD    Xcode export method. Defaults to release-testing.
   --configuration CONFIG    Xcode configuration. Defaults to Release.
   --skip-archive            Reuse the existing exported IPA when present.
@@ -100,6 +100,10 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+"$SCRIPT_DIR/validate-firebase-release-notes.sh" \
+  --text "$RELEASE_NOTES" \
+  --file "$RELEASE_NOTES_FILE"
 
 if [[ ! -d "$WORKSPACE" ]]; then
   echo "Missing workspace: $WORKSPACE" >&2

@@ -76,6 +76,7 @@ print_plan() {
     firebase)
       echo "required branch: qa"
       echo "destination: Firebase App Distribution"
+      echo "release notes: required"
       ;;
     appstore)
       echo "required branch: release/*"
@@ -124,6 +125,13 @@ require_command() {
 for command in git rg pod xcodebuild cmake ctest security python3; do
   require_command "$command"
 done
+
+if [[ "$MODE" == "firebase" ]]; then
+  step "Validate mandatory Firebase release notes"
+  "$IOS_DIR/scripts/validate-firebase-release-notes.sh" \
+    --text "${RELEASE_NOTES:-}" \
+    --file "${RELEASE_NOTES_FILE:-}"
+fi
 
 cd "$ROOT_DIR"
 
