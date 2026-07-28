@@ -15,6 +15,6 @@ struct CameraeNextSegmentedControlTests {
 
     @Test func workflowModeUsesSemanticValuesInsteadOfIndexes() {
         #expect(CameraeNextCaptureModeOption.repeatableItems.map(\.value) == [.video, .timelapse])
-        #expect(CameraeNextCaptureModeOption.astroItems.map(\.value) == [.automatic, .manual])
+        #expect(CameraeNextCaptureModeOption.astroItems.map(\.value) == [.photo, .timelapse, .video])
     }
 }

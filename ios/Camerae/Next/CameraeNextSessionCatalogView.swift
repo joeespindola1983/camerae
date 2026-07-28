@@ -258,11 +258,18 @@ struct CameraeNextSessionCatalogView: View {
         .preferredColorScheme(theme.colorScheme)
         .task { await reload() }
         .fullScreenCover(item: $selectedAstroSession) { summary in
-            NavigationStack {
+            if summary.captureKind == .photo {
+                CameraeNextAstroPhotoResultView(session: summary.session) {
+                    selectedAstroSession = nil
+                    Task { await reload() }
+                }
+            } else {
+                NavigationStack {
                 CameraeNextAstroProcessingView(session: summary.session) {
                     selectedAstroSession = nil
                     Task { await reload() }
                 }
+            }
             }
         }
         .fullScreenCover(item: $selectedVideo) { item in

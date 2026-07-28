@@ -486,6 +486,22 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    func toggleAstroPhotoStack(
+        stackCount: AstroPhotoStackCount,
+        usesAutomaticExposure: Bool,
+        plan: CapturePlan
+    ) async {
+        if isTimelapseRunning {
+            stopTimelapse()
+        } else {
+            await startAstroPhotoStack(
+                stackCount: stackCount,
+                usesAutomaticExposure: usesAutomaticExposure,
+                plan: plan
+            )
+        }
+    }
+
     func captureSinglePhoto() async {
         guard !isTimelapseRunning, !isSinglePhotoCaptureRunning else { return }
         isSinglePhotoCaptureRunning = true
@@ -817,6 +833,47 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    private func startAstroPhotoStack(
+        stackCount: AstroPhotoStackCount,
+        usesAutomaticExposure: Bool,
+        plan: CapturePlan
+    ) async {
+        guard case .astro = captureMode else { return }
+
+        do {
+            stoppedForStorage = false
+            astroExposureStrategy = usesAutomaticExposure
+                ? .automatic(maxDuration: max(plan.captureInterval ?? 1, 1))
+                : .fixed(duration: max(plan.captureInterval ?? 1, 1))
+            currentSession = try store.createSession(
+                captureKind: .photo,
+                cameraLens: selectedRepeatableLens,
+                cameraZoomFactor: selectedCameraZoomFactor
+            )
+            if let currentSession {
+                try store.saveCapturePlan(plan, in: currentSession)
+            }
+            completedSession = nil
+            frameCount = 0
+            astroCompositeFrameCount = 0
+            astroBatchProgressLabel = "0/\(stackCount.rawValue)"
+            astroExposurePhaseLabel = usesAutomaticExposure ? "Auto" : "Astro"
+            astroStackingStartFrame = nil
+            astroPreviewURL = nil
+            lastExportURL = nil
+            lastExportURLs = []
+            isTimelapseRunning = true
+            status = "Estabilizando tripé"
+
+            timelapseTask = Task { [weak self] in
+                guard let self else { return }
+                await self.runAstroPhotoStackWithCountdown(stackCount: stackCount)
+            }
+        } catch {
+            status = "Falha ao criar sessão: \(error.localizedDescription)"
+        }
+    }
+
     private func startMotionUpdates() {
         guard motionManager.isDeviceMotionAvailable, !motionManager.isDeviceMotionActive else {
             return
@@ -1059,6 +1116,59 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         if !Task.isCancelled {
             finishPlannedTimelapse()
         }
+    }
+
+    private func runAstroPhotoStackWithCountdown(
+        stackCount: AstroPhotoStackCount
+    ) async {
+        for second in stride(from: 3, through: 1, by: -1) {
+            guard !Task.isCancelled else { return }
+            countdownLabel = "\(second)s"
+            status = "Foto em \(second)s"
+            try? await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+
+        guard !Task.isCancelled else { return }
+        countdownLabel = "-"
+        await lockFocusForCaptureSequence()
+        guard !Task.isCancelled else { return }
+
+        var originals: [URL] = []
+        originals.reserveCapacity(stackCount.rawValue)
+        status = "Capturando originais Astro"
+
+        for index in 1...stackCount.rawValue {
+            guard !Task.isCancelled else { return }
+            do {
+                let frame = try await captureAndSaveFrame()
+                originals.append(frame.url)
+                astroBatchProgressLabel = "\(index)/\(stackCount.rawValue)"
+                stackProgressLabel = "Original \(index)/\(stackCount.rawValue)"
+                if await shouldStopForStorage() { break }
+            } catch {
+                status = "Frame \(index) falhou: \(error.localizedDescription)"
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+        guard !originals.isEmpty else {
+            finishPlannedTimelapse()
+            return
+        }
+
+        do {
+            status = "Alinhando e empilhando \(originals.count) fotos"
+            let outputURL = try await processAstroBatch(originals, batchIndex: 1)
+            astroCompositeFrameCount = 1
+            astroPreviewURL = outputURL
+            stackProgressLabel = "Stack final"
+            status = originals.count == stackCount.rawValue
+                ? "Foto Astro concluída"
+                : "Foto Astro concluída com \(originals.count) originais"
+        } catch {
+            status = "Stacking falhou: \(error.localizedDescription)"
+        }
+        finishPlannedTimelapse()
     }
 
     private func runTimelapse(interval: Double, plannedDuration: TimeInterval) async {

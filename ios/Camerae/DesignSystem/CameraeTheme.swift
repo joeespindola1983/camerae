@@ -97,7 +97,7 @@ struct CameraeNextCaptureSessionPresentation: Sendable {
         idleActionTitle: String = "Iniciar captura",
         idleActionSystemImage: String = "camera"
     ) -> Self {
-        .init(
+        return .init(
             theme: .repeatable,
             metrics: [
                 .init(title: "Frames", value: "\(frameCount)"),
@@ -119,20 +119,35 @@ struct CameraeNextCaptureSessionPresentation: Sendable {
         phase: String,
         baseExposure: String,
         lastExposure: String,
-        isRunning: Bool
+        isRunning: Bool,
+        captureKind: RepeatableCaptureKind = .timelapse,
+        targetCount: Int? = nil
     ) -> Self {
-        .init(
+        let batchMetric = captureKind == .photo
+            ? "\(originalCount)/\(targetCount ?? 0)"
+            : batch
+        let idleActionTitle: String = switch captureKind {
+        case .photo: "Capturar e empilhar"
+        case .timelapse: "Iniciar lotes Astro"
+        case .video: "Gravar vídeo Astro"
+        }
+        let idleActionSystemImage: String = switch captureKind {
+        case .photo: "camera.aperture"
+        case .timelapse: "sparkles"
+        case .video: "video.fill"
+        }
+        return Self(
             theme: .astro,
             metrics: [
                 .init(title: "Orig", value: "\(originalCount)"),
                 .init(title: "Bons", value: "\(acceptedCount)"),
-                .init(title: "Lote", value: batch),
+                .init(title: captureKind == .photo ? "Fotos" : "Lote", value: batchMetric),
                 .init(title: "Fase", value: phase),
                 .init(title: "Base", value: baseExposure),
                 .init(title: "Última", value: lastExposure)
             ],
-            actionTitle: isRunning ? "Parar" : "Iniciar lotes Astro",
-            actionSystemImage: isRunning ? "stop.fill" : "sparkles",
+            actionTitle: isRunning ? "Parar" : idleActionTitle,
+            actionSystemImage: isRunning ? "stop.fill" : idleActionSystemImage,
             isRunning: isRunning,
             showsLandscapePreview: true
         )
