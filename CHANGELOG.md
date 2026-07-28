@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [9.0.0] - 2026-07-27
+
+**Status:** QA candidate
+**Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision
+
 ### Added
 
 - Added the first offline plate-solving laboratory foundation to Camerae Vision, including gnomonic sky projection, deterministic synthetic star fields, OpenCV star centroid detection, annotated image evidence, and a versioned JSON report.
