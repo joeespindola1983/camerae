@@ -8,13 +8,13 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 - `develop`: integration branch and base for the next version.
 - `qa`: environment branch used to generate Firebase App Distribution builds from an active release candidate.
 - `release/*`: stabilization branches cut from `develop`, for example `release/v5.0.0`.
-- `feature/*` or `codex/*`: optional short-lived implementation branches.
+- `feature/*` or `codex/*`: mandatory short-lived implementation branches.
 - `hotfix/*`: urgent production fixes cut from `main`.
 
 ## Invariants
 
-- Normal development always starts from current `develop`. Direct commits to `develop` are allowed while Camerae has a single developer; pull requests and feature branches are optional.
-- When a feature branch is useful, it starts from current `develop` and merges back to `develop`.
+- Normal development always starts from current `develop` in a short-lived branch.
+- Product, build, dependency, privacy, and release-process changes return to `develop` through a pull request.
 - `qa` is a deployment target, never the source branch for features or the next release.
 - Release fixes are committed to `release/*` and promoted again to `qa`.
 - Every QA-approved candidate is returned to `develop` immediately. Development never continues from a `develop` that is behind the approved QA candidate.
@@ -24,10 +24,10 @@ Camerae uses a lightweight GitFlow that separates ongoing integration, tester bu
 
 ## Flow
 
-1. Switch to synchronized `develop`. Commit there directly, or optionally create `feature/*` or `codex/*` from it and merge completed work back.
+1. Switch to synchronized `develop`, create a short-lived `feature/*` or `codex/*` branch, and open a pull request back to `develop`.
 2. Cut `release/vX.Y.Z` from `develop` when the version enters stabilization.
 3. Bump versions, move the applicable `CHANGELOG.md` entries from `Unreleased` into a dated version section, finalize release notes, and merge or fast-forward the release candidate into `qa`.
-4. From a synchronized local `qa`, run `ios/scripts/release-gate.sh firebase --publish` and validate the Firebase build.
+4. Finalize detailed Firebase release notes, then run `ios/scripts/release-gate.sh firebase --publish` from a synchronized local `qa` and validate the Firebase build.
 5. After QA approves the candidate, merge or fast-forward that exact release commit into `develop`.
 6. Apply every later stabilization fix to `release/vX.Y.Z`, update `qa`, repeat validation, and reconcile each newly approved candidate into `develop`.
 7. After production approval, merge or fast-forward the release into `main` and tag that exact commit as `vX.Y.Z`.
@@ -42,12 +42,13 @@ Hotfixes start from `main`, are released and tagged through the same validation 
 
 ## Solo-development commands
 
-Pull requests are intentionally optional while the repository has a single developer. The safe default for a new task is:
+Pull requests remain mandatory even while the repository has a single developer. The safe default for a new task is:
 
 ```sh
 git fetch origin
 git switch develop
 git pull --ff-only origin develop
+git switch -c codex/feature-name
 ```
 
 Before creating a release, confirm that work started from `develop` and cut the stabilization branch from it:
@@ -81,7 +82,7 @@ scripts/release-gate.sh appstore --publish
 scripts/release-gate.sh check --ui-evidence
 ```
 
-O gate bloqueia publicação quando há alterações rastreadas, arquivos não rastreados dentro de `ios/`, branch incorreta, commit diferente do upstream, versão inválida, assinatura ausente, teste com falha ou build inválido. Firebase exige `qa`; App Store Connect exige `release/v<MARKETING_VERSION>`. A opção `--publish` torna qualquer mutação externa explícita.
+O gate bloqueia publicação quando há alterações rastreadas, arquivos não rastreados dentro de `ios/`, branch incorreta, commit diferente do upstream, versão inválida, assinatura ausente, teste com falha ou build inválido. Firebase exige `qa`, um grupo ou testers de destino e release notes detalhadas; App Store Connect exige `release/v<MARKETING_VERSION>`. A opção `--publish` torna qualquer mutação externa explícita.
 
 O gate roda `pod install --deployment`, fronteiras de arquitetura, testes Swift, testes C++ e build genérico sem assinatura antes de chamar o archive assinado. Evidências visuais são opcionais para não atrasar mudanças sem impacto de interface: use `--ui-evidence` para gerar e arquivar a matriz de iPhone e iPad nos seis idiomas suportados. A matriz completa também pode ser executada diretamente com `./scripts/generate-ui-evidence.sh --all-devices --all-locales --archive-tracked`. As evidências temporárias ficam em `ios/build/ui-evidence`; PNGs, manifesto e galeria HTML são copiados para `docs/ui-evidence/`, usando sufixos de device e idioma como `-ipad`, `-de` e `-ipad-ru`, e devem ser commitados após a publicação. IPA, ZIP e dados derivados continuam locais. O gate usa `Camerae.xcworkspace`; o `.xcodeproj` isolado não contém as dependências CocoaPods.
 
@@ -93,6 +94,9 @@ Android automation is intentionally paused while Camerae is developed and valida
 
 Copie `ios/Config/Release.env.example` para `ios/Config/Release.local.env` e preencha apenas o necessário. O arquivo local é ignorado pelo Git. A chave privada `.p8`, certificados, senhas e tokens nunca entram no repositório.
 
-O Firebase CLI pode usar a sessão criada por `firebase login`; configure o app, projeto e grupo no arquivo local. Para App Store Connect, informe Team ID e o caminho local da chave API `.p8`, seu Key ID e Issuer ID.
+O Firebase CLI pode usar a sessão criada por `firebase login`; configure o app, projeto e grupo no arquivo local. Toda publicação Firebase deve definir exatamente uma fonte de notas: `RELEASE_NOTES` para texto direto ou `RELEASE_NOTES_FILE` para um arquivo não vazio. As notas devem resumir funcionalidades, correções, riscos e o foco esperado da validação de QA. O gate interrompe a execução antes do archive quando as notas estão ausentes, vazias ou ambíguas. Para App Store Connect, informe Team ID e o caminho local da chave API `.p8`, seu Key ID e Issuer ID.
 
 Os scripts usam somente identidades e profiles já instalados por padrão (`ALLOW_PROVISIONING_UPDATES=0`). Se for realmente necessário permitir ao Xcode atualizar um profile, faça isso conscientemente numa execução local com `ALLOW_PROVISIONING_UPDATES=1`; o gate nunca habilita essa opção durante publicação.
+
+Os ambientes e perfis de assinatura do iOS estão detalhados em
+[`QA_ENVIRONMENTS.md`](QA_ENVIRONMENTS.md).

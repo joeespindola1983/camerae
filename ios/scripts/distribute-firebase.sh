@@ -9,15 +9,15 @@ Usage:
 Options:
   --groups GROUPS           Firebase tester groups, comma-separated.
   --testers EMAILS          Firebase tester emails, comma-separated.
-  --release-notes TEXT      Release notes text.
-  --release-notes-file FILE Release notes file.
+  --release-notes TEXT      Required release notes text.
+  --release-notes-file FILE Required release notes file alternative.
   --export-method METHOD    Xcode export method. Defaults to release-testing.
-  --configuration CONFIG    Xcode configuration. Defaults to Release.
+  --configuration CONFIG    Xcode configuration. Defaults to QA.
   --skip-archive            Reuse the existing exported IPA when present.
   -h, --help                Show this help.
 
 Environment overrides:
-  FIREBASE_APP_ID           Defaults to 1:413701042509:ios:b08c2a5a1594459dd20704.
+  FIREBASE_APP_ID           Defaults to the Camerae QA Firebase app.
   FIREBASE_PROJECT_NUMBER   Defaults to 413701042509.
   FIREBASE_PROJECT_ID       Defaults to camerae-59c4b.
   FIREBASE_GROUPS           Same as --groups.
@@ -25,6 +25,9 @@ Environment overrides:
   RELEASE_NOTES             Same as --release-notes.
   RELEASE_NOTES_FILE        Same as --release-notes-file.
   APPLE_TEAM_ID             Apple Developer Team ID for automatic signing.
+  QA_PROVISIONING_PROFILE_SPECIFIER
+                            Defaults to Camerae Ad Hoc.
+  QA_SIGNING_CERTIFICATE    Defaults to iPhone Distribution.
   APP_STORE_CONNECT_KEY_PATH App Store Connect API private key path for CI signing.
   APP_STORE_CONNECT_KEY_ID   App Store Connect API key ID for CI signing.
   APP_STORE_CONNECT_ISSUER_ID App Store Connect API issuer ID for CI signing.
@@ -42,18 +45,21 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 IOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 WORKSPACE="$IOS_DIR/Camerae.xcworkspace"
-SCHEME="Camerae"
-CONFIGURATION="${CONFIGURATION:-Release}"
+SCHEME="Camerae QA"
+CONFIGURATION="${CONFIGURATION:-QA}"
 EXPORT_METHOD="${EXPORT_METHOD:-release-testing}"
 ALLOW_PROVISIONING_UPDATES="${ALLOW_PROVISIONING_UPDATES:-0}"
 FIREBASE_PROJECT_NUMBER="${FIREBASE_PROJECT_NUMBER:-413701042509}"
 FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-camerae-59c4b}"
-FIREBASE_APP_ID="${FIREBASE_APP_ID:-1:${FIREBASE_PROJECT_NUMBER}:ios:b08c2a5a1594459dd20704}"
+FIREBASE_APP_ID="${FIREBASE_APP_ID:-1:413701042509:ios:74c9e8eb4ed40d45d20704}"
+EXPECTED_BUNDLE_ID="${EXPECTED_BUNDLE_ID:-com.espindola.camerae.qa}"
 FIREBASE_GROUPS="${FIREBASE_GROUPS:-}"
 FIREBASE_TESTERS="${FIREBASE_TESTERS:-}"
 RELEASE_NOTES="${RELEASE_NOTES:-}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-}"
-APPLE_TEAM_ID="${APPLE_TEAM_ID:-}"
+APPLE_TEAM_ID="${APPLE_TEAM_ID:-V6JPGVRWCS}"
+QA_PROVISIONING_PROFILE_SPECIFIER="${QA_PROVISIONING_PROFILE_SPECIFIER:-Camerae Ad Hoc}"
+QA_SIGNING_CERTIFICATE="${QA_SIGNING_CERTIFICATE:-iPhone Distribution}"
 APP_STORE_CONNECT_KEY_PATH="${APP_STORE_CONNECT_KEY_PATH:-}"
 APP_STORE_CONNECT_KEY_ID="${APP_STORE_CONNECT_KEY_ID:-}"
 APP_STORE_CONNECT_ISSUER_ID="${APP_STORE_CONNECT_ISSUER_ID:-}"
@@ -101,6 +107,10 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+"$SCRIPT_DIR/validate-firebase-release-notes.sh" \
+  --text "$RELEASE_NOTES" \
+  --file "$RELEASE_NOTES_FILE"
+
 if [[ ! -d "$WORKSPACE" ]]; then
   echo "Missing workspace: $WORKSPACE" >&2
   echo "Run 'pod install' from $IOS_DIR first." >&2
@@ -133,7 +143,16 @@ cat > "$EXPORT_OPTIONS" <<PLIST
   <key>method</key>
   <string>$EXPORT_METHOD</string>
   <key>signingStyle</key>
-  <string>automatic</string>
+  <string>manual</string>
+  <key>signingCertificate</key>
+  <string>$QA_SIGNING_CERTIFICATE</string>
+  <key>teamID</key>
+  <string>$APPLE_TEAM_ID</string>
+  <key>provisioningProfiles</key>
+  <dict>
+    <key>$EXPECTED_BUNDLE_ID</key>
+    <string>$QA_PROVISIONING_PROFILE_SPECIFIER</string>
+  </dict>
   <key>stripSwiftSymbols</key>
   <true/>
   <key>compileBitcode</key>
@@ -141,10 +160,6 @@ cat > "$EXPORT_OPTIONS" <<PLIST
 </dict>
 </plist>
 PLIST
-
-if [[ -n "$APPLE_TEAM_ID" ]]; then
-  /usr/libexec/PlistBuddy -c "Add :teamID string $APPLE_TEAM_ID" "$EXPORT_OPTIONS"
-fi
 
 if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
   rm -rf "$ARCHIVE_PATH" "$EXPORT_DIR"
@@ -168,10 +183,10 @@ if [[ "$SKIP_ARCHIVE" -eq 0 ]]; then
     )
   fi
 
-  build_settings=(CAMERAE_RELEASE_CHANNEL=qa)
-  if [[ -n "$APPLE_TEAM_ID" ]]; then
-    build_settings+=(DEVELOPMENT_TEAM="$APPLE_TEAM_ID" CODE_SIGN_STYLE=Automatic)
-  fi
+  build_settings=(
+    CAMERAE_RELEASE_CHANNEL=qa
+    DEVELOPMENT_TEAM="$APPLE_TEAM_ID"
+  )
 
   archive_command=(xcodebuild archive \
     -workspace "$WORKSPACE" \
@@ -201,6 +216,11 @@ if [[ ! -f "$IPA_PATH" ]]; then
   echo "IPA not found at $IPA_PATH" >&2
   exit 1
 fi
+
+"$SCRIPT_DIR/validate-ipa-environment.sh" \
+  "$IPA_PATH" \
+  "$EXPECTED_BUNDLE_ID" \
+  "$FIREBASE_APP_ID"
 
 firebase_args=(
   appdistribution:distribute "$IPA_PATH"

@@ -76,6 +76,7 @@ print_plan() {
     firebase)
       echo "required branch: qa"
       echo "destination: Firebase App Distribution"
+      echo "release notes: required"
       ;;
     appstore)
       echo "required branch: release/*"
@@ -84,7 +85,7 @@ print_plan() {
   esac
   echo "git: clean, synchronized commit"
   echo "signing: existing identity and provisioning profile only"
-  echo "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
+  echo "tests: environment separation, localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
   if [[ "$UI_EVIDENCE" -eq 1 ]]; then
     echo "visual evidence: enabled; six locales on iPhone and iPad, archived under docs/ui-evidence"
   else
@@ -124,6 +125,13 @@ require_command() {
 for command in git rg pod xcodebuild cmake ctest security python3; do
   require_command "$command"
 done
+
+if [[ "$MODE" == "firebase" ]]; then
+  step "Validate mandatory Firebase release notes"
+  "$IOS_DIR/scripts/validate-firebase-release-notes.sh" \
+    --text "${RELEASE_NOTES:-}" \
+    --file "${RELEASE_NOTES_FILE:-}"
+fi
 
 cd "$ROOT_DIR"
 
@@ -185,6 +193,9 @@ step "Validate localization catalogs"
 
 step "Validate Crashlytics privacy and build contract"
 (cd "$IOS_DIR" && ./scripts/tests/crashlytics-contract-tests.sh)
+
+step "Validate QA and production environment separation"
+(cd "$IOS_DIR" && ./scripts/tests/environment-contract-tests.sh)
 
 step "Run Swift component and integration tests"
 (cd "$IOS_DIR" && xcodebuild \

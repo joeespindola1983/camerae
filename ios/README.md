@@ -74,13 +74,17 @@ Distribuição após configurar `Config/Release.local.env`:
 
 ```sh
 # Execute a partir da branch qa sincronizada.
+FIREBASE_GROUPS=testers \
+RELEASE_NOTES_FILE=/caminho/absoluto/firebase-release-notes.txt \
 scripts/release-gate.sh firebase --publish
 
 # Execute a partir de release/vX.Y.Z sincronizada.
 scripts/release-gate.sh appstore --publish
 ```
 
-O gate valida Git, versão, assinatura local, arquitetura, testes Swift/C++, build e somente então publica. Workflows GitHub permanecem manuais e não disparam em pushes.
+Toda publicação Firebase exige exatamente uma fonte de notas detalhadas: `RELEASE_NOTES` ou `RELEASE_NOTES_FILE`. Texto ausente, vazio, contendo apenas espaços ou a definição simultânea das duas opções bloqueia o gate antes do archive.
+
+O gate valida Git, versão, assinatura local, release notes, arquitetura, testes Swift/C++, build e somente então publica. Workflows GitHub permanecem manuais e não disparam em pushes.
 
 ## Modelos locais
 

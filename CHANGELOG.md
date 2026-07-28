@@ -10,6 +10,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Added PT-BR App Store screenshot candidates for 6.9-inch iPhone and 13-inch iPad, featuring authentic Astro results, exposure planning, Repeatable alignment, and Editor workflows.
 
+## [9.0.0] - 2026-07-27
+
+**Status:** QA candidate
+**Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision, QA environment
+
+### Added
+
+- Added the first offline plate-solving laboratory foundation to Camerae Vision, including gnomonic sky projection, deterministic synthetic star fields, OpenCV star centroid detection, annotated image evidence, and a versioned JSON report.
+- Added TDD coverage for celestial projection round trips, synthetic star recovery, negative blank images, and the laboratory report contract.
+- Added constrained catalog matching with validated RA/Dec center, camera roll, field of view, plate scale, residuals, confidence, and auditable star correspondences.
+- Added conservative rejection tests proving that unrelated point fields do not produce a celestial solution.
+- Added reflection-aware constrained matching and conservative offline lost-in-space solving with quad fingerprints.
+- Added automatic letterbox detection, compact offline star catalogs, a deterministic catalog generator, and repeatable multi-image performance evidence.
+- Added an isolated Objective-C++ plate-solving bridge for future Swift integration without enabling the feature in capture or UI.
+- Added Astro Photo as a first-class capture mode with finite 5, 10, 20, or 30-image stacks, defaulting to 10 DNG originals.
+- Added a dedicated Astro photo result and celestial-identification editor with independently selectable planet, nebula, and galaxy layers.
+- Added an offline 20,000-star Gaia DR3 catalog, principal deep-sky objects, low-precision offline planetary ephemerides, image-space projection, and non-destructive JSON annotation sidecars.
+- Added an independently installable `Camerae QA` iOS build using `com.espindola.camerae.qa`.
+- Added a dedicated QA-badged application icon derived from the production mark.
+- Added build-time Firebase environment selection and fail-closed IPA/archive validation.
+- Added TDD contracts that prevent QA builds, Firebase apps, provisioning assets, and App Store archives from crossing environments.
+
+### Changed
+
+- Separated Astro Photo, Timelapse, and Video configuration contracts so photo stacking no longer depends on a duration-based batch workflow.
+- Preserved every Astro Photo original while producing one aligned and stacked result for review, sharing, and optional identification.
+- Required detailed, non-empty release notes for every Firebase App Distribution publication and documented the enforced QA contract.
+- Made Debug builds use the QA identity so local Xcode runs no longer replace the installed App Store application.
+- Made Firebase App Distribution archive the dedicated QA scheme and Firebase application by default.
+- Expanded Crashlytics symbol uploads to signed QA archives while retaining the separate `qa` release channel.
+- Documented pull requests as mandatory for product, build, and release-process changes.
+
 ## [8.5.1] - 2026-07-24
 
 **Status:** QA candidate

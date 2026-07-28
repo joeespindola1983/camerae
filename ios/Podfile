@@ -2,6 +2,11 @@ platform :ios, '17.0'
 
 use_frameworks!
 
+project 'Camerae',
+        'Debug' => :debug,
+        'QA' => :release,
+        'Release' => :release
+
 target 'Camerae' do
   pod 'FirebaseCrashlytics'
   pod 'FirebaseAnalytics'

@@ -24,6 +24,8 @@ rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = NO' "$IOS_DIR/Config/Debug.xccon
   || fail "Debug collection must be disabled"
 rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES' "$IOS_DIR/Config/Release.xcconfig" \
   || fail "Release collection must be enabled"
+rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES' "$IOS_DIR/Config/QA.xcconfig" \
+  || fail "QA collection must be enabled"
 rg -q 'CAMERAE_RELEASE_CHANNEL=qa' "$IOS_DIR/scripts/distribute-firebase.sh" \
   || fail "Firebase distribution must identify QA reports"
 rg -q 'setAnalyticsCollectionEnabled' "$IOS_DIR/Camerae/Diagnostics/CameraeDiagnosticsConsent.swift" \
@@ -33,8 +35,8 @@ rg -q 'isCollectionAllowed && state.analyticsEnabled' "$IOS_DIR/Camerae/Diagnost
 
 rg -q 'FirebaseCrashlytics/run' "$IOS_DIR/project.yml" \
   || fail "Release builds must upload dSYM files"
-rg -q 'if \[ "\$\{CONFIGURATION\}" = "Release" \]' "$IOS_DIR/project.yml" \
-  || fail "dSYM upload must be restricted to Release builds"
+rg -q 'QA\|Release' "$IOS_DIR/project.yml" \
+  || fail "dSYM upload must include QA and Release builds"
 
 if rg -q 'setUserID|setUserId' "$IOS_DIR/Camerae"; then
   fail "Camerae must not attach user identifiers to crash reports"

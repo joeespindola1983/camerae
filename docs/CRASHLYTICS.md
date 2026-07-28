@@ -6,7 +6,7 @@ Camerae uses Firebase Crashlytics and Analytics to improve stability and underst
 
 | Build | Collection | Release channel |
 | --- | --- | --- |
-| Debug and automated tests | Disabled regardless of the saved preference | `debug` |
+| Debug and automated tests | Disabled regardless of the saved preference | `qa-debug` |
 | Firebase App Distribution | Enabled by default, with opt-out | `qa` |
 | App Store and TestFlight | Enabled by default, with opt-out | `release` |
 
@@ -39,11 +39,16 @@ Only values defined by `CameraeDiagnosticModule` and the fixed application/build
 
 - Dependencies: `FirebaseCrashlytics` and `FirebaseAnalytics` through the locked CocoaPods workspace.
 - Initialization: after `FirebaseApp.configure()` in `CameraeAppDelegate`.
-- Debug symbols: the Firebase upload script runs only for Release builds.
+- Debug symbols: the Firebase upload script runs for signed QA and Release archives.
 - Linkage: the application uses the generated CocoaPods embed-framework phase and must be built from `Camerae.xcworkspace`.
 - Privacy manifests: Firebase-provided manifests are embedded through CocoaPods.
 
-The QA archive overrides `CAMERAE_RELEASE_CHANNEL` to `qa`. App Store archives use `release`.
+Debug, QA, and App Store builds select one Firebase plist at build time. Debug and
+QA use the Firebase iOS app registered for `com.espindola.camerae.qa`; Release uses
+the production Firebase iOS app registered for `com.espindola.camerae`. The build
+fails if a plist and product bundle identifier do not match.
+
+The QA archive uses `CAMERAE_RELEASE_CHANNEL=qa`. App Store archives use `release`.
 
 ## Verification before QA
 
