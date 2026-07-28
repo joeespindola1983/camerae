@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
-- Corrected EXIF-oriented Repeatable references so their pixels and dimensions are normalized before capture alignment.
+- Corrected EXIF-oriented Repeatable references and preserved that orientation in the derived contour-line overlay.
 
 ## [9.1.0] - 2026-07-28
 

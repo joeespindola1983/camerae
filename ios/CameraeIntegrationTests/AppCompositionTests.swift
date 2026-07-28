@@ -295,6 +295,35 @@ struct AppCompositionTests {
         #expect(session.referenceOrientation == .portrait)
     }
 
+    @Test("edge overlay preserves the reference image orientation")
+    func edgeOverlayPreservesReferenceOrientation() throws {
+        let rendererFormat = UIGraphicsImageRendererFormat.default()
+        rendererFormat.scale = 1
+        let source = UIGraphicsImageRenderer(
+            size: CGSize(width: 40, height: 20),
+            format: rendererFormat
+        ).image { context in
+            UIColor.white.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+            UIColor.black.setFill()
+            context.cgContext.fill(CGRect(x: 20, y: 0, width: 20, height: 20))
+        }
+        let sourceCGImage = try #require(source.cgImage)
+        let rotatedReference = UIImage(
+            cgImage: sourceCGImage,
+            scale: 1,
+            orientation: .right
+        )
+
+        let overlay = try #require(EdgeOverlayRenderer.render(
+            image: rotatedReference,
+            options: EdgeOverlayOptions(maxPixelDimension: 200)
+        ))
+
+        #expect(overlay.imageOrientation == rotatedReference.imageOrientation)
+        #expect(overlay.size == rotatedReference.size)
+    }
+
     private func testImage(color: UIColor) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
             color.setFill()

@@ -119,6 +119,10 @@ enum EdgeOverlayRenderer {
         ])
 
         guard let cgImage = context.createCGImage(output, from: extent) else { return nil }
-        return UIImage(cgImage: cgImage, scale: 1, orientation: .up)
+        return UIImage(
+            cgImage: cgImage,
+            scale: image.scale,
+            orientation: image.imageOrientation
+        )
     }
 }
