@@ -42,6 +42,8 @@ require_text "$WORKFLOW" '^  contents: read$' "iOS Build must use read-only repo
 require_text "$WORKFLOW" '^concurrency:$' "iOS Build must cancel obsolete PR runs"
 require_text "$WORKFLOW" "pull_request\\.draft == false" "full CI must wait until a draft PR is ready"
 require_text "$WORKFLOW" 'pr-workflow-tests\.sh' "CI must validate the PR workflow contract"
+require_text "$WORKFLOW" '-testLanguage pt-BR' "Swift tests must use the expected PT-BR language"
+require_text "$WORKFLOW" '-testRegion BR' "Swift tests must use the expected Brazilian region"
 
 require_text "$PR_TEMPLATE" '^## O que muda$' "PR template must summarize the change"
 require_text "$PR_TEMPLATE" '^## Por que entra nesta versão$' "PR template must justify release selection"

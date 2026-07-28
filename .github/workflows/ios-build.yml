@@ -75,6 +75,8 @@ jobs:
             -workspace Camerae.xcworkspace \
             -scheme Camerae \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -testLanguage pt-BR \
+            -testRegion BR \
             CODE_SIGNING_ALLOWED=NO \
             test
 
