@@ -1,5 +1,11 @@
 #include? "../Pods/Target Support Files/Pods-Camerae/Pods-Camerae.debug.xcconfig"
 #include "Signing.xcconfig"
 
+PRODUCT_BUNDLE_IDENTIFIER = com.espindola.camerae.qa
+CAMERAE_DISPLAY_NAME = Camerae QA
+GOOGLE_SERVICE_INFO_PLIST = $(SRCROOT)/Config/Firebase/QA/GoogleService-Info.plist
 CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = NO
-CAMERAE_RELEASE_CHANNEL = debug
+CAMERAE_RELEASE_CHANNEL = qa-debug
+CODE_SIGN_STYLE = Manual
+CODE_SIGN_IDENTITY = Apple Development
+PROVISIONING_PROFILE_SPECIFIER[sdk=iphoneos*] = Camerae QA Dev

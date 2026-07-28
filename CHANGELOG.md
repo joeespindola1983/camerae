@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Added an independently installable `Camerae QA` iOS build using `com.espindola.camerae.qa`.
+- Added build-time Firebase environment selection and fail-closed IPA/archive validation.
+- Added TDD contracts that prevent QA builds, Firebase apps, provisioning assets, and App Store archives from crossing environments.
+
+### Changed
+
+- Made Debug builds use the QA identity so local Xcode runs no longer replace the installed App Store application.
+- Made Firebase App Distribution archive the dedicated QA scheme and Firebase application by default.
+- Expanded Crashlytics symbol uploads to signed QA archives while retaining the separate `qa` release channel.
+- Documented pull requests as mandatory for product, build, and release-process changes.
+
 ## [9.0.0] - 2026-07-27
 
 **Status:** QA candidate

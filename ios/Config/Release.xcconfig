@@ -1,5 +1,8 @@
 #include? "../Pods/Target Support Files/Pods-Camerae/Pods-Camerae.release.xcconfig"
 #include "Signing.xcconfig"
 
+PRODUCT_BUNDLE_IDENTIFIER = com.espindola.camerae
+CAMERAE_DISPLAY_NAME = Camerae
+GOOGLE_SERVICE_INFO_PLIST = $(SRCROOT)/Config/Firebase/Production/GoogleService-Info.plist
 CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES
 CAMERAE_RELEASE_CHANNEL = release

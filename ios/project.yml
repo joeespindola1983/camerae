@@ -4,6 +4,10 @@ options:
   developmentLanguage: pt-BR
   deploymentTarget:
     iOS: "17.0"
+configs:
+  Debug: debug
+  QA: release
+  Release: release
 settings:
   base:
     SWIFT_VERSION: "5.0"
@@ -76,15 +80,14 @@ targets:
       - path: Camerae
         excludes:
           - DeepSNRDenoiser.swift
-      - path: Camerae/GoogleService-Info.plist
-        buildPhase: resources
     configFiles:
       Debug: Config/Debug.xcconfig
+      QA: Config/QA.xcconfig
       Release: Config/Release.xcconfig
     info:
       path: Camerae/Info.plist
       properties:
-        CFBundleDisplayName: Camerae
+        CFBundleDisplayName: $(CAMERAE_DISPLAY_NAME)
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         ITSAppUsesNonExemptEncryption: false
@@ -109,24 +112,43 @@ targets:
           - arm64
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         SWIFT_OBJC_BRIDGING_HEADER: Camerae/Camerae-Bridging-Header.h
         OTHER_LDFLAGS: $(inherited) -ObjC
         DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+      configs:
+        Debug:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: Apple Development
+          PROVISIONING_PROFILE_SPECIFIER: Camerae QA Dev
+        QA:
+          CODE_SIGN_STYLE: Manual
+          CODE_SIGN_IDENTITY: iPhone Distribution
+          PROVISIONING_PROFILE_SPECIFIER: Camerae Ad Hoc
     dependencies:
       - target: CameraeCore
       - target: CameraeMedia
       - target: CameraeVision
+    postCompileScripts:
+      - name: Select Firebase Environment
+        basedOnDependencyAnalysis: true
+        path: scripts/copy-firebase-config.sh
+        inputFiles:
+          - $(GOOGLE_SERVICE_INFO_PLIST)
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/GoogleService-Info.plist
     postBuildScripts:
       - name: Upload Crashlytics Symbols
         basedOnDependencyAnalysis: false
         script: |
-          if [ "${CONFIGURATION}" = "Release" ]; then
-            "${PODS_ROOT}/FirebaseCrashlytics/run"
-          else
-            echo "Skipping Crashlytics symbol upload for ${CONFIGURATION}"
-          fi
+          case "${CONFIGURATION}" in
+            QA|Release)
+              "${PODS_ROOT}/FirebaseCrashlytics/run"
+              ;;
+            *)
+              echo "Skipping Crashlytics symbol upload for ${CONFIGURATION}"
+              ;;
+          esac
         inputFiles:
           - ${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}
           - ${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}/Contents/Resources/DWARF/${TARGET_NAME}
@@ -203,6 +225,25 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.espindola.camerae.ui-tests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
+  Camerae QA:
+    build:
+      targets:
+        Camerae: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - CameraeCoreTests
+        - CameraeMediaTests
+        - CameraeVisionTests
+        - CameraeIntegrationTests
+    profile:
+      config: QA
+    analyze:
+      config: Debug
+    archive:
+      config: QA
   Camerae:
     build:
       targets:
