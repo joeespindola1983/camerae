@@ -48,6 +48,12 @@ rg -q '^CAMERAE_DISPLAY_NAME = Camerae QA$' "$IOS_DIR/Config/QA.xcconfig" \
   || fail "QA archives must be visibly identified as Camerae QA"
 rg -q '^CAMERAE_DISPLAY_NAME = Camerae$' "$IOS_DIR/Config/Release.xcconfig" \
   || fail "Release must retain the Camerae display name"
+rg -q '^ASSETCATALOG_COMPILER_APPICON_NAME = AppIconQA$' "$IOS_DIR/Config/Debug.xcconfig" \
+  || fail "Debug must use the QA-badged app icon"
+rg -q '^ASSETCATALOG_COMPILER_APPICON_NAME = AppIconQA$' "$IOS_DIR/Config/QA.xcconfig" \
+  || fail "QA archives must use the QA-badged app icon"
+rg -q '^ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon$' "$IOS_DIR/Config/Release.xcconfig" \
+  || fail "Release must retain the production app icon"
 rg -q '^CODE_SIGN_STYLE = Manual$' "$IOS_DIR/Config/Debug.xcconfig" \
   || fail "Debug must use the explicit QA development profile"
 rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = Camerae QA Dev$' "$IOS_DIR/Config/Debug.xcconfig" \
@@ -101,5 +107,11 @@ rg -q '^\*\.mobileprovision$' "$ROOT_DIR/.gitignore" \
 
 rg -q 'environment-contract-tests\.sh' "$IOS_DIR/scripts/release-gate.sh" \
   || fail "release gate must validate environment separation"
+
+QA_ICON_DIR="$IOS_DIR/Camerae/Assets.xcassets/AppIconQA.appiconset"
+[[ -f "$QA_ICON_DIR/Contents.json" ]] || fail "QA app icon set is missing"
+for icon in Icon-20.png Icon-20@2x.png Icon-20@3x.png Icon-29.png Icon-29@2x.png Icon-29@3x.png Icon-40.png Icon-40@2x.png Icon-40@3x.png Icon-60@2x.png Icon-60@3x.png Icon-76.png Icon-76@2x.png Icon-83.5@2x.png Icon-1024.png; do
+  [[ -s "$QA_ICON_DIR/$icon" ]] || fail "QA app icon is missing $icon"
+done
 
 echo "QA and production environment contract tests passed"

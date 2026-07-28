@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Added
 
 - Added an independently installable `Camerae QA` iOS build using `com.espindola.camerae.qa`.
+- Added a dedicated QA-badged application icon derived from the production mark.
 - Added build-time Firebase environment selection and fail-closed IPA/archive validation.
 - Added TDD contracts that prevent QA builds, Firebase apps, provisioning assets, and App Store archives from crossing environments.
 

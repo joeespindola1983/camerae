@@ -10,7 +10,9 @@ independent iOS applications.
 | App Store/TestFlight | `Camerae` | `Release` | `com.espindola.camerae` | Camerae | Production |
 
 `Debug` intentionally uses the QA identity. Running the project from Xcode must
-never replace the application installed from the App Store.
+never replace the application installed from the App Store. QA builds also use a
+dedicated icon with a visible `QA` badge; Release retains the unmodified
+production icon.
 
 ## Firebase configuration
 
