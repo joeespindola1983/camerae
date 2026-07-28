@@ -58,6 +58,16 @@ struct CameraeNextProjectCatalogTests {
         #expect(CameraeNextProjectCatalogLayout(module: .astrophotography).contentWidth(containerWidth: 393) == 361)
     }
 
+    @Test("project rows reserve a double-size thumbnail and an independent information column")
+    func projectRowLayout() {
+        let layout = ProjectListRowLayout(containerWidth: 361)
+
+        #expect(layout.thumbnailSize == 120)
+        #expect(layout.minimumHeight == 160)
+        #expect(layout.contentWidth == 193)
+        #expect(layout.thumbnailRange.upperBound <= layout.contentRange.lowerBound)
+    }
+
     private func makeProject(
         name: String,
         module: CameraModule,

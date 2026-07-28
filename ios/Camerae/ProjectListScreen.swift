@@ -381,39 +381,74 @@ struct ProjectListHeroCard: View {
     }
 }
 
+struct ProjectListRowLayout: Equatable {
+    let containerWidth: CGFloat
+    let horizontalPadding: CGFloat = 18
+    let spacing: CGFloat = 12
+    let thumbnailSize: CGFloat = 120
+    let minimumHeight: CGFloat = 160
+
+    var contentWidth: CGFloat {
+        max(0, containerWidth - (horizontalPadding * 2) - spacing - thumbnailSize)
+    }
+
+    var thumbnailRange: ClosedRange<CGFloat> {
+        horizontalPadding...(horizontalPadding + thumbnailSize)
+    }
+
+    var contentRange: ClosedRange<CGFloat> {
+        let lowerBound = horizontalPadding + thumbnailSize + spacing
+        return lowerBound...(lowerBound + contentWidth)
+    }
+}
+
 struct ProjectListRow: View {
     let project: CameraProject
     let theme: ProjectListTheme
-    private var completed: Bool { (project.summary?.mediaCount ?? 0) > 0 }
+    private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
         HStack(spacing: 12) {
-            ProjectListThumbnail(imageURL: project.referenceFrameURL, label: "\(project.summary?.mediaCount ?? 0)f", height: 60, cornerRadius: 12, theme: theme)
-                .frame(width: 60)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(project.name)
-                    .font(.custom("Outfit-SemiBold", size: 14, relativeTo: .subheadline))
-                    .foregroundStyle(theme.text)
-                    .lineLimit(1)
-                Text(ProjectRowSummary(project: project).subtitle)
-                    .font(.custom("Outfit-Regular", size: 10, relativeTo: .caption2))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-                HStack {
-                    Text(completed ? CameraeL10n.statusCompleted : CameraeL10n.statusInProgress)
-                        .foregroundStyle(completed ? Color.green : theme.accent)
-                    Spacer()
-                    Text(project.updatedAt.formatted(date: .abbreviated, time: .shortened))
+            ProjectListThumbnail(
+                imageURL: project.referenceFrameURL,
+                label: "\(project.summary?.mediaCount ?? 0)f",
+                height: layout.thumbnailSize,
+                cornerRadius: 14,
+                theme: theme
+            )
+                .frame(width: layout.thumbnailSize, height: layout.thumbnailSize)
+            VStack(alignment: .leading, spacing: 7) {
+                HStack(spacing: 6) {
+                    Text(project.name)
+                        .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
+                        .foregroundStyle(theme.text)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
                         .foregroundStyle(theme.muted)
                 }
-                .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+                Text(
+                    project.captureConfiguration?.projectSummary
+                        ?? ProjectRowSummary(project: project).subtitle.uppercased()
+                )
+                    .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                    .foregroundStyle(theme.accent)
+                    .lineLimit(1)
+                Text(ProjectRowSummary(project: project).subtitle)
+                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+                Text(project.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(theme.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(12)
-        .frame(minHeight: 88)
+        .padding(.horizontal, layout.horizontalPadding)
+        .padding(.vertical, 20)
+        .frame(minHeight: layout.minimumHeight)
         .background(theme.card)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(theme.border, lineWidth: 1) }

@@ -6,6 +6,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Added project-level capture configuration locking so Photo, Timelapse, and Video projects automatically reuse the type and exact settings selected for their first capture.
+
+### Changed
+
+- Doubled project-list thumbnails to 120 points and reorganized project metadata into a dedicated column that cannot overlap the image.
+- Added the fixed project capture type and configuration summary to project cards and subsequent capture setup.
+
 ## [9.1.0] - 2026-07-28
 
 **Status:** Release candidate

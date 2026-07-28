@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import CameraeCore
 @testable import Camerae
@@ -15,6 +16,47 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(configuration.cameraZoomFactor == 1)
         #expect(configuration.intervalSeconds == 5)
         #expect(configuration.referenceOpacity == 0.5)
+    }
+
+    @Test("the first project capture configuration remains fixed for later captures")
+    func projectCaptureConfigurationLock() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeCaptureDefaults-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        var initialVideo = CameraeNextCaptureConfiguration.repeatableDefault
+        initialVideo.repeatableKind = .video
+        initialVideo.videoDurationSeconds = 120
+        initialVideo.videoSettings = WorkflowVideoSettings(resolution: .fourK, fps: 30, quality: .max)
+        initialVideo.cameraLens = .telephoto
+        initialVideo.cameraZoomFactor = 2
+        let changedLater = CameraeNextCaptureConfiguration.repeatableDefault
+
+        let first = try store.saveInitial(initialVideo)
+        let second = try store.saveInitial(changedLater)
+
+        #expect(first == initialVideo)
+        #expect(second == initialVideo)
+        #expect(try store.load() == initialVideo)
+    }
+
+    @Test(
+        "photo, timelapse, and video projects restore their initial capture kind",
+        arguments: RepeatableCaptureKind.captureOptions
+    )
+    func projectCaptureKind(kind: RepeatableCaptureKind) throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeCaptureKind-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        var configuration = CameraeNextCaptureConfiguration.repeatableDefault
+        configuration.repeatableKind = kind
+
+        _ = try store.saveInitial(configuration)
+
+        #expect(try store.load()?.repeatableKind == kind)
     }
 
     @Test("Astro starts from the photo stacking defaults")

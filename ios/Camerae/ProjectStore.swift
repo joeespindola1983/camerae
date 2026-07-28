@@ -57,6 +57,10 @@ struct CameraProject: Identifiable, Equatable, Hashable {
         return directoryURL.appendingPathComponent(key)
     }
 
+    var captureConfiguration: CameraeNextCaptureConfiguration? {
+        try? ProjectCaptureConfigurationStore(projectDirectory: directoryURL).load()
+    }
+
     var libraryRootURL: URL {
         directoryURL
             .deletingLastPathComponent()
