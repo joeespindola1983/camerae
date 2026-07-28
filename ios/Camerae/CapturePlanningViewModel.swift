@@ -104,6 +104,9 @@ struct CapturePreflightMetricsPresentation: Equatable {
 
     init(plan: CapturePlan, estimate: CaptureEstimate) {
         switch plan.workflow {
+        case .repeatablePhoto:
+            primary = CameraeL10n.onePhoto
+            secondary = "\(plan.sourceFormat.rawValue.uppercased()) • \(CameraeL10n.captureSize(Self.bytes(estimate.captureBytes)))"
         case .repeatableVideo:
             primary = CameraeL10n.videoDuration(Self.duration(plan.plannedDuration))
             secondary = "\(Self.resolution(plan.resolution)) • \(plan.captureFPS ?? 0) FPS • \(CameraeL10n.captureSize(Self.bytes(estimate.captureBytes)))"

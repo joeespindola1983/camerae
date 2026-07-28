@@ -45,6 +45,7 @@ enum CameraeNextCaptureCompletionRoute: Equatable, Sendable {
 }
 
 enum CameraeNextSessionOpenRoute: Equatable, Sendable {
+    case image(URL)
     case video(URL)
     case generateVideo
     case astroProcessing
@@ -52,6 +53,8 @@ enum CameraeNextSessionOpenRoute: Equatable, Sendable {
     init(summary: TimelapseSessionSummary) {
         if summary.session.module == .astrophotography {
             self = .astroProcessing
+        } else if summary.captureKind == .photo, let url = summary.referenceFrameURL {
+            self = .image(url)
         } else if let url = summary.alignedVideoURL ?? summary.videoClipURL ?? summary.videoURL {
             self = .video(url)
         } else {
@@ -74,6 +77,9 @@ struct CameraeNextSessionCardPresentation: Equatable, Sendable {
         if summary.session.module == .astrophotography {
             statusText = "ABRIR PROCESSAMENTO"
             trailingAction = .menu
+        } else if summary.captureKind == .photo, let url = summary.referenceFrameURL {
+            statusText = "TOQUE PARA ABRIR"
+            trailingAction = .share(url)
         } else if summary.captureKind == .video,
                   let url = summary.alignedVideoURL ?? summary.videoClipURL ?? summary.videoURL {
             statusText = "TOQUE PARA REPRODUZIR"
@@ -168,12 +174,12 @@ struct CameraeNextSessionCatalogModel: Equatable {
     init(summaries: [TimelapseSessionSummary]) {
         let populated = summaries.filter { $0.frameCount > 0 }
         let explicitReference = populated
-            .filter { $0.captureKind == .photo }
+            .filter { $0.session.purpose == .projectReference }
             .sorted { $0.session.createdAt > $1.session.createdAt }
             .compactMap(\.referenceFrameURL)
             .first
         let automaticReference = populated
-            .filter { $0.captureKind != .photo }
+            .filter { $0.session.purpose != .projectReference }
             .sorted { $0.session.createdAt < $1.session.createdAt }
             .compactMap(\.referenceFrameURL)
             .first
@@ -188,7 +194,7 @@ struct CameraeNextSessionCatalogModel: Equatable {
             .compactMap(\.referenceFrameURL)
             .first
         sessions = populated
-            .filter { $0.captureKind != .photo }
+            .filter { $0.session.purpose != .projectReference }
             .sorted { $0.session.createdAt > $1.session.createdAt }
     }
 
@@ -223,6 +229,7 @@ struct CameraeNextSessionCatalogView: View {
     @State private var summaries: [TimelapseSessionSummary] = []
     @State private var selectedAstroSession: TimelapseSessionSummary?
     @State private var selectedVideo: CameraeNextSessionVideoItem?
+    @State private var selectedImage: CameraeNextSessionImageItem?
     @State private var pendingDeletion: TimelapseSession?
     @State private var renderingSessionID: UUID?
     @State private var shareItem: CameraeNextSessionShareItem?
@@ -275,6 +282,11 @@ struct CameraeNextSessionCatalogView: View {
         .fullScreenCover(item: $selectedVideo) { item in
             CameraeNextSessionVideoPlayerView(url: item.url, title: item.title) {
                 selectedVideo = nil
+            }
+        }
+        .fullScreenCover(item: $selectedImage) { item in
+            CameraeNextSessionImageViewer(item: item) {
+                selectedImage = nil
             }
         }
         .sheet(item: $pendingVideoGeneration) { summary in
@@ -584,7 +596,11 @@ struct CameraeNextSessionCatalogView: View {
                     .background(theme.surface, in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Compartilhar vídeo")
+            .accessibilityLabel(
+                summary.captureKind == .photo
+                    ? "Compartilhar foto"
+                    : "Compartilhar vídeo"
+            )
         case let .videoMenu(url):
             Menu {
                 Button("Processar alinhamento", systemImage: "viewfinder") {
@@ -635,6 +651,8 @@ struct CameraeNextSessionCatalogView: View {
 
     private func open(_ summary: TimelapseSessionSummary) {
         switch CameraeNextSessionOpenRoute(summary: summary) {
+        case let .image(url):
+            selectedImage = .init(url: url, title: "Foto")
         case let .video(url):
             selectedVideo = .init(url: url, title: playerTitle(summary))
         case .generateVideo:
@@ -645,7 +663,11 @@ struct CameraeNextSessionCatalogView: View {
     }
 
     private func playerTitle(_ summary: TimelapseSessionSummary) -> String {
-        summary.captureKind == .video ? "Vídeo" : "Timelapse"
+        switch summary.captureKind {
+        case .photo: "Foto"
+        case .video: "Vídeo"
+        case .timelapse: "Timelapse"
+        }
     }
 
     private var alignmentSettingsStore: CameraeNextRepeatableAlignmentSettingsStore {
@@ -701,6 +723,8 @@ struct CameraeNextSessionCatalogView: View {
 
     private func sessionAccessibilityLabel(_ summary: TimelapseSessionSummary) -> String {
         switch CameraeNextSessionOpenRoute(summary: summary) {
+        case .image:
+            "Abrir foto da captura"
         case .video:
             "Reproduzir vídeo da captura com \(summary.frameCount) imagens"
         case .generateVideo:
@@ -779,6 +803,46 @@ private struct CameraeNextSessionVideoItem: Identifiable {
     let url: URL
     let title: String
     var id: String { url.absoluteString }
+}
+
+private struct CameraeNextSessionImageItem: Identifiable {
+    let url: URL
+    let title: String
+    var id: String { url.absoluteString }
+}
+
+private struct CameraeNextSessionImageViewer: View {
+    let item: CameraeNextSessionImageItem
+    let onClose: () -> Void
+    @State private var isSharing = false
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            Color.black.ignoresSafeArea()
+            if let image = UIImage(contentsOfFile: item.url.path) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            HStack {
+                Button(action: onClose) {
+                    Image(systemName: "xmark")
+                }
+                Spacer()
+                Text(item.title).font(.headline)
+                Spacer()
+                Button { isSharing = true } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+            .foregroundStyle(.white)
+            .padding()
+        }
+        .sheet(isPresented: $isSharing) {
+            ShareSheet(items: [item.url])
+        }
+    }
 }
 
 private struct CameraeNextSessionVideoPlayerView: View {

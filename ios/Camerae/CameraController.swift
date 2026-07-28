@@ -502,7 +502,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    func captureSinglePhoto() async {
+    func captureSinglePhoto(plan: CapturePlan) async {
         guard !isTimelapseRunning, !isSinglePhotoCaptureRunning else { return }
         isSinglePhotoCaptureRunning = true
         defer { isSinglePhotoCaptureRunning = false }
@@ -510,10 +510,14 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         do {
             currentSession = try store.createSession(
                 captureKind: .photo,
+                purpose: .capture,
                 cameraLens: selectedRepeatableLens,
                 cameraZoomFactor: selectedCameraZoomFactor
             )
             completedSession = nil
+            if let currentSession {
+                try store.saveCapturePlan(plan, in: currentSession)
+            }
             frameCount = 0
             astroCompositeFrameCount = 0
             astroBatchProgressLabel = "-"

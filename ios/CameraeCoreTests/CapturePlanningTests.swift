@@ -63,6 +63,27 @@ struct CapturePlanningTests {
         #expect(estimate.renderedDuration == 30)
     }
 
+    @Test("Repeatable photo plans reserve exactly one full-sensor frame")
+    func repeatablePhotoEstimate() throws {
+        let plan = try CapturePlan(
+            workflow: .repeatablePhoto,
+            plannedDuration: 1,
+            captureInterval: nil,
+            sourceFormat: .heic,
+            captureFPS: nil,
+            renderFPS: nil,
+            resolution: .fullSensor,
+            astroPipeline: nil
+        )
+        let estimate = try CapturePlanEstimator().estimate(
+            plan: plan,
+            sizeProfile: .init(bytesPerFrameUpperBound: 4_000_000)
+        )
+        #expect(estimate.expectedFrameCount == 1)
+        #expect(estimate.captureBytes == 4_000_000)
+        #expect(estimate.renderedDuration == nil)
+    }
+
     @Test("invalid workflow combinations are rejected before capture")
     func invalidPlans() {
         #expect(throws: CapturePlanError.self) {

@@ -6,6 +6,11 @@ public enum SessionCaptureKind: String, Codable, CaseIterable, Hashable, Sendabl
     case photo
 }
 
+public enum SessionPurpose: String, Codable, CaseIterable, Hashable, Sendable {
+    case capture
+    case projectReference
+}
+
 public struct SessionMotion: Codable, Equatable, Hashable, Sendable {
     public let x: Double
     public let y: Double
@@ -39,6 +44,7 @@ public struct SessionRecord: Identifiable, Equatable, Hashable, Sendable {
     public let projectID: UUID
     public let module: ProjectModule
     public let captureKind: SessionCaptureKind
+    public let purpose: SessionPurpose
     public let name: String
     public let directoryURL: URL
     public let createdAt: Date
@@ -53,6 +59,7 @@ public struct SessionRecord: Identifiable, Equatable, Hashable, Sendable {
         projectID: UUID,
         module: ProjectModule,
         captureKind: SessionCaptureKind,
+        purpose: SessionPurpose = .capture,
         name: String,
         directoryURL: URL,
         createdAt: Date,
@@ -66,6 +73,7 @@ public struct SessionRecord: Identifiable, Equatable, Hashable, Sendable {
         self.projectID = projectID
         self.module = module
         self.captureKind = captureKind
+        self.purpose = purpose
         self.name = name
         self.directoryURL = directoryURL
         self.createdAt = createdAt

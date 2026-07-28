@@ -42,6 +42,19 @@ struct CameraeNextSessionCatalogTests {
         #expect(CameraeNextSessionOpenRoute(summary: summary) == .video(url))
     }
 
+    @Test func openingRepeatablePhotoRoutesToFullScreenImage() {
+        let url = URL(fileURLWithPath: "/tmp/photo.heic")
+        let summary = fixture(
+            frameCount: 1,
+            captureKind: .photo,
+            purpose: .capture,
+            referenceFrameURL: url
+        )
+
+        #expect(CameraeNextSessionOpenRoute(summary: summary) == .image(url))
+        #expect(CameraeNextSessionCardPresentation(summary: summary).trailingAction == .share(url))
+    }
+
     @Test func openingRepeatableCaptureWithoutRenderedVideoNeverStartsCamera() {
         let summary = fixture(frameCount: 8)
 
@@ -297,6 +310,7 @@ struct CameraeNextSessionCatalogTests {
         videoClipURL: URL? = nil,
         alignedVideoURL: URL? = nil,
         captureKind: RepeatableCaptureKind = .timelapse,
+        purpose: TimelapseSession.Purpose? = nil,
         referenceFrameURL: URL? = nil,
         createdAt: Date = .now
     ) -> TimelapseSessionSummary {
@@ -305,6 +319,7 @@ struct CameraeNextSessionCatalogTests {
             projectID: UUID(),
             module: module,
             captureKind: captureKind,
+            purpose: purpose ?? (module == .repeatable && captureKind == .photo ? .projectReference : .capture),
             referenceMotion: nil,
             referenceGeoPose: nil,
             referenceOrientation: nil,

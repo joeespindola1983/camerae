@@ -165,7 +165,7 @@ done
 # transient and can exhaust disk space during a 12-profile matrix.
 find "$ROOT_DIR/.build/ui-evidence/Logs/Test" -mindepth 1 -depth -delete 2>/dev/null || true
 
-expected=14
+expected=15
 actual="$(find "$OUTPUT_DIR" -maxdepth 1 -name '*.png' -type f | wc -l | tr -d ' ')"
 [[ "$actual" == "$expected" ]] || { echo "Expected $expected screenshots, found $actual" >&2; exit 1; }
 [[ -f "$OUTPUT_DIR/manifest.json" ]] || { echo "Missing manifest.json" >&2; exit 1; }

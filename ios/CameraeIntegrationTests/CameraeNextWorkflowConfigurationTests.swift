@@ -82,6 +82,22 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(timelapsePresentation.showsInterval)
     }
 
+    @Test("Repeatable photo is a single-frame workflow without timed or Astro controls")
+    func repeatablePhotoMode() {
+        var photo = CameraeNextCaptureConfiguration.repeatableDefault
+        photo.repeatableKind = .photo
+        let presentation = CameraeNextWorkflowConfigurationPresentation(configuration: photo)
+
+        #expect(photo.estimatedFrameCount == 1)
+        #expect(presentation.navigationTitle == "Nova foto")
+        #expect(presentation.adjustmentTitles == ["EV"])
+        #expect(presentation.durationLabels.isEmpty)
+        #expect(!presentation.showsInterval)
+        #expect(!presentation.showsVideoSettings)
+        #expect(!presentation.showsAstroPhotoStacking)
+        #expect(CameraeNextCaptureModeOption.repeatableItems.map(\.value) == [.photo, .timelapse, .video])
+    }
+
     @Test("Astro photo presentation uses stacking instead of a duration")
     func astroPresentation() {
         let presentation = CameraeNextWorkflowConfigurationPresentation(

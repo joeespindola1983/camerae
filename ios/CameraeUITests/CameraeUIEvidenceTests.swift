@@ -31,25 +31,28 @@ final class CameraeUIEvidenceTests: XCTestCase {
 
         try capture("04-repeatable-configuracao-timelapse", title: "Repeatable · Configuração Timelapse", app: app)
 
-        element(localizedTitle(ptBR: "Vídeo", es: "Vídeo", en: "Video", fr: "Vidéo", de: "Video", ru: "Видео"), app: app).tap()
-        try capture("05-repeatable-configuracao-video", title: "Repeatable · Configuração Vídeo", app: app)
+        element("camerae.segment.photo", app: app).tap()
+        try capture("05-repeatable-configuracao-foto", title: "Repeatable · Configuração Foto", app: app)
+
+        element("camerae.segment.video", app: app).tap()
+        try capture("06-repeatable-configuracao-video", title: "Repeatable · Configuração Vídeo", app: app)
 
         element(localizedTitle(ptBR: "Capturas", es: "Capturas", en: "Captures", fr: "Captures", de: "Aufnahmen", ru: "Съёмки"), app: app).tap()
-        try capture("06-repeatable-capturas", title: "Repeatable · Capturas", app: app)
+        try capture("07-repeatable-capturas", title: "Repeatable · Capturas", app: app)
 
         relaunch(app)
         openWorkflow(.astrophotography, app: app)
-        try capture("07-astro-projetos", title: "Astro · Projetos", app: app)
+        try capture("08-astro-projetos", title: "Astro · Projetos", app: app)
 
         openNewProject(app: app)
-        try capture("08-astro-novo-projeto", title: "Astro · Novo projeto", app: app)
+        try capture("09-astro-novo-projeto", title: "Astro · Novo projeto", app: app)
         createProject(app: app)
 
-        try capture("09-astro-configuracao", title: "Astro · Configuração", app: app)
+        try capture("10-astro-configuracao", title: "Astro · Configuração", app: app)
 
         relaunch(app)
         openWorkflow(.edit, app: app)
-        try capture("10-editor-projetos", title: "Editor · Projetos", app: app)
+        try capture("11-editor-projetos", title: "Editor · Projetos", app: app)
 
         relaunch(app)
         try captureSettingsEvidence(app: app)
@@ -124,26 +127,26 @@ final class CameraeUIEvidenceTests: XCTestCase {
         settingsButton.tap()
 
         XCTAssertTrue(element("settings.overview", app: app).waitForExistence(timeout: 8))
-        try capture("11-settings-overview", title: "Configurações · Visão geral", app: app)
+        try capture("12-settings-overview", title: "Configurações · Visão geral", app: app)
 
         try captureSettingsPage(
             openIdentifier: "settings.privacy.open",
             pageIdentifier: "settings.privacy",
-            filename: "12-settings-privacy",
+            filename: "13-settings-privacy",
             title: "Configurações · Privacidade e diagnóstico",
             app: app
         )
         try captureSettingsPage(
             openIdentifier: "settings.capture.open",
             pageIdentifier: "settings.capture",
-            filename: "13-settings-capture",
+            filename: "14-settings-capture",
             title: "Configurações · Captura e desempenho",
             app: app
         )
         try captureSettingsPage(
             openIdentifier: "settings.storage.open",
             pageIdentifier: "settings.storage",
-            filename: "14-settings-storage",
+            filename: "15-settings-storage",
             title: "Configurações · Armazenamento",
             app: app
         )

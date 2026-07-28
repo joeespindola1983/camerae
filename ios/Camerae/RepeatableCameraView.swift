@@ -1259,7 +1259,12 @@ struct RepeatableCameraView: View {
                         }
                         await camera.toggleVideoRecording(plan: plan, settings: videoSettings)
                     case .photo:
-                        await camera.captureSinglePhoto()
+                        guard let plan = planning.result?.resolvedPlan else { return }
+                        if let preflight = planning.result {
+                            camera.configureCapturePreflight(preflight)
+                        }
+                        camera.setCaptureSourceFormat(plan.sourceFormat)
+                        await camera.captureSinglePhoto(plan: plan)
                     }
                 }
             } label: {
@@ -1371,7 +1376,12 @@ struct RepeatableCameraView: View {
             }
             await camera.toggleVideoRecording(plan: plan, settings: videoSettings)
         case .photo:
-            await camera.captureSinglePhoto()
+            guard let plan = planning.result?.resolvedPlan else { return }
+            if let preflight = planning.result {
+                camera.configureCapturePreflight(preflight)
+            }
+            camera.setCaptureSourceFormat(plan.sourceFormat)
+            await camera.captureSinglePhoto(plan: plan)
         }
     }
 
@@ -1405,14 +1415,15 @@ struct RepeatableCameraView: View {
     }
 
     private func refreshPreflight() async {
-        guard selectedCaptureKind != .photo else { return }
         do {
-            let workflow: CaptureWorkflow = selectedCaptureKind == .video
-                ? .repeatableVideo
-                : .repeatableTimelapse
+            let workflow: CaptureWorkflow = switch selectedCaptureKind {
+            case .photo: .repeatablePhoto
+            case .video: .repeatableVideo
+            case .timelapse: .repeatableTimelapse
+            }
             let plan = try CapturePlan(
                 workflow: workflow,
-                plannedDuration: plannedDuration,
+                plannedDuration: selectedCaptureKind == .photo ? 1 : plannedDuration,
                 captureInterval: selectedCaptureKind == .timelapse ? intervalSeconds : nil,
                 sourceFormat: sourceFormat,
                 captureFPS: selectedCaptureKind == .video ? videoSettings.fps : nil,

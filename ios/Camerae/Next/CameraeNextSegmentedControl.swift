@@ -39,6 +39,7 @@ struct CameraeNextSegmentedControl<Value: Hashable>: View {
                         )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("camerae.segment.\(String(describing: item.value))")
                 .accessibilityAddTraits(selection == item.value ? .isSelected : [])
             }
         }
@@ -59,8 +60,9 @@ enum CameraeNextCaptureModeOption: String, Hashable, Sendable {
     case manual
 
     static var repeatableItems: [CameraeNextSegmentItem<Self>] { [
+        CameraeNextSegmentItem(value: Self.photo, label: CameraeL10n.photo),
+        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse),
         CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video),
-        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse)
     ] }
 
     static var astroItems: [CameraeNextSegmentItem<Self>] { [

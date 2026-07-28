@@ -4,10 +4,16 @@ import Foundation
 import UIKit
 
 struct TimelapseSession: Identifiable, Equatable, Hashable {
+    enum Purpose: String, Codable, Equatable, Hashable {
+        case capture
+        case projectReference
+    }
+
     let id: UUID
     let projectID: UUID
     let module: CameraModule
     let captureKind: RepeatableCaptureKind
+    let purpose: Purpose
     let referenceMotion: MotionAttitude?
     let referenceGeoPose: GeoPose?
     let referenceOrientation: CaptureDisplayOrientation?
@@ -22,6 +28,7 @@ struct TimelapseSession: Identifiable, Equatable, Hashable {
         projectID: UUID,
         module: CameraModule,
         captureKind: RepeatableCaptureKind,
+        purpose: Purpose = .capture,
         referenceMotion: MotionAttitude?,
         referenceGeoPose: GeoPose?,
         referenceOrientation: CaptureDisplayOrientation?,
@@ -35,6 +42,7 @@ struct TimelapseSession: Identifiable, Equatable, Hashable {
         self.projectID = projectID
         self.module = module
         self.captureKind = captureKind
+        self.purpose = purpose
         self.referenceMotion = referenceMotion
         self.referenceGeoPose = referenceGeoPose
         self.referenceOrientation = referenceOrientation
@@ -111,6 +119,7 @@ final class TimelapseSessionStore {
 
     func createSession(
         captureKind: RepeatableCaptureKind = .timelapse,
+        purpose: TimelapseSession.Purpose = .capture,
         cameraLens: RepeatableCameraLens? = nil,
         cameraZoomFactor: Double? = nil
     ) throws -> TimelapseSession {
@@ -128,6 +137,7 @@ final class TimelapseSessionStore {
             projectID: project.id,
             module: project.module,
             captureKind: captureKind,
+            purpose: purpose,
             referenceMotion: nil,
             referenceGeoPose: nil,
             referenceOrientation: nil,
@@ -163,9 +173,10 @@ final class TimelapseSessionStore {
             throw TimelapseStoreError.referenceImageEncodingFailed
         }
 
-        let previousReferences = (try? loadSessions())?.filter { $0.captureKind == .photo } ?? []
+        let previousReferences = (try? loadSessions())?.filter { $0.purpose == .projectReference } ?? []
         let session = try createSession(
             captureKind: .photo,
+            purpose: .projectReference,
             cameraLens: cameraLens,
             cameraZoomFactor: cameraZoomFactor
         )
@@ -239,6 +250,7 @@ final class TimelapseSessionStore {
             projectID: session.projectID,
             module: session.module,
             captureKind: session.captureKind,
+            purpose: session.purpose,
             referenceMotion: motion,
             referenceGeoPose: session.referenceGeoPose,
             referenceOrientation: session.referenceOrientation,
@@ -258,6 +270,7 @@ final class TimelapseSessionStore {
             projectID: session.projectID,
             module: session.module,
             captureKind: session.captureKind,
+            purpose: session.purpose,
             referenceMotion: session.referenceMotion,
             referenceGeoPose: geoPose,
             referenceOrientation: session.referenceOrientation,
@@ -280,6 +293,7 @@ final class TimelapseSessionStore {
             projectID: session.projectID,
             module: session.module,
             captureKind: session.captureKind,
+            purpose: session.purpose,
             referenceMotion: session.referenceMotion,
             referenceGeoPose: session.referenceGeoPose,
             referenceOrientation: orientation,
@@ -331,6 +345,7 @@ final class TimelapseSessionStore {
                 projectID: record.projectID,
                 module: CameraModule(rawValue: record.module.rawValue) ?? project.module,
                 captureKind: RepeatableCaptureKind(rawValue: record.captureKind.rawValue) ?? .timelapse,
+                purpose: record.purpose == .projectReference ? .projectReference : .capture,
                 referenceMotion: record.referenceMotion.map { MotionAttitude(x: $0.x, y: $0.y, z: $0.z) },
                 referenceGeoPose: record.referenceGeoPose.map {
                     GeoPose(
@@ -398,12 +413,12 @@ final class TimelapseSessionStore {
 
         let populated = sessions.filter { frameCount(in: $0) > 0 }
         let explicitReference = populated
-            .filter { $0.captureKind == .photo }
+            .filter { $0.purpose == .projectReference }
             .sorted { $0.createdAt > $1.createdAt }
             .compactMap { firstFrameURL(in: $0) }
             .first
         let automaticReference = populated
-            .filter { $0.captureKind != .photo }
+            .filter { $0.purpose != .projectReference }
             .sorted { $0.createdAt < $1.createdAt }
             .compactMap { firstFrameURL(in: $0) }
             .first
@@ -948,6 +963,7 @@ final class TimelapseSessionStore {
         manifest["projectName"] = project.name
         manifest["module"] = session.module.rawValue
         manifest["captureKind"] = session.captureKind.rawValue
+        manifest["purpose"] = session.purpose.rawValue
         manifest["name"] = session.name
         manifest["createdAt"] = ISO8601DateFormatter().string(from: session.createdAt)
         manifest["format"] = "original_jpeg_sequence"
@@ -1029,11 +1045,16 @@ final class TimelapseSessionStore {
                 return nil
             }
 
+            let module = CameraModule(rawValue: manifest.module) ?? project.module
+            let captureKind = RepeatableCaptureKind(rawValue: manifest.captureKind ?? "") ?? .timelapse
+            let purpose = manifest.purpose.flatMap(TimelapseSession.Purpose.init(rawValue:))
+                ?? (module == .repeatable && captureKind == .photo ? .projectReference : .capture)
             return TimelapseSession(
                 id: id,
                 projectID: projectID,
-                module: CameraModule(rawValue: manifest.module) ?? project.module,
-                captureKind: RepeatableCaptureKind(rawValue: manifest.captureKind ?? "") ?? .timelapse,
+                module: module,
+                captureKind: captureKind,
+                purpose: purpose,
                 referenceMotion: manifest.referenceMotion,
                 referenceGeoPose: manifest.referenceGeoPose,
                 referenceOrientation: CaptureDisplayOrientation(rawValue: manifest.referenceOrientation ?? ""),
@@ -1191,7 +1212,7 @@ enum RepeatableCaptureKind: String, Identifiable, Codable, Hashable {
 
     var id: String { rawValue }
 
-    static let captureOptions: [RepeatableCaptureKind] = [.video, .timelapse]
+    static let captureOptions: [RepeatableCaptureKind] = [.photo, .timelapse, .video]
 
     var title: String {
         switch self {
@@ -1244,6 +1265,7 @@ private struct SessionManifest: Decodable {
     let projectId: String
     let module: String
     let captureKind: String?
+    let purpose: String?
     let referenceMotion: MotionAttitude?
     let referenceGeoPose: GeoPose?
     let referenceOrientation: String?

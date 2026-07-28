@@ -64,6 +64,9 @@ struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
             : Double(durationMinutes * 60)
         switch module {
         case .repeatable:
+            if repeatableKind == .photo {
+                return 1
+            }
             if repeatableKind == .video {
                 return max(1, Int(seconds) * videoSettings.fps)
             }
@@ -121,8 +124,9 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
     init(configuration: CameraeNextCaptureConfiguration) {
         let isAstro = configuration.module == .astrophotography
         let isVideo = configuration.repeatableKind == .video
+        let isRepeatablePhoto = !isAstro && configuration.repeatableKind == .photo
         let isAstroPhoto = isAstro && configuration.repeatableKind == .photo
-        navigationTitle = isAstro ? CameraeL10n.newAstro : (isVideo ? CameraeL10n.newVideo : CameraeL10n.newTimelapse)
+        navigationTitle = isAstro ? CameraeL10n.newAstro : (isRepeatablePhoto ? CameraeL10n.newPhoto : (isVideo ? CameraeL10n.newVideo : CameraeL10n.newTimelapse))
         primaryActionTitle = CameraeL10n.openCamera
         captureSectionTitle = isAstro ? CameraeL10n.sessionSection : CameraeL10n.captureSection
         adjustmentsSectionTitle = isAstro ? CameraeL10n.astroCaptureSection : CameraeL10n.adjustmentsSection
@@ -132,10 +136,10 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
             ? [CameraeL10n.exposure]
             : isAstro
             ? [CameraeL10n.exposure, CameraeL10n.interval, CameraeL10n.capturesPerFrame]
-            : (isVideo ? ["EV"] : ["EV", CameraeL10n.interval])
+            : (isRepeatablePhoto ? ["EV"] : ["EV", CameraeL10n.interval])
         durationLabels = isVideo
             ? ["30 s", "1 min", "2 min"]
-            : isAstroPhoto
+            : isAstroPhoto || isRepeatablePhoto
             ? []
             : isAstro
             ? ["15 min", "30 min", "1 h", CameraeL10n.customDurationShort]
@@ -144,7 +148,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
             ? .lockedStatus(lens: "Wide", zoom: "1×")
             : .selector
         showsVideoSettings = isVideo
-        showsInterval = !isVideo && !isAstroPhoto
+        showsInterval = !isVideo && !isAstroPhoto && !isRepeatablePhoto
         isAstroExposureControlEnabled = isAstro && !isVideo && !configuration.usesAutomaticAstroExposure
         showsAstroPhotoStacking = isAstroPhoto
     }
@@ -405,7 +409,11 @@ struct CameraeNextWorkflowConfigurationView: View {
                     case .timelapse: .timelapse
                     }
                 }
-                return configuration.repeatableKind == .video ? .video : .timelapse
+                return switch configuration.repeatableKind {
+                case .photo: .photo
+                case .video: .video
+                case .timelapse: .timelapse
+                }
             },
             set: { value in
                 if isAstro {
@@ -416,7 +424,11 @@ struct CameraeNextWorkflowConfigurationView: View {
                     }
                     usesCustomDuration = false
                 } else {
-                    configuration.repeatableKind = value == .video ? .video : .timelapse
+                    configuration.repeatableKind = switch value {
+                    case .photo: .photo
+                    case .video: .video
+                    default: .timelapse
+                    }
                     if configuration.repeatableKind == .video {
                         usesCustomDuration = false
                     }
@@ -430,7 +442,16 @@ struct CameraeNextWorkflowConfigurationView: View {
             VStack(spacing: 12) {
                 CameraeNextSectionLabel(title: presentation.captureSectionTitle, theme: theme)
 
-                if presentation.showsAstroPhotoStacking {
+                if !isAstro && configuration.repeatableKind == .photo {
+                    CameraeNextSettingRow(
+                        title: CameraeL10n.quantity,
+                        helper: CameraeL10n.singleReferenceAlignedCapture,
+                        theme: theme
+                    ) {
+                        Text(CameraeL10n.onePhoto)
+                            .foregroundStyle(theme.accent)
+                    }
+                } else if presentation.showsAstroPhotoStacking {
                     CameraeNextSegmentedControl(
                         items: AstroPhotoStackCount.allCases.map {
                             CameraeNextSegmentItem(value: $0, label: "\($0.rawValue)")
@@ -670,7 +691,7 @@ struct CameraeNextWorkflowConfigurationView: View {
             self.referenceURL = nil
             return
         }
-        guard summary.captureKind == .photo else {
+        guard summary.session.purpose == .projectReference else {
             referenceErrorMessage = "O primeiro frame pertence a uma captura e não será apagado. Importe ou fotografe outra referência para substituí-lo."
             return
         }
@@ -705,10 +726,18 @@ struct CameraeNextWorkflowConfigurationView: View {
 
     private var capturePlan: CapturePlan {
         get throws {
-            let workflow: CaptureWorkflow = configuration.repeatableKind == .video
-                ? .repeatableVideo
-                : (isAstro ? .astro : .repeatableTimelapse)
-            let plannedDuration: TimeInterval = if isAstro && configuration.repeatableKind == .photo {
+            let workflow: CaptureWorkflow = if isAstro {
+                .astro
+            } else {
+                switch configuration.repeatableKind {
+                case .photo: .repeatablePhoto
+                case .video: .repeatableVideo
+                case .timelapse: .repeatableTimelapse
+                }
+            }
+            let plannedDuration: TimeInterval = if !isAstro && configuration.repeatableKind == .photo {
+                1
+            } else if isAstro && configuration.repeatableKind == .photo {
                 max(
                     configuration.astroExposureSeconds
                         * Double(configuration.astroPhotoStackCount.rawValue),
@@ -722,7 +751,7 @@ struct CameraeNextWorkflowConfigurationView: View {
             return try CapturePlan(
                 workflow: workflow,
                 plannedDuration: plannedDuration,
-                captureInterval: workflow == .repeatableVideo
+                captureInterval: workflow == .repeatableVideo || workflow == .repeatablePhoto
                     ? nil
                     : (isAstro
                         ? (configuration.repeatableKind == .photo
@@ -731,7 +760,7 @@ struct CameraeNextWorkflowConfigurationView: View {
                         : configuration.intervalSeconds),
                 sourceFormat: configuration.sourceFormat,
                 captureFPS: workflow == .repeatableVideo ? configuration.videoSettings.fps : nil,
-                renderFPS: workflow == .repeatableVideo ? nil : configuration.videoSettings.fps,
+                renderFPS: workflow == .repeatableVideo || workflow == .repeatablePhoto ? nil : configuration.videoSettings.fps,
                 resolution: captureResolution,
                 astroPipeline: isAstro ? astroPipeline : nil
             )

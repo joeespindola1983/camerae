@@ -76,13 +76,20 @@ enum CameraeL10n {
     static var configure: String { text("workflow.tab.configure", "Configurar") }
     static var captures: String { text("workflow.tab.captures", "Capturas") }
     static var video: String { text("workflow.mode.video", "Vídeo") }
+    static var photo: String { text("workflow.mode.photo", "Foto") }
     static var timelapse: String { text("workflow.mode.timelapse", "Timelapse") }
     static var automatic: String { text("workflow.mode.automatic", "Automática") }
     static var manual: String { text("workflow.mode.manual", "Manual") }
     static var newAstro: String { text("workflow.title.new_astro", "Nova astrofotografia") }
     static var newVideo: String { text("workflow.title.new_video", "Novo vídeo") }
+    static var newPhoto: String { text("workflow.title.new_photo", "Nova foto") }
     static var newTimelapse: String { text("workflow.title.new_timelapse", "Novo timelapse") }
     static var captureSection: String { text("workflow.section.capture", "CAPTURA") }
+    static var quantity: String { text("workflow.capture.quantity", "Quantidade") }
+    static var singleReferenceAlignedCapture: String {
+        text("workflow.capture.single_reference_aligned", "Uma captura alinhada à referência")
+    }
+    static var onePhoto: String { text("workflow.capture.one_photo", "1 foto") }
     static var sessionSection: String { text("workflow.section.session", "SESSÃO") }
     static var adjustmentsSection: String { text("workflow.section.adjustments", "AJUSTES") }
     static var astroCaptureSection: String { text("workflow.section.astro_capture", "CAPTURA ASTRO") }
@@ -193,7 +200,10 @@ enum CameraeL10n {
     }
 
     static func frameCount(_ count: Int) -> String {
-        format("workflow.summary.frames", defaultValue: "%lld frames", Int64(count))
+        if count == 1 {
+            return text("workflow.summary.one_frame", "1 frame")
+        }
+        return format("workflow.summary.frames", defaultValue: "%lld frames", Int64(count))
     }
 
     static func estimatedValue(_ value: String) -> String {

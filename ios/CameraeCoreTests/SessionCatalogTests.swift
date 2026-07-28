@@ -63,6 +63,40 @@ struct SessionManifestCompatibilityTests {
         #expect(decoded.session.cameraZoomFactor == 2)
     }
 
+    @Test("legacy repeatable photos remain project references")
+    func legacyRepeatablePhotoPurpose() throws {
+        let directory = URL(fileURLWithPath: "/tmp/session-reference", isDirectory: true)
+        let json = Self.legacyJSON
+            .replacingOccurrences(of: #""captureKind": "timelapse""#, with: #""captureKind": "photo""#)
+
+        let decoded = try SessionManifestCodec().decode(Data(json.utf8), directoryURL: directory)
+
+        #expect(decoded.session.purpose == .projectReference)
+    }
+
+    @Test("new repeatable photos preserve their capture purpose")
+    func repeatablePhotoCapturePurposeRoundTrip() throws {
+        let directory = URL(fileURLWithPath: "/tmp/session-photo", isDirectory: true)
+        let session = SessionRecord(
+            id: UUID(),
+            projectID: UUID(),
+            module: .repeatable,
+            captureKind: .photo,
+            purpose: .capture,
+            name: "session_photo",
+            directoryURL: directory,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let codec = SessionManifestCodec()
+
+        let decoded = try codec.decode(
+            codec.encode(SessionManifestDocument(session: session, frameSummary: .empty)),
+            directoryURL: directory
+        )
+
+        #expect(decoded.session.purpose == .capture)
+    }
+
     @Test("future session schemas are rejected without reinterpretation")
     func rejectsFutureSessionSchema() {
         let json = Self.legacyJSON.replacingOccurrences(

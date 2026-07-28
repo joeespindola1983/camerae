@@ -14,6 +14,11 @@ public struct SessionManifestCodec: Sendable {
             projectID: payload.projectId,
             module: payload.module,
             captureKind: payload.captureKind ?? .timelapse,
+            purpose: payload.purpose ?? (
+                payload.module == .repeatable && payload.captureKind == .photo
+                    ? .projectReference
+                    : .capture
+            ),
             name: payload.name,
             directoryURL: directoryURL,
             createdAt: payload.createdAt,
@@ -43,6 +48,7 @@ public struct SessionManifestCodec: Sendable {
             projectId: session.projectID,
             module: session.module,
             captureKind: session.captureKind,
+            purpose: session.purpose,
             name: session.name,
             createdAt: session.createdAt,
             referenceMotion: session.referenceMotion,
@@ -79,6 +85,7 @@ public struct SessionManifestCodec: Sendable {
         let projectId: UUID
         let module: ProjectModule
         let captureKind: SessionCaptureKind?
+        let purpose: SessionPurpose?
         let name: String
         let createdAt: Date
         let referenceMotion: SessionMotion?

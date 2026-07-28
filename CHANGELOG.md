@@ -6,6 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Added single-photo capture to Repeatable with reference-guided framing, one-frame storage planning, and image viewing and sharing in the capture catalog.
+
 ## [9.0.0] - 2026-07-27
 
 **Status:** Approved

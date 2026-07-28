@@ -1,6 +1,7 @@
 import Foundation
 
 public enum CaptureWorkflow: String, Codable, CaseIterable, Hashable, Sendable {
+    case repeatablePhoto
     case repeatableVideo
     case repeatableTimelapse
     case astro
@@ -138,6 +139,11 @@ public struct CapturePlan: Codable, Equatable, Hashable, Sendable {
     ) throws {
         guard plannedDuration.isFinite, plannedDuration > 0 else { throw CapturePlanError.invalidDuration }
         switch workflow {
+        case .repeatablePhoto:
+            guard captureInterval == nil else { throw CapturePlanError.unexpectedCaptureInterval }
+            guard captureFPS == nil else { throw CapturePlanError.invalidCaptureFPS }
+            guard renderFPS == nil else { throw CapturePlanError.unexpectedRenderFPS }
+            guard astroPipeline == nil else { throw CapturePlanError.unexpectedAstroPipeline }
         case .repeatableVideo:
             guard captureInterval == nil else { throw CapturePlanError.unexpectedCaptureInterval }
             guard let captureFPS, captureFPS > 0 else { throw CapturePlanError.invalidCaptureFPS }
@@ -240,6 +246,13 @@ public struct CapturePlanEstimator: Sendable {
         let renderedDuration: TimeInterval?
 
         switch plan.workflow {
+        case .repeatablePhoto:
+            guard let bytesPerFrame = sizeProfile.bytesPerFrameUpperBound else {
+                throw CapturePlanError.missingSizeEstimate
+            }
+            frameCount = 1
+            captureBytes = bytesPerFrame
+            renderedDuration = nil
         case .repeatableVideo:
             guard let fps = plan.captureFPS, let bitrate = sizeProfile.videoBitsPerSecondUpperBound else {
                 throw CapturePlanError.missingSizeEstimate
