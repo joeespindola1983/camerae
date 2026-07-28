@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [9.0.0] - 2026-07-27
 
-**Status:** QA candidate
+**Status:** Approved
 **Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision, QA environment, App Store
 
 ### Added
@@ -38,6 +38,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Made Debug builds use the QA identity so local Xcode runs no longer replace the installed App Store application.
 - Made Firebase App Distribution archive the dedicated QA scheme and Firebase application by default.
 - Expanded Crashlytics symbol uploads to signed QA archives while retaining the separate `qa` release channel.
+
+### Fixed
+
+- Configured the development Team for local QA runs and enabled automatic signing for the QA development identity.
 
 ## [8.5.1] - 2026-07-24
 

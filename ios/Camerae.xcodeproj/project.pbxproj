@@ -2108,8 +2108,9 @@
 			baseConfigurationReference = 4FD61DCF79DE05A11F6D4F15 /* Debug.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = V6JPGVRWCS;
 				INFOPLIST_FILE = Camerae/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2119,7 +2120,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PROVISIONING_PROFILE_SPECIFIER = "Camerae QA Dev";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Camerae/Camerae-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = "1,2";

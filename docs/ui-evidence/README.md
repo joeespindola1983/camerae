@@ -2,6 +2,8 @@
 
 Galerias versionadas das telas principais, geradas pelo release gate no iOS Simulator.
 
+- [v9.0.0-27-ipad](v9.0.0-27-ipad/index.html)
+- [v9.0.0-27](v9.0.0-27/index.html)
 - [v8.5.0-23-ru](v8.5.0-23-ru/index.html)
 - [v8.5.0-23-ipad-ru](v8.5.0-23-ipad-ru/index.html)
 - [v8.5.0-23-ipad-fr](v8.5.0-23-ipad-fr/index.html)
