@@ -32,11 +32,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Separated Astro Photo, Timelapse, and Video configuration contracts so photo stacking no longer depends on a duration-based batch workflow.
 - Preserved every Astro Photo original while producing one aligned and stacked result for review, sharing, and optional identification.
+- Replaced optional direct development commits with short-lived branches, structured Draft PR selection, required review-ready CI, and documented pull request routing for `develop` and release stabilization.
 - Required detailed, non-empty release notes for every Firebase App Distribution publication and documented the enforced QA contract.
 - Made Debug builds use the QA identity so local Xcode runs no longer replace the installed App Store application.
 - Made Firebase App Distribution archive the dedicated QA scheme and Firebase application by default.
 - Expanded Crashlytics symbol uploads to signed QA archives while retaining the separate `qa` release channel.
-- Documented pull requests as mandatory for product, build, and release-process changes.
 
 ## [8.5.1] - 2026-07-24
 

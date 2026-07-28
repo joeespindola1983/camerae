@@ -98,7 +98,8 @@ Temporary output is written under `ios/build/ui-evidence/`. Release galleries ar
 Camerae currently uses a solo-developer GitFlow:
 
 - All normal development begins on an up-to-date `develop`.
-- Product and release-process changes use short-lived branches and mandatory pull requests into `develop`.
+- Product and process changes use short-lived branches and pull requests into `develop`.
+- Draft PRs form the decision queue for candidate work; marking one ready selects it for full CI and review.
 - `qa` is a deployment target for Firebase validation, never a development source.
 - `release/vX.Y.Z` stabilizes one version.
 - Every QA-approved candidate is reconciled into `develop`.
