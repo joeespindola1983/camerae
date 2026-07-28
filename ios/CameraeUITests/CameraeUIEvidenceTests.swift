@@ -112,9 +112,10 @@ final class CameraeUIEvidenceTests: XCTestCase {
     }
 
     private func openWorkflow(_ workflow: EvidenceWorkflow, app: XCUIApplication) {
-        let button = element("camerae.module.\(workflow.rawValue).open", app: app)
+        let identifier = "camerae.module.\(workflow.rawValue).open"
+        let button = app.buttons.matching(identifier: identifier).firstMatch
         XCTAssertTrue(button.waitForExistence(timeout: 5))
-        button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        button.tap()
     }
 
     private func captureSettingsEvidence(app: XCUIApplication) throws {
