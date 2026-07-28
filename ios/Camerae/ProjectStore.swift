@@ -220,14 +220,19 @@ final class ProjectStore: ObservableObject {
                             )
                         }
                         let sessions = try await SessionCatalog(project: record).loadSummaries()
-                        let firstReference = sessions
-                            .filter { $0.session.purpose == .projectReference }
-                            .sorted { $0.session.createdAt < $1.session.createdAt }
-                            .compactMap { summary -> String? in
-                                guard let file = summary.frameSummary.firstFileName else { return nil }
-                                return "Sessions/\(summary.session.name)/\(file)"
-                            }
-                            .first
+                        let orderedSessions = sessions.sorted {
+                            $0.session.createdAt < $1.session.createdAt
+                        }
+                        let referenceSession = orderedSessions.first {
+                            $0.session.purpose == .projectReference &&
+                            $0.frameSummary.firstFileName != nil
+                        } ?? orderedSessions.first {
+                            $0.frameSummary.firstFileName != nil
+                        }
+                        let firstReference = referenceSession.flatMap { summary -> String? in
+                            guard let file = summary.frameSummary.firstFileName else { return nil }
+                            return "Sessions/\(summary.session.name)/\(file)"
+                        }
                         let current = snapshot.summary(for: record.id)
                         let stableSummary = ProjectSummary(
                             sessionCount: sessions.count,

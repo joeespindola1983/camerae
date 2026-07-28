@@ -81,6 +81,24 @@ struct AppCompositionTests {
         #expect((store.projects.first?.summary?.totalKnownBytes ?? 0) >= 7)
     }
 
+    @Test("ProjectStore keeps an Astro capture frame as the project thumbnail")
+    func astroProjectThumbnailFallback() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeAstroThumbnail-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let store = ProjectStore(rootDirectory: root)
+        let project = try await store.createProject(module: .astrophotography, name: "Milky Way")
+        let catalog = SessionCatalog(project: project.coreRecord)
+        let session = try await catalog.createSession(captureKind: .photo)
+        try await catalog.beginCapture(sessionID: session.id)
+        let frameURL = try await catalog.saveFrame(Data([1, 2, 3]), sessionID: session.id, index: 1)
+        try await catalog.finishCapture(sessionID: session.id)
+
+        await store.reloadNow()
+
+        #expect(store.projects.first?.referenceFrameURL?.standardizedFileURL == frameURL.standardizedFileURL)
+    }
+
     @Test("ProjectStore creates and reloads an initialized Edit project")
     func editProjectComposition() async throws {
         let root = FileManager.default.temporaryDirectory
