@@ -6,7 +6,7 @@ These rules apply to every code or product change in this repository.
 
 - Start all normal development from an up-to-date `develop`.
 - Before editing, verify the current branch and synchronize it with `origin/develop` using a fast-forward-only pull.
-- Direct commits to `develop` are allowed while the project has a single developer. Pull requests and short-lived `codex/*` branches are optional.
+- Product, build, privacy, dependency, and release-process changes use short-lived `codex/*` branches and mandatory pull requests into `develop`.
 - Never start product development from `main`, `qa`, or `release/*`.
 - `main` contains approved production history only.
 - `qa` is a deployment target only.
