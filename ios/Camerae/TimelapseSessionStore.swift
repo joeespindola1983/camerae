@@ -1178,6 +1178,10 @@ enum CaptureDisplayOrientation: String, Codable, Equatable, Hashable {
         }
     }
 
+    func referenceOverlayRotationDegrees(to displayOrientation: Self) -> Double {
+        Double(displayOrientation.videoRotationAngle - videoRotationAngle)
+    }
+
     init(displaySize: CGSize) {
         self = displaySize.width > displaySize.height ? .landscapeRight : .portrait
     }

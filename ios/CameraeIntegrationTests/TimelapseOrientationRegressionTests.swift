@@ -55,4 +55,20 @@ struct TimelapseOrientationRegressionTests {
         #expect(CaptureDisplayOrientation.landscapeLeft.videoRotationAngle == 180)
         #expect(CaptureDisplayOrientation.landscapeRight.videoRotationAngle == 0)
     }
+
+    @Test("Reference overlay rotates from its saved orientation into the live display orientation")
+    func referenceOverlayUsesRelativeOrientation() {
+        #expect(
+            CaptureDisplayOrientation.portrait.referenceOverlayRotationDegrees(to: .portrait) == 0
+        )
+        #expect(
+            CaptureDisplayOrientation.landscapeRight.referenceOverlayRotationDegrees(to: .portrait) == 90
+        )
+        #expect(
+            CaptureDisplayOrientation.portrait.referenceOverlayRotationDegrees(to: .landscapeRight) == -90
+        )
+        #expect(
+            CaptureDisplayOrientation.landscapeLeft.referenceOverlayRotationDegrees(to: .landscapeRight) == -180
+        )
+    }
 }
