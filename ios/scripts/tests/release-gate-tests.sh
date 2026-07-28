@@ -33,6 +33,7 @@ expect_contains "$firebase_plan" "mode: firebase"
 expect_contains "$firebase_plan" "required branch: qa"
 expect_contains "$firebase_plan" "publish: yes"
 expect_contains "$firebase_plan" "destination: Firebase App Distribution"
+expect_contains "$firebase_plan" "release notes: required"
 
 appstore_plan="$($SCRIPT appstore --plan --publish)"
 expect_contains "$appstore_plan" "mode: appstore"
@@ -56,6 +57,10 @@ if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$
 fi
 if ! rg -q 'CAMERAE_RELEASE_CHANNEL=qa' "$IOS_DIR/scripts/distribute-firebase.sh"; then
   echo "Firebase archives must identify the QA release channel" >&2
+  exit 1
+fi
+if ! rg -q 'validate-firebase-release-notes\.sh' "$IOS_DIR/scripts/distribute-firebase.sh"; then
+  echo "Firebase distribution must validate mandatory release notes before archiving" >&2
   exit 1
 fi
 if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$IOS_DIR/scripts/upload-appstore.sh"; then

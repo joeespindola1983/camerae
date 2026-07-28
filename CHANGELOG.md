@@ -28,6 +28,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Separated Astro Photo, Timelapse, and Video configuration contracts so photo stacking no longer depends on a duration-based batch workflow.
 - Preserved every Astro Photo original while producing one aligned and stacked result for review, sharing, and optional identification.
+- Required detailed, non-empty release notes for every Firebase App Distribution publication and documented the enforced QA contract.
 
 ## [8.5.1] - 2026-07-24
 
