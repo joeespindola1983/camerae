@@ -264,6 +264,37 @@ struct AppCompositionTests {
         #expect(store.firstReferenceFrameURL() == secondURL)
     }
 
+    @Test("an EXIF-rotated camera reference is stored upright with swapped dimensions")
+    func rotatedReferenceIsNormalizedBeforeStorage() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeRotatedReference-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectStore = ProjectStore(rootDirectory: root)
+        let project = try await projectStore.createProject(module: .repeatable, name: "Rotated reference")
+        let store = TimelapseSessionStore(project: project)
+        let rendererFormat = UIGraphicsImageRendererFormat.default()
+        rendererFormat.scale = 1
+        let source = UIGraphicsImageRenderer(
+            size: CGSize(width: 40, height: 20),
+            format: rendererFormat
+        ).image { context in
+            UIColor.red.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 20, height: 20))
+            UIColor.blue.setFill()
+            context.cgContext.fill(CGRect(x: 20, y: 0, width: 20, height: 20))
+        }
+        let sourceCGImage = try #require(source.cgImage)
+        let rotated = UIImage(cgImage: sourceCGImage, scale: 1, orientation: .right)
+
+        let session = try store.importReferenceImage(rotated)
+        let url = try #require(store.firstFrameURL(in: session))
+        let stored = try #require(UIImage(contentsOfFile: url.path))
+
+        #expect(stored.imageOrientation == .up)
+        #expect(stored.size == CGSize(width: 20, height: 40))
+        #expect(session.referenceOrientation == .portrait)
+    }
+
     private func testImage(color: UIColor) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
             color.setFill()

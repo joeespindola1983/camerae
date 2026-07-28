@@ -1178,10 +1178,6 @@ enum CaptureDisplayOrientation: String, Codable, Equatable, Hashable {
         }
     }
 
-    func referenceOverlayRotationDegrees(to displayOrientation: Self) -> Double {
-        Double(displayOrientation.videoRotationAngle - videoRotationAngle)
-    }
-
     init(displaySize: CGSize) {
         self = displaySize.width > displaySize.height ? .landscapeRight : .portrait
     }
@@ -1282,10 +1278,31 @@ private struct SessionManifest: Decodable {
 private extension UIImage {
     func normalizedForStorage() -> UIImage {
         guard imageOrientation != .up else { return self }
+        let sourceSize: CGSize
+        if let cgImage {
+            sourceSize = CGSize(
+                width: CGFloat(cgImage.width) / scale,
+                height: CGFloat(cgImage.height) / scale
+            )
+        } else {
+            sourceSize = size
+        }
+        let swapsDimensions: Bool
+        switch imageOrientation {
+        case .left, .leftMirrored, .right, .rightMirrored:
+            swapsDimensions = true
+        case .up, .upMirrored, .down, .downMirrored:
+            swapsDimensions = false
+        @unknown default:
+            swapsDimensions = false
+        }
+        let normalizedSize = swapsDimensions
+            ? CGSize(width: sourceSize.height, height: sourceSize.width)
+            : sourceSize
         let format = UIGraphicsImageRendererFormat.default()
         format.scale = scale
-        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
-            draw(in: CGRect(origin: .zero, size: size))
+        return UIGraphicsImageRenderer(size: normalizedSize, format: format).image { _ in
+            draw(in: CGRect(origin: .zero, size: normalizedSize))
         }
     }
 }

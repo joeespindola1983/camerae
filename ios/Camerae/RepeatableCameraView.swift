@@ -1833,13 +1833,10 @@ private struct ReferenceOverlayImage: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let rotation = referenceOrientation?
-                .referenceOverlayRotationDegrees(to: displayOrientation) ?? 0
             Image(uiImage: image)
                 .resizable()
                 .scaledToFill()
                 .frame(width: proxy.size.width, height: proxy.size.height)
-                .rotationEffect(.degrees(rotation))
         }
     }
 }
