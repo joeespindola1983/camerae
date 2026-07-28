@@ -9,6 +9,7 @@ struct ReferenceThumbnail: View {
     var height: CGFloat = 48
     var maxPixelSize = 220
     var usesNeutralImagePlaceholder = false
+    var cornerRadius: CGFloat = 14
 
     @State private var image: UIImage?
 
@@ -39,9 +40,9 @@ struct ReferenceThumbnail: View {
         }
         .frame(maxWidth: width == nil ? .infinity : nil)
         .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
+            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                 .stroke(.secondary.opacity(0.2), lineWidth: 1)
         }
         .task(id: imageURL) {

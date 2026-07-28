@@ -58,14 +58,13 @@ struct CameraeNextProjectCatalogTests {
         #expect(CameraeNextProjectCatalogLayout(module: .astrophotography).contentWidth(containerWidth: 393) == 361)
     }
 
-    @Test("project rows reserve a double-size thumbnail and an independent information column")
+    @Test("project cards keep one orientation-independent thumbnail above their information")
     func projectRowLayout() {
         let layout = ProjectListRowLayout(containerWidth: 361)
 
-        #expect(layout.thumbnailSize == 120)
-        #expect(layout.minimumHeight == 160)
-        #expect(layout.contentWidth == 193)
-        #expect(layout.thumbnailRange.upperBound <= layout.contentRange.lowerBound)
+        #expect(layout.thumbnailSize == CGSize(width: 361, height: 160))
+        #expect(layout.minimumHeight == 244)
+        #expect(layout.thumbnailRange.upperBound <= layout.informationRange.lowerBound)
     }
 
     private func makeProject(

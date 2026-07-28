@@ -12,7 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Changed
 
-- Doubled project-list thumbnails to 120 points and reorganized project metadata into a dedicated column that cannot overlap the image.
+- Standardized every project-list thumbnail as a fixed, orientation-independent image area with the project name over the image and all metadata below it.
 - Added the fixed project capture type and configuration summary to project cards and subsequent capture setup.
 
 ## [9.1.0] - 2026-07-28

@@ -327,11 +327,15 @@ struct ProjectListHeroCard: View {
 
     private var summary: ProjectRowSummary { .init(project: project) }
     private var completed: Bool { (project.summary?.mediaCount ?? 0) > 0 }
+    private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                ProjectListThumbnail(imageURL: project.referenceFrameURL, label: nil, height: 137, cornerRadius: 0, theme: theme)
+            ProjectListImageHeader(
+                project: project,
+                height: layout.thumbnailSize.height,
+                theme: theme
+            ) {
                 Text(CameraeL10n.lastOpened)
                     .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
                     .tracking(0.64)
@@ -343,10 +347,6 @@ struct ProjectListHeroCard: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(project.name)
-                    .font(.custom("Outfit-SemiBold", size: 17, relativeTo: .headline))
-                    .foregroundStyle(theme.text)
-                    .lineLimit(1)
                 Text(summary.subtitle)
                     .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
@@ -383,22 +383,23 @@ struct ProjectListHeroCard: View {
 
 struct ProjectListRowLayout: Equatable {
     let containerWidth: CGFloat
-    let horizontalPadding: CGFloat = 18
-    let spacing: CGFloat = 12
-    let thumbnailSize: CGFloat = 120
-    let minimumHeight: CGFloat = 160
+    let thumbnailHeight: CGFloat = 160
+    let informationHeight: CGFloat = 84
 
-    var contentWidth: CGFloat {
-        max(0, containerWidth - (horizontalPadding * 2) - spacing - thumbnailSize)
+    var thumbnailSize: CGSize {
+        CGSize(width: containerWidth, height: thumbnailHeight)
+    }
+
+    var minimumHeight: CGFloat {
+        thumbnailHeight + informationHeight
     }
 
     var thumbnailRange: ClosedRange<CGFloat> {
-        horizontalPadding...(horizontalPadding + thumbnailSize)
+        0...thumbnailHeight
     }
 
-    var contentRange: ClosedRange<CGFloat> {
-        let lowerBound = horizontalPadding + thumbnailSize + spacing
-        return lowerBound...(lowerBound + contentWidth)
+    var informationRange: ClosedRange<CGFloat> {
+        thumbnailHeight...minimumHeight
     }
 }
 
@@ -408,26 +409,21 @@ struct ProjectListRow: View {
     private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
-        HStack(spacing: 12) {
-            ProjectListThumbnail(
-                imageURL: project.referenceFrameURL,
-                label: "\(project.summary?.mediaCount ?? 0)f",
-                height: layout.thumbnailSize,
-                cornerRadius: 14,
+        VStack(alignment: .leading, spacing: 0) {
+            ProjectListImageHeader(
+                project: project,
+                height: layout.thumbnailSize.height,
                 theme: theme
-            )
-                .frame(width: layout.thumbnailSize, height: layout.thumbnailSize)
+            ) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(.black.opacity(0.55), in: Circle())
+                    .padding(10)
+            }
+
             VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 6) {
-                    Text(project.name)
-                        .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
-                        .foregroundStyle(theme.text)
-                        .lineLimit(1)
-                    Spacer(minLength: 2)
-                    Image(systemName: "chevron.right")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(theme.muted)
-                }
                 Text(
                     project.captureConfiguration?.projectSummary
                         ?? ProjectRowSummary(project: project).subtitle.uppercased()
@@ -444,10 +440,11 @@ struct ProjectListRow: View {
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: layout.informationHeight, alignment: .topLeading)
         }
-        .padding(.horizontal, layout.horizontalPadding)
-        .padding(.vertical, 20)
         .frame(minHeight: layout.minimumHeight)
         .background(theme.card)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
@@ -455,6 +452,40 @@ struct ProjectListRow: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(CameraeL10n.openProject(project.name))
         .accessibilityIdentifier(CameraeAccessibility.openProject(project.id))
+    }
+}
+
+private struct ProjectListImageHeader<Accessory: View>: View {
+    let project: CameraProject
+    let height: CGFloat
+    let theme: ProjectListTheme
+    @ViewBuilder let accessory: () -> Accessory
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            ProjectListThumbnail(
+                imageURL: project.referenceFrameURL,
+                label: nil,
+                height: height,
+                cornerRadius: 0,
+                theme: theme
+            )
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.72)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+            Text(project.name)
+                .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
+        }
+        .frame(height: height)
+        .overlay(alignment: .topTrailing) {
+            accessory()
+        }
     }
 }
 
@@ -469,7 +500,14 @@ private struct ProjectListThumbnail: View {
         ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: theme.gradient, startPoint: .leading, endPoint: .trailing)
             if imageURL != nil {
-                ReferenceThumbnail(imageURL: imageURL, systemImage: theme.systemImage, width: nil, height: height, maxPixelSize: 900)
+                ReferenceThumbnail(
+                    imageURL: imageURL,
+                    systemImage: theme.systemImage,
+                    width: nil,
+                    height: height,
+                    maxPixelSize: 900,
+                    cornerRadius: cornerRadius
+                )
                     .overlay(theme.accent.opacity(0.12))
             }
             if let label {
