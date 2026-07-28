@@ -21,7 +21,7 @@ check_plan="$($SCRIPT check --plan)"
 expect_contains "$check_plan" "mode: check"
 expect_contains "$check_plan" "publish: no"
 expect_contains "$check_plan" "git: clean, synchronized commit"
-expect_contains "$check_plan" "tests: localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
+expect_contains "$check_plan" "tests: environment separation, localization, Crashlytics privacy, architecture, Swift, Camerae Processing, Camerae Vision"
 expect_contains "$check_plan" "visual evidence: skipped; enable with --ui-evidence"
 expect_contains "$check_plan" "OpenCV XCFramework: pinned 4.13.0, device and simulator slices"
 
@@ -33,6 +33,7 @@ expect_contains "$firebase_plan" "mode: firebase"
 expect_contains "$firebase_plan" "required branch: qa"
 expect_contains "$firebase_plan" "publish: yes"
 expect_contains "$firebase_plan" "destination: Firebase App Distribution"
+expect_contains "$firebase_plan" "release notes: required"
 
 appstore_plan="$($SCRIPT appstore --plan --publish)"
 expect_contains "$appstore_plan" "mode: appstore"
@@ -56,6 +57,10 @@ if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$
 fi
 if ! rg -q 'CAMERAE_RELEASE_CHANNEL=qa' "$IOS_DIR/scripts/distribute-firebase.sh"; then
   echo "Firebase archives must identify the QA release channel" >&2
+  exit 1
+fi
+if ! rg -q 'validate-firebase-release-notes\.sh' "$IOS_DIR/scripts/distribute-firebase.sh"; then
+  echo "Firebase distribution must validate mandatory release notes before archiving" >&2
   exit 1
 fi
 if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$IOS_DIR/scripts/upload-appstore.sh"; then
@@ -97,6 +102,10 @@ if ! rg -q 'localization-tests\.sh' "$SCRIPT"; then
 fi
 if ! rg -q 'crashlytics-contract-tests\.sh' "$SCRIPT"; then
   echo "Release gate must validate Crashlytics privacy and build settings" >&2
+  exit 1
+fi
+if ! rg -q 'environment-contract-tests\.sh' "$SCRIPT"; then
+  echo "Release gate must validate QA and production environment separation" >&2
   exit 1
 fi
 if ! rg -q 'CHANGELOG\.md' "$SCRIPT"; then

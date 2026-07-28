@@ -7,6 +7,7 @@ IOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 WORKSPACE="$IOS_DIR/Camerae.xcworkspace"
 SCHEME="Camerae"
 CONFIGURATION="${CONFIGURATION:-Release}"
+EXPECTED_BUNDLE_ID="com.espindola.camerae"
 APPLE_TEAM_ID="${APPLE_TEAM_ID:?Set APPLE_TEAM_ID.}"
 APP_STORE_CONNECT_KEY_PATH="${APP_STORE_CONNECT_KEY_PATH:?Set APP_STORE_CONNECT_KEY_PATH.}"
 APP_STORE_CONNECT_KEY_ID="${APP_STORE_CONNECT_KEY_ID:?Set APP_STORE_CONNECT_KEY_ID.}"
@@ -74,6 +75,8 @@ xcodebuild archive \
   "${auth_args[@]}" \
   DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
   CODE_SIGN_STYLE=Automatic
+
+"$SCRIPT_DIR/validate-archive-environment.sh" "$ARCHIVE_PATH" "$EXPECTED_BUNDLE_ID"
 
 xcodebuild -exportArchive \
   -archivePath "$ARCHIVE_PATH" \

@@ -2,7 +2,7 @@
 
 Camerae is an iPhone and iPad camera app for repeatable framing, timelapse capture, astrophotography, image alignment, and local video creation.
 
-[Website](https://www.camerae.app/) · [Changelog](CHANGELOG.md) · [GitFlow](docs/GITFLOW.md)
+[Website](https://www.camerae.app/) · [Changelog](CHANGELOG.md) · [GitFlow](docs/GITFLOW.md) · [QA environments](docs/QA_ENVIRONMENTS.md)
 
 ## Product
 
@@ -23,7 +23,7 @@ The interface supports iPhone and iPad in Brazilian Portuguese, Spanish, English
 - UI: SwiftUI
 - Capture: AVFoundation, CoreMotion, and CoreLocation
 - Alignment: Vision and OpenCV
-- Diagnostics: Firebase Crashlytics without Google Analytics in the upcoming release
+- Diagnostics: Firebase Crashlytics and Analytics with in-app opt-out
 - Processing lab: C++ and OpenCV
 - Android: planned from the shared product behavior after the iOS reference implementation stabilizes
 
@@ -54,6 +54,10 @@ xcodebuild \
 ```
 
 Always build `Camerae.xcworkspace`. The standalone `.xcodeproj` does not include the CocoaPods dependencies used by Firebase and OpenCV.
+
+For normal device development, select the `Camerae QA` scheme. It installs
+`com.espindola.camerae.qa` as **Camerae QA**, so the App Store application remains
+installed independently.
 
 ## Test
 
