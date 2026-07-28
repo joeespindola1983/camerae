@@ -2,24 +2,24 @@ import SwiftUI
 
 enum CameraeNextProjectCatalogFilter: String, CaseIterable, Identifiable, Sendable {
     case recent
-    case inProgress
-    case completed
+    case withCaptures
+    case archived
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .recent: CameraeL10n.recent
-        case .inProgress: CameraeL10n.inProgress
-        case .completed: CameraeL10n.completed
+        case .withCaptures: CameraeL10n.withCaptures
+        case .archived: CameraeL10n.archived
         }
     }
 
     var systemImage: String {
         switch self {
         case .recent: "clock"
-        case .inProgress: "circle.dotted"
-        case .completed: "checkmark.circle"
+        case .withCaptures: "camera.fill"
+        case .archived: "archivebox"
         }
     }
 }
@@ -29,9 +29,9 @@ struct CameraeNextProjectCatalogModel: Equatable {
     let module: CameraModule
     let filter: CameraeNextProjectCatalogFilter
 
-    private var activeProjects: [CameraProject] {
+    private var moduleProjects: [CameraProject] {
         projects
-            .filter { $0.module == module && !$0.isArchived }
+            .filter { $0.module == module }
             .sorted { lhs, rhs in
                 let lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
                 let rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
@@ -40,20 +40,20 @@ struct CameraeNextProjectCatalogModel: Equatable {
             }
     }
 
-    var featuredProject: CameraProject? { activeProjects.first }
-    var projectCount: Int { activeProjects.count }
-
-    var remainingProjects: [CameraProject] {
-        let remaining = Array(activeProjects.dropFirst())
+    var visibleProjects: [CameraProject] {
         switch filter {
         case .recent:
-            return remaining
-        case .inProgress:
-            return remaining.filter { ($0.summary?.mediaCount ?? 0) == 0 }
-        case .completed:
-            return remaining.filter { ($0.summary?.mediaCount ?? 0) > 0 }
+            return moduleProjects.filter { !$0.isArchived }
+        case .withCaptures:
+            return moduleProjects.filter { !$0.isArchived && ($0.summary?.mediaCount ?? 0) > 0 }
+        case .archived:
+            return moduleProjects.filter(\.isArchived)
         }
     }
+
+    var featuredProject: CameraProject? { visibleProjects.first }
+    var projectCount: Int { visibleProjects.count }
+    var remainingProjects: [CameraProject] { Array(visibleProjects.dropFirst()) }
 }
 
 enum CameraeNextTemporaryProjectPolicy {
@@ -120,6 +120,9 @@ struct CameraeNextProjectCatalogView: View {
                             ProjectListHeroCard(project: featured, theme: theme)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            archiveButton(for: featured)
+                        }
                         .padding(.top, 12)
                     } else {
                         ProjectListEmptyHero(theme: theme, createAction: beginCreatingProject)
@@ -152,12 +155,11 @@ struct CameraeNextProjectCatalogView: View {
                                 }
                                 .buttonStyle(.plain)
                                 .swipeActions(edge: .trailing) {
-                                    Button {
-                                        setArchived(project, true)
-                                    } label: {
-                                        Label(CameraeL10n.archive, systemImage: "archivebox")
-                                    }
+                                    archiveButton(for: project)
                                     .tint(theme.accent)
+                                }
+                                .contextMenu {
+                                    archiveButton(for: project)
                                 }
                             }
                         }
@@ -263,6 +265,18 @@ struct CameraeNextProjectCatalogView: View {
         .foregroundStyle(theme.muted)
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
+    }
+
+    @ViewBuilder
+    private func archiveButton(for project: CameraProject) -> some View {
+        Button {
+            setArchived(project, !project.isArchived)
+        } label: {
+            Label(
+                project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
+                systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
+            )
+        }
     }
 
     private func beginCreatingProject() {

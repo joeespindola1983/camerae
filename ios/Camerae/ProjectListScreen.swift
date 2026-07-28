@@ -6,7 +6,7 @@ struct ProjectListScreen: View {
     let module: CameraModule
     @Binding var path: NavigationPath
 
-    @State private var filter = ProjectListFilter.recent
+    @State private var filter = CameraeNextProjectCatalogFilter.recent
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var errorMessage: String?
@@ -14,18 +14,11 @@ struct ProjectListScreen: View {
     @State private var emptyProjectToRemove: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
-    private var projects: [CameraProject] { projectStore.activeProjects(for: module) }
-    private var lastOpenedProject: CameraProject? { projects.first }
-
-    private var remainingProjects: [CameraProject] {
-        let remaining = projects.filter { $0.id != lastOpenedProject?.id }
-        switch filter {
-        case .recent: return remaining
-        case .inProgress: return remaining.filter { ($0.summary?.mediaCount ?? 0) == 0 }
-        case .completed: return remaining.filter { ($0.summary?.mediaCount ?? 0) > 0 }
-        case .favorites: return []
-        }
+    private var catalog: CameraeNextProjectCatalogModel {
+        .init(projects: projectStore.projects, module: module, filter: filter)
     }
+    private var lastOpenedProject: CameraProject? { catalog.featuredProject }
+    private var remainingProjects: [CameraProject] { catalog.remainingProjects }
 
     var body: some View {
         ZStack {
@@ -51,6 +44,9 @@ struct ProjectListScreen: View {
                             ProjectListHeroCard(project: lastOpenedProject, theme: theme)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            archiveButton(for: lastOpenedProject)
+                        }
                         .padding(.top, 12)
                     } else {
                         ProjectListEmptyHero(theme: theme, createAction: beginCreatingProject)
@@ -61,7 +57,7 @@ struct ProjectListScreen: View {
                         Text("PROJETOS")
                             .tracking(1.6)
                         Spacer()
-                        Text("\(projects.count)")
+                        Text("\(catalog.projectCount)")
                             .foregroundStyle(theme.accent)
                     }
                     .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
@@ -83,12 +79,11 @@ struct ProjectListScreen: View {
                                 }
                                 .buttonStyle(.plain)
                                 .swipeActions(edge: .trailing) {
-                                    Button {
-                                        setArchived(project, true)
-                                    } label: {
-                                        Label("Arquivar", systemImage: "archivebox")
-                                    }
+                                    archiveButton(for: project)
                                     .tint(theme.accent)
+                                }
+                                .contextMenu {
+                                    archiveButton(for: project)
                                 }
                             }
                         }
@@ -120,7 +115,7 @@ struct ProjectListScreen: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
                     Picker("Filtrar projetos", selection: $filter) {
-                        ForEach(ProjectListFilter.allCases) { option in
+                        ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
                             Label(option.title, systemImage: option.systemImage).tag(option)
                         }
                     }
@@ -176,7 +171,7 @@ struct ProjectListScreen: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(ProjectListFilter.allCases) { option in
+                ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
                     Button(option.title) { filter = option }
                         .font(.custom("Outfit-Regular", size: 10, relativeTo: .caption2))
                         .foregroundStyle(filter == option ? .white : theme.text)
@@ -190,9 +185,9 @@ struct ProjectListScreen: View {
 
     private var emptyFilteredState: some View {
         VStack(spacing: 8) {
-            Image(systemName: filter == .favorites ? "star" : "rectangle.stack")
+            Image(systemName: filter == .archived ? "archivebox" : "rectangle.stack")
                 .font(.title2)
-            Text(projects.isEmpty ? "Nenhum projeto ainda" : "Nenhum projeto neste filtro")
+            Text(catalog.projectCount == 0 ? "Nenhum projeto ainda" : "Nenhum projeto neste filtro")
                 .font(.custom("Outfit-Medium", size: 15, relativeTo: .subheadline))
         }
         .foregroundStyle(theme.muted)
@@ -267,6 +262,18 @@ struct ProjectListScreen: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func archiveButton(for project: CameraProject) -> some View {
+        Button {
+            setArchived(project, !project.isArchived)
+        } label: {
+            Label(
+                project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
+                systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
+            )
+        }
+    }
 }
 
 private struct PendingTemporaryProject {
@@ -300,33 +307,11 @@ struct ProjectListTheme {
     }
 }
 
-private enum ProjectListFilter: String, CaseIterable, Identifiable {
-    case recent, inProgress, completed, favorites
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .recent: "Recentes"
-        case .inProgress: "Em andamento"
-        case .completed: "Concluídos"
-        case .favorites: "Favoritos"
-        }
-    }
-    var systemImage: String {
-        switch self {
-        case .recent: "clock"
-        case .inProgress: "circle.dotted"
-        case .completed: "checkmark.circle"
-        case .favorites: "star"
-        }
-    }
-}
-
 struct ProjectListHeroCard: View {
     let project: CameraProject
     let theme: ProjectListTheme
 
     private var summary: ProjectRowSummary { .init(project: project) }
-    private var completed: Bool { (project.summary?.mediaCount ?? 0) > 0 }
     private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
@@ -353,12 +338,14 @@ struct ProjectListHeroCard: View {
                     .lineLimit(1)
                 HStack(spacing: 14) {
                     metric("camera", "\(project.summary?.sessionCount ?? 0)x")
-                    metric("photo.stack", "\(project.summary?.mediaCount ?? 0)f")
                     if let bytes = project.summary?.totalKnownBytes {
                         metric("externaldrive", ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file))
                     }
                     Spacer(minLength: 2)
-                    ProjectListStatusBadge(completed: completed, theme: theme)
+                    ProjectListCaptureCountBadge(
+                        count: project.summary?.mediaCount ?? 0,
+                        theme: theme
+                    )
                 }
                 .padding(.top, 3)
             }
@@ -523,16 +510,17 @@ private struct ProjectListThumbnail: View {
     }
 }
 
-private struct ProjectListStatusBadge: View {
-    let completed: Bool
+private struct ProjectListCaptureCountBadge: View {
+    let count: Int
     let theme: ProjectListTheme
+
     var body: some View {
-        Text(completed ? CameraeL10n.statusCompleted : CameraeL10n.statusInProgress)
+        Text(CameraeL10n.captureCount(count))
             .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
-            .foregroundStyle(completed ? Color.green : theme.accent)
+            .foregroundStyle(theme.accent)
             .padding(.horizontal, 10)
             .frame(height: 22)
-            .background(completed ? Color.green.opacity(0.15) : theme.surface, in: Capsule())
+            .background(theme.surface, in: Capsule())
     }
 }
 
