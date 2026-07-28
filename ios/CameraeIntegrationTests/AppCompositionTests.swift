@@ -324,11 +324,103 @@ struct AppCompositionTests {
         #expect(overlay.size == rotatedReference.size)
     }
 
+    @Test("EXIF and pixel-normalized references produce the same visual contour raster")
+    func edgeOverlayMatchesVisualReferencePixels() throws {
+        let rendererFormat = UIGraphicsImageRendererFormat.default()
+        rendererFormat.scale = 1
+        let source = UIGraphicsImageRenderer(
+            size: CGSize(width: 64, height: 40),
+            format: rendererFormat
+        ).image { context in
+            UIColor.black.setFill()
+            context.cgContext.fill(CGRect(x: 0, y: 0, width: 64, height: 40))
+            UIColor.white.setFill()
+            context.cgContext.fill(CGRect(x: 5, y: 4, width: 18, height: 9))
+            context.cgContext.fill(CGRect(x: 38, y: 19, width: 20, height: 15))
+        }
+        let sourceCGImage = try #require(source.cgImage)
+        let exifReference = UIImage(
+            cgImage: sourceCGImage,
+            scale: 1,
+            orientation: .right
+        )
+        let normalizedReference = visuallyNormalizedImage(exifReference)
+        let options = EdgeOverlayOptions(
+            tint: .green,
+            stroke: EdgeOverlayStroke(detail: 0.35),
+            maxPixelDimension: 200,
+            backgroundOpacity: 0
+        )
+
+        let exifOverlay = try #require(EdgeOverlayRenderer.render(
+            image: exifReference,
+            options: options
+        ))
+        let normalizedOverlay = try #require(EdgeOverlayRenderer.render(
+            image: normalizedReference,
+            options: options
+        ))
+        let exifRaster = try rgbaRaster(visuallyNormalizedImage(exifOverlay))
+        let normalizedRaster = try rgbaRaster(visuallyNormalizedImage(normalizedOverlay))
+
+        #expect(exifRaster.width == normalizedRaster.width)
+        #expect(exifRaster.height == normalizedRaster.height)
+        let differingBytes = zip(exifRaster.bytes, normalizedRaster.bytes)
+            .reduce(into: 0) { count, pair in
+                if pair.0 != pair.1 {
+                    count += 1
+                }
+            }
+        #expect(exifRaster.bytes.count == normalizedRaster.bytes.count)
+        #expect(differingBytes == 0)
+    }
+
     private func testImage(color: UIColor) -> UIImage {
         UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8)).image { context in
             color.setFill()
             context.cgContext.fill(CGRect(x: 0, y: 0, width: 8, height: 8))
         }
+    }
+
+    private func visuallyNormalizedImage(_ image: UIImage) -> UIImage {
+        guard image.imageOrientation != .up else { return image }
+        let sourceSize = image.cgImage.map {
+            CGSize(width: CGFloat($0.width) / image.scale, height: CGFloat($0.height) / image.scale)
+        } ?? image.size
+        let size: CGSize
+        switch image.imageOrientation {
+        case .left, .leftMirrored, .right, .rightMirrored:
+            size = CGSize(width: sourceSize.height, height: sourceSize.width)
+        case .up, .upMirrored, .down, .downMirrored:
+            size = sourceSize
+        @unknown default:
+            size = sourceSize
+        }
+        let format = UIGraphicsImageRendererFormat.default()
+        format.scale = image.scale
+        return UIGraphicsImageRenderer(size: size, format: format).image { _ in
+            image.draw(in: CGRect(origin: .zero, size: size))
+        }
+    }
+
+    private func rgbaRaster(_ image: UIImage) throws -> (width: Int, height: Int, bytes: [UInt8]) {
+        let cgImage = try #require(image.cgImage)
+        let width = cgImage.width
+        let height = cgImage.height
+        let bytesPerRow = width * 4
+        var bytes = [UInt8](repeating: 0, count: height * bytesPerRow)
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let context = try #require(CGContext(
+            data: &bytes,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return (width, height, bytes)
     }
 
     @Test("capture planning view model publishes a blocked preflight")
