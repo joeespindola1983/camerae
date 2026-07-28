@@ -6,14 +6,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Added
-
-- Added PT-BR App Store screenshot candidates for 6.9-inch iPhone and 13-inch iPad, featuring authentic Astro results, exposure planning, Repeatable alignment, and Editor workflows.
-
 ## [9.0.0] - 2026-07-27
 
 **Status:** QA candidate
-**Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision, QA environment
+**Areas:** Astro Photo, stacking, plate solving, celestial identification, Camerae Vision, QA environment, App Store
 
 ### Added
 
@@ -31,6 +27,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added a dedicated QA-badged application icon derived from the production mark.
 - Added build-time Firebase environment selection and fail-closed IPA/archive validation.
 - Added TDD contracts that prevent QA builds, Firebase apps, provisioning assets, and App Store archives from crossing environments.
+- Added PT-BR App Store screenshot candidates for 6.9-inch iPhone and 13-inch iPad, combining authentic Astro results with Home, Astro, and Repeatable screens captured from the v9 interface.
 
 ### Changed
 
