@@ -6,22 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
-### Fixed
-
-- Corrected EXIF-oriented Repeatable references and preserved that orientation in the derived contour-line overlay.
-
-### Added
-
-- Added a live normal/inverted contrast control to the Repeatable contour-line tool.
-
 ## [9.1.0] - 2026-07-28
 
-**Status:** QA candidate
-**Areas:** Repeatable, single-photo capture, catalog, Figma
+**Status:** Release candidate
+**Areas:** Repeatable, single-photo capture, contour alignment, catalog, Figma
 
 ### Added
 
 - Added single-photo capture to Repeatable with reference-guided framing, one-frame storage planning, and image viewing and sharing in the capture catalog.
+- Added a live normal/inverted contrast control to the Repeatable contour-line tool.
+
+### Fixed
+
+- Corrected EXIF-oriented Repeatable references and preserved that orientation in the derived contour-line overlay.
 
 ## [9.0.0] - 2026-07-27
 
