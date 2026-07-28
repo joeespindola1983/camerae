@@ -22,7 +22,7 @@ require_text() {
   local file="$1"
   local pattern="$2"
   local message="$3"
-  rg -q -- "$pattern" "$file" || fail "$message"
+  grep -Eq -- "$pattern" "$file" || fail "$message"
 }
 
 require_file "$WORKFLOW"
