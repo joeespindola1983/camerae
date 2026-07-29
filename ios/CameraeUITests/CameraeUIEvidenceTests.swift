@@ -38,6 +38,19 @@ final class CameraeUIEvidenceTests: XCTestCase {
         try capture("06-repeatable-configuracao-video", title: "Repeatable · Configuração Vídeo", app: app)
 
         element(localizedTitle(ptBR: "Capturas", es: "Capturas", en: "Captures", fr: "Captures", de: "Aufnahmen", ru: "Съёмки"), app: app).tap()
+        XCTAssertTrue(
+            element(
+                localizedTitle(
+                    ptBR: "Nenhuma captura ainda",
+                    es: "Aún no hay capturas",
+                    en: "No captures yet",
+                    fr: "Aucune capture pour l’instant",
+                    de: "Noch keine Aufnahmen",
+                    ru: "Снимков пока нет"
+                ),
+                app: app
+            ).waitForExistence(timeout: 8)
+        )
         try capture("07-repeatable-capturas", title: "Repeatable · Capturas", app: app)
 
         relaunch(app)
@@ -52,6 +65,19 @@ final class CameraeUIEvidenceTests: XCTestCase {
 
         relaunch(app)
         openWorkflow(.edit, app: app)
+        XCTAssertTrue(
+            element(
+                localizedTitle(
+                    ptBR: "Nenhuma montagem",
+                    es: "Aún no hay montajes",
+                    en: "No edits yet",
+                    fr: "Aucun montage pour l’instant",
+                    de: "Noch kein Schnitt",
+                    ru: "Монтажей пока нет"
+                ),
+                app: app
+            ).waitForExistence(timeout: 8)
+        )
         try capture("11-editor-projetos", title: "Editor · Projetos", app: app)
 
         relaunch(app)

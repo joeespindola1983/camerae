@@ -1,6 +1,56 @@
 {
   "sourceLanguage" : "pt-BR",
   "strings" : {
+    "capture.empty.message" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Deine erste Sitzung erscheint hier, sobald ein Bild gespeichert wurde." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your first session will appear here as soon as an image is saved." } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Tu primera sesión aparecerá aquí en cuanto se guarde una imagen." } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Votre première session apparaîtra ici dès qu’une image sera enregistrée." } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Sua primeira sessão aparecerá aqui assim que uma imagem for salva." } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Первый сеанс появится здесь после сохранения изображения." } }
+      }
+    },
+    "capture.empty.title" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch keine Aufnahmen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No captures yet" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún no hay capturas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucune capture pour l’instant" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nenhuma captura ainda" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Снимков пока нет" } }
+      }
+    },
+    "capture.new" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neue Aufnahme" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "New capture" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Nueva captura" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Nouvelle capture" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nova captura" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Новая съёмка" } }
+      }
+    },
+    "capture.session_count" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%d SITZUNGEN" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%d SESSIONS" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "%d SESIONES" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "%d SESSIONS" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "%d SESSÕES" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "%d СЕАНСОВ" } }
+      }
+    },
+    "edit.empty.title" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch kein Schnitt" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No edits yet" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Aún no hay montajes" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Aucun montage pour l’instant" } },
+        "pt-BR" : { "stringUnit" : { "state" : "translated", "value" : "Nenhuma montagem" } },
+        "ru" : { "stringUnit" : { "state" : "translated", "value" : "Монтажей пока нет" } }
+      }
+    },
     "settings.title" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Einstellungen"}},"en":{"stringUnit":{"state":"translated","value":"Settings"}},"es":{"stringUnit":{"state":"translated","value":"Ajustes"}},"fr":{"stringUnit":{"state":"translated","value":"Réglages"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Configurações"}},"ru":{"stringUnit":{"state":"translated","value":"Настройки"}}}},
     "settings.close" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Schließen"}},"en":{"stringUnit":{"state":"translated","value":"Close"}},"es":{"stringUnit":{"state":"translated","value":"Cerrar"}},"fr":{"stringUnit":{"state":"translated","value":"Fermer"}},"pt-BR":{"stringUnit":{"state":"translated","value":"Fechar"}},"ru":{"stringUnit":{"state":"translated","value":"Закрыть"}}}},
     "settings.overview.helper" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Globale Camerae-Einstellungen. Aufnahmeoptionen werden für jedes Modul separat festgelegt."}},"en":{"stringUnit":{"state":"translated","value":"Global Camerae preferences. Capture choices are configured separately for each module."}},"es":{"stringUnit":{"state":"translated","value":"Preferencias globales de Camerae. Las opciones de captura se configuran por separado para cada módulo."}},"fr":{"stringUnit":{"state":"translated","value":"Préférences générales de Camerae. Les options de capture sont configurées séparément pour chaque module."}},"pt-BR":{"stringUnit":{"state":"translated","value":"Preferências globais do Camerae. As escolhas de captura são separadas por módulo."}},"ru":{"stringUnit":{"state":"translated","value":"Общие настройки Camerae. Параметры съёмки задаются отдельно для каждого модуля."}}}},

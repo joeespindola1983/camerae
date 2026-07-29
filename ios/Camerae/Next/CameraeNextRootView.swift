@@ -180,7 +180,7 @@ struct CameraeNextProjectListView: View {
 
                     if projectStore.activeProjects(for: .edit).isEmpty {
                         ContentUnavailableView(
-                            "Nenhuma montagem",
+                            CameraeL10n.noEditsYet,
                             systemImage: "film.stack",
                             description: Text(CameraeL10n.newProjectMessage(for: .edit))
                         )

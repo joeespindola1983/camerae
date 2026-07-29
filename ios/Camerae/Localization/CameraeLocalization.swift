@@ -89,9 +89,21 @@ enum CameraeL10n {
     static var moduleEdit: String { text("home.module.edit", "Editar") }
     static var configure: String { text("workflow.tab.configure", "Configurar") }
     static var captures: String { text("workflow.tab.captures", "Capturas") }
+    static var newCapture: String { text("capture.new", "Nova captura") }
+    static var noCapturesYet: String { text("capture.empty.title", "Nenhuma captura ainda") }
+    static var firstCaptureMessage: String {
+        text(
+            "capture.empty.message",
+            "Sua primeira sessão aparecerá aqui assim que uma imagem for salva."
+        )
+    }
+    static var noEditsYet: String { text("edit.empty.title", "Nenhuma montagem") }
 
     static func captureCount(_ count: Int) -> String {
         format("project.capture_count", defaultValue: "%d capturas", count)
+    }
+    static func sessionCount(_ count: Int) -> String {
+        format("capture.session_count", defaultValue: "%d SESSÕES", count)
     }
     static var video: String { text("workflow.mode.video", "Vídeo") }
     static var photo: String { text("workflow.mode.photo", "Foto") }

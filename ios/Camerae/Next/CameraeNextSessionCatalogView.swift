@@ -365,7 +365,7 @@ struct CameraeNextSessionCatalogView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: onStartNew) {
-                    Label("Nova captura", systemImage: "plus")
+                    Label(CameraeL10n.newCapture, systemImage: "plus")
                 }
             }
         }
@@ -378,7 +378,7 @@ struct CameraeNextSessionCatalogView: View {
         }
         .safeAreaInset(edge: .bottom) {
             CameraeNextActionButton(
-                title: "Nova captura",
+                title: CameraeL10n.newCapture,
                 systemImage: nil,
                 theme: theme,
                 action: onStartNew
@@ -426,7 +426,7 @@ struct CameraeNextSessionCatalogView: View {
             Text(CameraeL10n.captures.uppercased())
                 .foregroundStyle(theme.muted)
             Spacer()
-            Text("\(catalog.sessions.count + (isFinalizingCapture ? 1 : 0)) SESSÕES")
+            Text(CameraeL10n.sessionCount(catalog.sessions.count + (isFinalizingCapture ? 1 : 0)))
                 .foregroundStyle(theme.accent)
         }
         .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
@@ -442,11 +442,11 @@ struct CameraeNextSessionCatalogView: View {
                 .frame(width: 72, height: 72)
                 .background(theme.surface, in: Circle())
 
-            Text("Nenhuma captura ainda")
+            Text(CameraeL10n.noCapturesYet)
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
                 .foregroundStyle(theme.text)
 
-            Text("Sua primeira sessão aparecerá aqui assim que uma imagem for salva.")
+            Text(CameraeL10n.firstCaptureMessage)
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)

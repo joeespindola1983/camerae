@@ -30,6 +30,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Fixed
 
 - Restored project-list thumbnails for Astro captures and legacy projects while continuing to prefer an explicit Repeatable reference image.
+- Localized the Repeatable capture-empty state, capture count and action, plus the Edit empty state, across all six release languages.
 
 ## [9.1.0] - 2026-07-28
 
