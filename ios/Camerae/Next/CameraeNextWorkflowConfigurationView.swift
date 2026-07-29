@@ -138,7 +138,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
             ? [CameraeL10n.exposure, CameraeL10n.interval, CameraeL10n.capturesPerFrame]
             : (isRepeatablePhoto ? ["EV"] : ["EV", CameraeL10n.interval])
         durationLabels = isVideo
-            ? ["30 s", "1 min", "2 min"]
+            ? ["30 s", "1 min", "2 min", CameraeL10n.customDurationShort]
             : isAstroPhoto || isRepeatablePhoto
             ? []
             : isAstro
@@ -154,6 +154,25 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
     }
 }
 
+struct CameraeNextDurationSelection: Equatable, Sendable {
+    static let videoPresetSeconds = [30, 60, 120]
+    static let timelapsePresetMinutes = [15, 30, 60]
+
+    let selectedValue: Int
+
+    init(configuration: CameraeNextCaptureConfiguration) {
+        if configuration.repeatableKind == .video {
+            selectedValue = Self.videoPresetSeconds.contains(configuration.videoDurationSeconds)
+                ? configuration.videoDurationSeconds
+                : 0
+        } else {
+            selectedValue = Self.timelapsePresetMinutes.contains(configuration.durationMinutes)
+                ? configuration.durationMinutes
+                : 0
+        }
+    }
+}
+
 struct CameraeNextWorkflowConfigurationView: View {
     @EnvironmentObject private var settings: CameraeSettingsStore
     let project: CameraProject
@@ -164,7 +183,7 @@ struct CameraeNextWorkflowConfigurationView: View {
 
     @State private var configuration: CameraeNextCaptureConfiguration
     @StateObject private var planning: CapturePlanningViewModel
-    @State private var usesCustomDuration = false
+    @State private var usesCustomDuration: Bool
     @State private var isShowingCustomDuration = false
     @State private var referenceURL: URL?
     @State private var importedReferenceItem: PhotosPickerItem?
@@ -227,6 +246,9 @@ struct CameraeNextWorkflowConfigurationView: View {
         self.captureConfigurationStore = captureConfigurationStore
         _projectCaptureProfile = State(initialValue: savedProfile)
         _configuration = State(initialValue: initialConfiguration)
+        _usesCustomDuration = State(
+            initialValue: CameraeNextDurationSelection(configuration: initialConfiguration).selectedValue == 0
+        )
         _referenceURL = State(initialValue: project.referenceFrameURL)
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
@@ -331,7 +353,7 @@ struct CameraeNextWorkflowConfigurationView: View {
         }
         .sheet(isPresented: $isShowingCustomDuration) {
             CameraeNextCustomDurationSheet(
-                minutes: $configuration.durationMinutes,
+                minutes: customDurationMinutesBinding,
                 module: project.module,
                 theme: theme,
                 onApply: { usesCustomDuration = true }
@@ -481,7 +503,7 @@ struct CameraeNextWorkflowConfigurationView: View {
             next.repeatableKind = kind
             configuration = hardware.applying(to: next)
         }
-        usesCustomDuration = false
+        usesCustomDuration = CameraeNextDurationSelection(configuration: configuration).selectedValue == 0
     }
 
     private var captureCard: some View {
@@ -540,21 +562,43 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
 
     private var durationValues: [Int] {
-        presentation.showsVideoSettings ? [30, 60, 120] : [15, 30, 60, 0]
+        presentation.showsVideoSettings ? [30, 60, 120, 0] : [15, 30, 60, 0]
     }
 
     private var durationBinding: Binding<Int> {
-        if presentation.showsVideoSettings {
-            return $configuration.videoDurationSeconds
-        }
         return Binding(
-            get: { usesCustomDuration ? 0 : configuration.durationMinutes },
+            get: {
+                usesCustomDuration
+                    ? 0
+                    : CameraeNextDurationSelection(configuration: configuration).selectedValue
+            },
             set: { value in
                 if value == 0 {
                     isShowingCustomDuration = true
                 } else {
                     usesCustomDuration = false
-                    configuration.durationMinutes = value
+                    if presentation.showsVideoSettings {
+                        configuration.videoDurationSeconds = value
+                    } else {
+                        configuration.durationMinutes = value
+                    }
+                }
+            }
+        )
+    }
+
+    private var customDurationMinutesBinding: Binding<Int> {
+        Binding(
+            get: {
+                presentation.showsVideoSettings
+                    ? max(1, Int(ceil(Double(configuration.videoDurationSeconds) / 60)))
+                    : configuration.durationMinutes
+            },
+            set: { minutes in
+                if presentation.showsVideoSettings {
+                    configuration.videoDurationSeconds = minutes * 60
+                } else {
+                    configuration.durationMinutes = minutes
                 }
             }
         )

@@ -282,9 +282,9 @@ struct CameraeNextWorkflowConfigurationTests {
         let timelapsePresentation = CameraeNextWorkflowConfigurationPresentation(configuration: .repeatableDefault)
 
         #expect(videoPresentation.navigationTitle == CameraeL10n.newVideo)
-        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
+        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min", CameraeL10n.customDurationShort])
         #expect(videoPresentation.adjustmentTitles == ["EV"])
-        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
+        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min", CameraeL10n.customDurationShort])
         #expect(videoPresentation.showsVideoSettings)
         #expect(!videoPresentation.showsInterval)
         #expect(video.estimatedFrameCount == video.videoDurationSeconds * video.videoSettings.fps)
@@ -292,6 +292,24 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(timelapsePresentation.navigationTitle == CameraeL10n.newTimelapse)
         #expect(!timelapsePresentation.showsVideoSettings)
         #expect(timelapsePresentation.showsInterval)
+    }
+
+    @Test("A saved custom duration remains selected without changing the persisted value")
+    func restoredCustomDurationSelection() {
+        var video = CameraeNextCaptureConfiguration.repeatableDefault
+        video.repeatableKind = .video
+        video.videoDurationSeconds = 720
+
+        #expect(CameraeNextDurationSelection(configuration: video).selectedValue == 0)
+        #expect(video.videoDurationSeconds == 720)
+
+        video.videoDurationSeconds = 60
+        #expect(CameraeNextDurationSelection(configuration: video).selectedValue == 60)
+
+        var timelapse = CameraeNextCaptureConfiguration.repeatableDefault
+        timelapse.durationMinutes = 10
+        #expect(CameraeNextDurationSelection(configuration: timelapse).selectedValue == 0)
+        #expect(timelapse.durationMinutes == 10)
     }
 
     @Test("Repeatable photo is a single-frame workflow without timed or Astro controls")
