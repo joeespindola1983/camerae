@@ -17,6 +17,14 @@ struct AppRootView: View {
                 .navigationDestination(for: CameraProject.self) { project in
                     ModuleRuntimeView(project: project, path: $path)
                 }
+                .navigationDestination(for: ProjectNavigationRoute.self) { route in
+                    if let project = projectStore.projects.first(where: { $0.id == route.projectID }) {
+                        ModuleRuntimeView(project: project, path: $path)
+                    } else {
+                        ProgressView()
+                            .task { await projectStore.reloadNow() }
+                    }
+                }
         }
         .environmentObject(projectStore)
         .onAppear {

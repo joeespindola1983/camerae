@@ -1,5 +1,13 @@
 import SwiftUI
 
+struct ProjectNavigationRoute: Hashable, Sendable {
+    let projectID: UUID
+
+    init(project: CameraProject) {
+        projectID = project.id
+    }
+}
+
 struct ProjectListScreen: View {
     @EnvironmentObject private var projectStore: ProjectStore
 
@@ -41,7 +49,7 @@ struct ProjectListScreen: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if let lastOpenedProject {
-                        NavigationLink(value: lastOpenedProject) {
+                        NavigationLink(value: ProjectNavigationRoute(project: lastOpenedProject)) {
                             ProjectListHeroCard(project: lastOpenedProject, theme: theme)
                         }
                         .buttonStyle(.plain)
@@ -78,7 +86,7 @@ struct ProjectListScreen: View {
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(remainingProjects) { project in
-                                NavigationLink(value: project) {
+                                NavigationLink(value: ProjectNavigationRoute(project: project)) {
                                     ProjectListRow(project: project, theme: theme)
                                 }
                                 .buttonStyle(.plain)
@@ -228,7 +236,7 @@ struct ProjectListScreen: View {
                     project: project,
                     returnPathCount: path.count
                 )
-                path.append(project)
+                path.append(ProjectNavigationRoute(project: project))
             } catch {
                 errorMessage = error.localizedDescription
             }

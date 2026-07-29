@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Fixed
 
+- Keeps project-card navigation keyed by the stable project ID so the recently opened project remains tappable while its metadata and list position refresh.
 - Restores video duration from the project's latest recorded clip, normalizes near-preset recordings such as 29 seconds back to 30 seconds, and labels non-preset durations as Other.
 - Preserve the recorded resolution, frame rate, HEVC codec, and source bitrate when exporting aligned Repeatable videos, including 4K at 60 fps, and reject silent capture or export downgrades.
 - Select the largest full-sensor recording format before using stabilization support as a tie-breaker, preventing an unintended fallback to 1720 × 1290.
