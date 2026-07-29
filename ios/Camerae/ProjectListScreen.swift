@@ -480,7 +480,7 @@ struct ProjectListRow: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(
-                    project.captureConfiguration?.projectSummary
+                    project.captureProfile?.projectSummary
                         ?? ProjectRowSummary(project: project).subtitle.uppercased()
                 )
                     .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))

@@ -58,9 +58,13 @@ struct CameraProject: Identifiable, Equatable, Hashable {
     }
 
     var captureConfiguration: CameraeNextCaptureConfiguration? {
+        captureProfile?.selectedConfiguration
+    }
+
+    var captureProfile: ProjectCaptureProfile? {
         let store = ProjectCaptureConfigurationStore(projectDirectory: directoryURL)
         let summaries = TimelapseSessionStore(project: self).sessionSummaries()
-        return try? store.loadOrMigrate(module: module, summaries: summaries)
+        return try? store.loadProfileOrMigrate(module: module, summaries: summaries)
     }
 
     var libraryRootURL: URL {

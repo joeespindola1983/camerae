@@ -14,12 +14,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Added obvious Photo, Video, and Timelapse SF Symbol badges to capture-type selection and every project capture card.
+- Added independent editable defaults for Photo, Video, and Timelapse inside the same Repeatable project.
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
 - Added a themed project-storage screen for Repeatable and Astro, matching the canonical light and dark examples in Figma.
 - Added project-level capture configuration locking so Photo, Timelapse, and Video projects automatically reuse the type and exact settings selected for their first capture.
 
 ### Changed
 
+- Locks only the project's physical camera and zoom after the first capture; all other capture settings remain preselected and editable.
+- Migrates legacy immutable capture configurations to schema 3 hardware contracts with independent per-type presets.
 - Automatically discards a newly created temporary project when the user leaves without creating or importing any durable content.
 - Standardized every project-list thumbnail as a fixed, orientation-independent image area with the project name over the image and all metadata below it.
 - Replaced project completion badges with actual capture totals and added archived-project filtering with reversible archive actions.
