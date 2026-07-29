@@ -127,7 +127,7 @@ enum CameraeL10n {
     static var qualityHigh: String { text("workflow.video.quality.high", "Alta") }
     static var qualityMaximum: String { text("workflow.video.quality.maximum", "Máxima") }
     static var preview: String { text("workflow.video.resolution.preview", "Prévia") }
-    static var customDurationShort: String { text("workflow.duration.custom.short", "Personal.") }
+    static var customDurationShort: String { text("workflow.duration.other.short", "Outro") }
     static var takePhoto: String { text("workflow.reference.take_photo", "Tirar foto") }
     static var importPhoto: String { text("workflow.reference.import", "Importar") }
     static var replace: String { text("workflow.reference.replace", "Substituir") }

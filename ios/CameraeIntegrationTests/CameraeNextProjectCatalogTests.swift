@@ -109,7 +109,32 @@ struct CameraeNextProjectCatalogTests {
         #expect(ProjectCatalogActionPolicy.actions(for: archived) == [.unarchive, .delete])
     }
 
+    @Test("project navigation identity survives metadata and last-opened updates")
+    func stableProjectNavigationIdentity() {
+        let projectID = UUID()
+        let beforeOpening = makeProject(
+            id: projectID,
+            name: "Repeatable",
+            module: .repeatable,
+            day: 1,
+            lastOpenedDay: 1,
+            mediaCount: 1
+        )
+        let afterOpening = makeProject(
+            id: projectID,
+            name: "Repeatable",
+            module: .repeatable,
+            day: 1,
+            lastOpenedDay: 2,
+            mediaCount: 2
+        )
+
+        #expect(beforeOpening != afterOpening)
+        #expect(ProjectNavigationRoute(project: beforeOpening) == ProjectNavigationRoute(project: afterOpening))
+    }
+
     private func makeProject(
+        id: UUID = UUID(),
         name: String,
         module: CameraModule,
         day: Int,
@@ -122,7 +147,7 @@ struct CameraeNextProjectCatalogTests {
             timeIntervalSince1970: TimeInterval((lastOpenedDay ?? day) * 86_400)
         )
         let record = ProjectRecord(
-            id: UUID(),
+            id: id,
             module: module.coreValue,
             name: name,
             directoryURL: URL(fileURLWithPath: "/tmp/\(name)"),

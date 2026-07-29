@@ -69,11 +69,37 @@ enum CameraeNextSessionTrailingAction: Equatable, Sendable {
     case menu
 }
 
+struct CameraeNextCaptureTypePresentation: Equatable, Sendable {
+    let title: String
+    let systemImage: String
+
+    init(kind: RepeatableCaptureKind) {
+        switch kind {
+        case .photo:
+            title = CameraeL10n.photo
+            systemImage = "camera.fill"
+        case .video:
+            title = CameraeL10n.video
+            systemImage = "video.fill"
+        case .timelapse:
+            title = CameraeL10n.timelapse
+            systemImage = "timelapse"
+        }
+    }
+
+    init(title: String, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+    }
+}
+
 struct CameraeNextSessionCardPresentation: Equatable, Sendable {
     let statusText: String
     let trailingAction: CameraeNextSessionTrailingAction
+    let captureType: CameraeNextCaptureTypePresentation
 
     init(summary: TimelapseSessionSummary) {
+        captureType = CameraeNextCaptureTypePresentation(kind: summary.captureKind)
         if summary.session.module == .astrophotography {
             statusText = "ABRIR PROCESSAMENTO"
             trailingAction = .menu
@@ -555,6 +581,19 @@ struct CameraeNextSessionCatalogView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 3) {
+                        Label(
+                            cardPresentation.captureType.title.uppercased(),
+                            systemImage: cardPresentation.captureType.systemImage
+                        )
+                            .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                            .tracking(1.4)
+                            .foregroundStyle(theme.accent)
+                            .padding(.horizontal, 9)
+                            .frame(height: 26)
+                            .background(theme.surface, in: Capsule())
+                            .overlay {
+                                Capsule().stroke(theme.accent, lineWidth: 1)
+                            }
                         Text(summary.session.createdAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                             .foregroundStyle(theme.text)

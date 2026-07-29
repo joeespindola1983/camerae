@@ -138,7 +138,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
             ? [CameraeL10n.exposure, CameraeL10n.interval, CameraeL10n.capturesPerFrame]
             : (isRepeatablePhoto ? ["EV"] : ["EV", CameraeL10n.interval])
         durationLabels = isVideo
-            ? ["30 s", "1 min", "2 min"]
+            ? ["30 s", "1 min", "2 min", CameraeL10n.customDurationShort]
             : isAstroPhoto || isRepeatablePhoto
             ? []
             : isAstro
@@ -154,6 +154,25 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
     }
 }
 
+struct CameraeNextDurationSelection: Equatable, Sendable {
+    static let videoPresetSeconds = CameraeNextVideoDurationPolicy.presetSeconds
+    static let timelapsePresetMinutes = [15, 30, 60]
+
+    let selectedValue: Int
+
+    init(configuration: CameraeNextCaptureConfiguration) {
+        if configuration.repeatableKind == .video {
+            selectedValue = Self.videoPresetSeconds.contains(configuration.videoDurationSeconds)
+                ? configuration.videoDurationSeconds
+                : 0
+        } else {
+            selectedValue = Self.timelapsePresetMinutes.contains(configuration.durationMinutes)
+                ? configuration.durationMinutes
+                : 0
+        }
+    }
+}
+
 struct CameraeNextWorkflowConfigurationView: View {
     @EnvironmentObject private var settings: CameraeSettingsStore
     let project: CameraProject
@@ -164,7 +183,7 @@ struct CameraeNextWorkflowConfigurationView: View {
 
     @State private var configuration: CameraeNextCaptureConfiguration
     @StateObject private var planning: CapturePlanningViewModel
-    @State private var usesCustomDuration = false
+    @State private var usesCustomDuration: Bool
     @State private var isShowingCustomDuration = false
     @State private var referenceURL: URL?
     @State private var importedReferenceItem: PhotosPickerItem?
@@ -173,7 +192,7 @@ struct CameraeNextWorkflowConfigurationView: View {
     @State private var isReferenceLoading = false
     @State private var referenceErrorMessage: String?
     @State private var configurationErrorMessage: String?
-    @State private var isConfigurationLocked: Bool
+    @State private var projectCaptureProfile: ProjectCaptureProfile?
 
     private let availableLenses: [RepeatableCameraLens]
     private let preferredLens: RepeatableCameraLens
@@ -200,13 +219,13 @@ struct CameraeNextWorkflowConfigurationView: View {
         let cameraPolicy = CameraeNextProjectCameraPolicy(summaries: sessionSummaries)
         let preferredLens = cameraPolicy.lockedLens ?? RepeatableCameraLens.wide
         let availableLenses = RepeatableCameraLens.availableBackLenses()
-        let savedConfiguration = try? captureConfigurationStore.loadOrMigrate(
+        let savedProfile = try? captureConfigurationStore.loadProfileOrMigrate(
             module: project.module,
             summaries: sessionSummaries
         )
         var initialConfiguration: CameraeNextCaptureConfiguration
-        if let savedConfiguration, savedConfiguration.module == project.module {
-            initialConfiguration = savedConfiguration
+        if let savedProfile, savedProfile.module == project.module {
+            initialConfiguration = savedProfile.selectedConfiguration
         } else {
             initialConfiguration = project.module == .astrophotography
                 ? CameraeNextCaptureConfiguration.astroDefault
@@ -225,10 +244,11 @@ struct CameraeNextWorkflowConfigurationView: View {
         self.preferredLens = preferredLens
         self.referenceStore = referenceStore
         self.captureConfigurationStore = captureConfigurationStore
-        _isConfigurationLocked = State(
-            initialValue: savedConfiguration?.module == project.module
-        )
+        _projectCaptureProfile = State(initialValue: savedProfile)
         _configuration = State(initialValue: initialConfiguration)
+        _usesCustomDuration = State(
+            initialValue: CameraeNextDurationSelection(configuration: initialConfiguration).selectedValue == 0
+        )
         _referenceURL = State(initialValue: project.referenceFrameURL)
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
@@ -244,13 +264,14 @@ struct CameraeNextWorkflowConfigurationView: View {
         .init(configuration: configuration)
     }
     private var cameraSetupPresentation: CameraeNextCameraSetupPresentation {
-        .init(
+        let hardware = projectCaptureProfile?.hardware
+        return .init(
             module: project.module,
             availableLenses: availableLenses,
             selectedLens: configuration.cameraLens,
             preferredLens: preferredLens,
-            lockedLens: cameraPolicy.lockedLens,
-            lockedZoomFactor: cameraPolicy.lockedZoomFactor
+            lockedLens: hardware?.cameraLens ?? cameraPolicy.lockedLens,
+            lockedZoomFactor: hardware?.cameraZoomFactor ?? cameraPolicy.lockedZoomFactor
         )
     }
     private var planningPresentation: CameraeNextCapturePlanningPresentation {
@@ -283,15 +304,11 @@ struct CameraeNextWorkflowConfigurationView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     referenceCard
-                    if isConfigurationLocked {
-                        lockedConfigurationCard
-                    } else {
-                        modePicker
-                        captureCard
-                        cameraCard
-                        adjustmentsCard
-                        if presentation.showsVideoSettings { videoSettingsCard }
-                    }
+                    modePicker
+                    captureCard
+                    cameraCard
+                    adjustmentsCard
+                    if presentation.showsVideoSettings { videoSettingsCard }
                     planningCard
                 }
                 .padding(.horizontal, 16)
@@ -336,7 +353,7 @@ struct CameraeNextWorkflowConfigurationView: View {
         }
         .sheet(isPresented: $isShowingCustomDuration) {
             CameraeNextCustomDurationSheet(
-                minutes: $configuration.durationMinutes,
+                minutes: customDurationMinutesBinding,
                 module: project.module,
                 theme: theme,
                 onApply: { usesCustomDuration = true }
@@ -424,27 +441,12 @@ struct CameraeNextWorkflowConfigurationView: View {
             resolved.sourceFormat = format
         }
         do {
-            let persisted = try captureConfigurationStore.saveInitial(resolved)
+            let persisted = try captureConfigurationStore.saveDefaults(resolved)
             configuration = persisted
-            isConfigurationLocked = true
+            projectCaptureProfile = try captureConfigurationStore.loadProfile()
             onStart(persisted)
         } catch {
             configurationErrorMessage = error.localizedDescription
-        }
-    }
-
-    private var lockedConfigurationCard: some View {
-        CameraeNextCard(theme: theme) {
-            VStack(alignment: .leading, spacing: 8) {
-                CameraeNextSectionLabel(title: "CONFIGURAÇÃO DO PROJETO", theme: theme)
-                Text(configuration.projectSummary)
-                    .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
-                    .foregroundStyle(theme.text)
-                Text("As próximas capturas reutilizam automaticamente o tipo e as configurações definidos na primeira captura.")
-                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
-                    .foregroundStyle(theme.muted)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -473,25 +475,35 @@ struct CameraeNextWorkflowConfigurationView: View {
                 }
             },
             set: { value in
-                if isAstro {
-                    configuration.repeatableKind = switch value {
-                    case .photo: .photo
-                    case .video: .video
-                    default: .timelapse
-                    }
-                    usesCustomDuration = false
-                } else {
-                    configuration.repeatableKind = switch value {
-                    case .photo: .photo
-                    case .video: .video
-                    default: .timelapse
-                    }
-                    if configuration.repeatableKind == .video {
-                        usesCustomDuration = false
-                    }
+                let kind: RepeatableCaptureKind = switch value {
+                case .photo: .photo
+                case .video: .video
+                default: .timelapse
                 }
+                selectCaptureKind(kind)
             }
         )
+    }
+
+    private func selectCaptureKind(_ kind: RepeatableCaptureKind) {
+        guard configuration.repeatableKind != kind else { return }
+        if var profile = projectCaptureProfile {
+            _ = profile.updateDefaults(configuration)
+            configuration = profile.configuration(for: kind)
+            profile.selectedKind = kind
+            projectCaptureProfile = profile
+        } else {
+            let hardware = ProjectCaptureHardware(
+                cameraLens: configuration.cameraLens,
+                cameraZoomFactor: configuration.cameraZoomFactor
+            )
+            var next = project.module == .astrophotography
+                ? CameraeNextCaptureConfiguration.astroDefault
+                : CameraeNextCaptureConfiguration.repeatableDefault
+            next.repeatableKind = kind
+            configuration = hardware.applying(to: next)
+        }
+        usesCustomDuration = CameraeNextDurationSelection(configuration: configuration).selectedValue == 0
     }
 
     private var captureCard: some View {
@@ -550,21 +562,43 @@ struct CameraeNextWorkflowConfigurationView: View {
     }
 
     private var durationValues: [Int] {
-        presentation.showsVideoSettings ? [30, 60, 120] : [15, 30, 60, 0]
+        presentation.showsVideoSettings ? [30, 60, 120, 0] : [15, 30, 60, 0]
     }
 
     private var durationBinding: Binding<Int> {
-        if presentation.showsVideoSettings {
-            return $configuration.videoDurationSeconds
-        }
         return Binding(
-            get: { usesCustomDuration ? 0 : configuration.durationMinutes },
+            get: {
+                usesCustomDuration
+                    ? 0
+                    : CameraeNextDurationSelection(configuration: configuration).selectedValue
+            },
             set: { value in
                 if value == 0 {
                     isShowingCustomDuration = true
                 } else {
                     usesCustomDuration = false
-                    configuration.durationMinutes = value
+                    if presentation.showsVideoSettings {
+                        configuration.videoDurationSeconds = value
+                    } else {
+                        configuration.durationMinutes = value
+                    }
+                }
+            }
+        )
+    }
+
+    private var customDurationMinutesBinding: Binding<Int> {
+        Binding(
+            get: {
+                presentation.showsVideoSettings
+                    ? max(1, Int(ceil(Double(configuration.videoDurationSeconds) / 60)))
+                    : configuration.durationMinutes
+            },
+            set: { minutes in
+                if presentation.showsVideoSettings {
+                    configuration.videoDurationSeconds = minutes * 60
+                } else {
+                    configuration.durationMinutes = minutes
                 }
             }
         )

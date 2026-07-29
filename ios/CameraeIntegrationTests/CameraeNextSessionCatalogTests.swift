@@ -52,7 +52,30 @@ struct CameraeNextSessionCatalogTests {
         )
 
         #expect(CameraeNextSessionOpenRoute(summary: summary) == .image(url))
-        #expect(CameraeNextSessionCardPresentation(summary: summary).trailingAction == .share(url))
+        let presentation = CameraeNextSessionCardPresentation(summary: summary)
+        #expect(presentation.trailingAction == .share(url))
+        #expect(presentation.captureType == .init(title: "Foto", systemImage: "camera.fill"))
+    }
+
+    @Test(
+        "every capture card exposes an obvious typed icon independent of its layout",
+        arguments: [
+            (RepeatableCaptureKind.photo, "Foto", "camera.fill"),
+            (RepeatableCaptureKind.video, "Vídeo", "video.fill"),
+            (RepeatableCaptureKind.timelapse, "Timelapse", "timelapse"),
+        ]
+    )
+    func captureTypeIcon(
+        kind: RepeatableCaptureKind,
+        title: String,
+        systemImage: String
+    ) {
+        let presentation = CameraeNextSessionCardPresentation(
+            summary: fixture(frameCount: 1, captureKind: kind, purpose: .capture)
+        )
+
+        #expect(presentation.captureType.title == title)
+        #expect(presentation.captureType.systemImage == systemImage)
     }
 
     @Test func openingRepeatableCaptureWithoutRenderedVideoNeverStartsCamera() {
