@@ -10,10 +10,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
 - Added a themed project-storage screen for Repeatable and Astro, matching the canonical light and dark examples in Figma.
+- Added project-level capture configuration locking so Photo, Timelapse, and Video projects automatically reuse the type and exact settings selected for their first capture.
 
 ### Changed
 
 - Automatically discards a newly created temporary project when the user leaves without creating or importing any durable content.
+- Standardized every project-list thumbnail as a fixed, orientation-independent image area with the project name over the image and all metadata below it.
+- Replaced project completion badges with actual capture totals and added archived-project filtering with reversible archive actions.
+- Restored explicit project action menus after thumbnail changes and added tested interface-capability contracts that preserve archive, unarchive, and delete access across layout refactors.
+- Added one-time migration for captured legacy projects so historical capture type, camera, format, duration, interval, and Astro stack size become a normalized immutable project configuration.
+- Added independent project sorting by last activity or creation date with newest projects first.
+- Added the fixed project capture type and configuration summary to project cards and subsequent capture setup.
 
 ### Fixed
 

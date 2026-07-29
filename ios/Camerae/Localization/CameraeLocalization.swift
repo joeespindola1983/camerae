@@ -41,8 +41,18 @@ enum CameraeL10n {
     static var okay: String { text("common.ok", "OK") }
     static var error: String { text("common.error", "Erro") }
     static var archive: String { text("project.archive", "Arquivar") }
+    static var unarchive: String { text("project.unarchive", "Desarquivar") }
+    static var archived: String { text("project.filter.archived", "Arquivados") }
+    static var withCaptures: String { text("project.filter.with_captures", "Com capturas") }
     static var projectsSection: String { text("project.section", "PROJETOS") }
     static var filterProjects: String { text("project.filter", "Filtrar projetos") }
+    static var sortProjects: String { text("project.sort", "Ordenar projetos") }
+    static var sortLastActivity: String {
+        text("project.sort.last_activity", "Última atividade")
+    }
+    static var sortCreatedNewest: String {
+        text("project.sort.created_newest", "Data de criação · mais novos primeiro")
+    }
     static var createProject: String { text("project.create", "Criar projeto") }
     static var newProject: String { text("project.new", "Novo projeto") }
     static var projectName: String { text("project.name", "Nome do projeto") }
@@ -57,6 +67,10 @@ enum CameraeL10n {
     static var startFirstProject: String { text("project.empty.action", "Comece seu primeiro projeto") }
     static var emptyTemporaryProject: String { text("project.temporary.empty.title", "Projeto temporário vazio") }
     static var removeProject: String { text("project.remove", "Remover projeto") }
+    static var deleteProject: String { text("project.delete", "Excluir projeto") }
+    static var deleteProjectConfirmation: String {
+        text("project.delete.confirmation", "Todo o conteúdo do projeto será removido permanentemente.")
+    }
     static var emptyTemporaryProjectMessage: String {
         text(
             "project.temporary.empty.message",
@@ -75,6 +89,10 @@ enum CameraeL10n {
     static var moduleEdit: String { text("home.module.edit", "Editar") }
     static var configure: String { text("workflow.tab.configure", "Configurar") }
     static var captures: String { text("workflow.tab.captures", "Capturas") }
+
+    static func captureCount(_ count: Int) -> String {
+        format("project.capture_count", defaultValue: "%d capturas", count)
+    }
     static var video: String { text("workflow.mode.video", "Vídeo") }
     static var photo: String { text("workflow.mode.photo", "Foto") }
     static var timelapse: String { text("workflow.mode.timelapse", "Timelapse") }

@@ -1,25 +1,58 @@
 import SwiftUI
 
+enum ProjectCatalogAction: Hashable, Sendable {
+    case archive
+    case unarchive
+    case delete
+}
+
+enum ProjectCatalogActionPolicy {
+    static func actions(for project: CameraProject) -> [ProjectCatalogAction] {
+        [project.isArchived ? .unarchive : .archive, .delete]
+    }
+}
+
 enum CameraeNextProjectCatalogFilter: String, CaseIterable, Identifiable, Sendable {
     case recent
-    case inProgress
-    case completed
+    case withCaptures
+    case archived
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .recent: CameraeL10n.recent
-        case .inProgress: CameraeL10n.inProgress
-        case .completed: CameraeL10n.completed
+        case .withCaptures: CameraeL10n.withCaptures
+        case .archived: CameraeL10n.archived
         }
     }
 
     var systemImage: String {
         switch self {
         case .recent: "clock"
-        case .inProgress: "circle.dotted"
-        case .completed: "checkmark.circle"
+        case .withCaptures: "camera.fill"
+        case .archived: "archivebox"
+        }
+    }
+}
+
+enum CameraeNextProjectCatalogSort: String, CaseIterable, Identifiable, Sendable {
+    case lastActivity
+    case createdNewest
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .lastActivity: CameraeL10n.sortLastActivity
+        case .createdNewest: CameraeL10n.sortCreatedNewest
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .lastActivity: "clock.arrow.circlepath"
+        case .createdNewest: "calendar.badge.clock"
         }
     }
 }
@@ -28,32 +61,41 @@ struct CameraeNextProjectCatalogModel: Equatable {
     let projects: [CameraProject]
     let module: CameraModule
     let filter: CameraeNextProjectCatalogFilter
+    var sort: CameraeNextProjectCatalogSort = .lastActivity
 
-    private var activeProjects: [CameraProject] {
+    private var moduleProjects: [CameraProject] {
         projects
-            .filter { $0.module == module && !$0.isArchived }
+            .filter { $0.module == module }
             .sorted { lhs, rhs in
-                let lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
-                let rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
+                let lhsDate: Date
+                let rhsDate: Date
+                switch sort {
+                case .lastActivity:
+                    lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
+                    rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
+                case .createdNewest:
+                    lhsDate = lhs.createdAt
+                    rhsDate = rhs.createdAt
+                }
                 if lhsDate == rhsDate { return lhs.name < rhs.name }
                 return lhsDate > rhsDate
             }
     }
 
-    var featuredProject: CameraProject? { activeProjects.first }
-    var projectCount: Int { activeProjects.count }
-
-    var remainingProjects: [CameraProject] {
-        let remaining = Array(activeProjects.dropFirst())
+    var visibleProjects: [CameraProject] {
         switch filter {
         case .recent:
-            return remaining
-        case .inProgress:
-            return remaining.filter { ($0.summary?.mediaCount ?? 0) == 0 }
-        case .completed:
-            return remaining.filter { ($0.summary?.mediaCount ?? 0) > 0 }
+            return moduleProjects.filter { !$0.isArchived }
+        case .withCaptures:
+            return moduleProjects.filter { !$0.isArchived && ($0.summary?.mediaCount ?? 0) > 0 }
+        case .archived:
+            return moduleProjects.filter(\.isArchived)
         }
     }
+
+    var featuredProject: CameraProject? { visibleProjects.first }
+    var projectCount: Int { visibleProjects.count }
+    var remainingProjects: [CameraProject] { Array(visibleProjects.dropFirst()) }
 }
 
 enum CameraeNextTemporaryProjectPolicy {
@@ -84,6 +126,7 @@ struct CameraeNextProjectCatalogView: View {
     @Binding var path: NavigationPath
 
     @State private var filter = CameraeNextProjectCatalogFilter.recent
+    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var errorMessage: String?
@@ -94,7 +137,7 @@ struct CameraeNextProjectCatalogView: View {
     private var theme: ProjectListTheme { .init(module: module) }
     private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
     private var catalog: CameraeNextProjectCatalogModel {
-        .init(projects: projectStore.projects, module: module, filter: filter)
+        .init(projects: projectStore.projects, module: module, filter: filter, sort: sort)
     }
 
     var body: some View {
@@ -177,9 +220,12 @@ struct CameraeNextProjectCatalogView: View {
                                     }
 
                                     Button {
-                                        setArchived(project, true)
+                                        setArchived(project, !project.isArchived)
                                     } label: {
-                                        Label(CameraeL10n.archive, systemImage: "archivebox")
+                                        Label(
+                                            project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
+                                            systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
+                                        )
                                     }
                                     .tint(theme.accent)
                                 }
@@ -221,6 +267,17 @@ struct CameraeNextProjectCatalogView: View {
                     Image(systemName: "line.3.horizontal.decrease")
                 }
                 .accessibilityLabel(CameraeL10n.filterProjects)
+
+                Menu {
+                    Picker(CameraeL10n.sortProjects, selection: $sort) {
+                        ForEach(CameraeNextProjectCatalogSort.allCases) { option in
+                            Label(option.title, systemImage: option.systemImage).tag(option)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .accessibilityLabel(CameraeL10n.sortProjects)
 
                 Button(action: beginCreatingProject) {
                     Image(systemName: "plus")
@@ -305,6 +362,14 @@ struct CameraeNextProjectCatalogView: View {
         Menu {
             Button("Gerenciar armazenamento", systemImage: "externaldrive") {
                 projectForStorageManagement = project
+            }
+            Button {
+                setArchived(project, !project.isArchived)
+            } label: {
+                Label(
+                    project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
+                    systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
+                )
             }
             Button("Excluir projeto", systemImage: "trash", role: .destructive) {
                 projectToDelete = project

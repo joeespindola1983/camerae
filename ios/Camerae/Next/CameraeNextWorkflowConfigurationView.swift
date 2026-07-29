@@ -5,7 +5,7 @@ import PhotosUI
 import SwiftUI
 import UIKit
 
-struct CameraeNextCaptureConfiguration: Equatable, Hashable, Sendable {
+struct CameraeNextCaptureConfiguration: Codable, Equatable, Hashable, Sendable {
     var module: CameraModule
     var repeatableKind: RepeatableCaptureKind
     var durationMinutes: Int
@@ -172,10 +172,13 @@ struct CameraeNextWorkflowConfigurationView: View {
     @State private var isShowingReferenceCamera = false
     @State private var isReferenceLoading = false
     @State private var referenceErrorMessage: String?
+    @State private var configurationErrorMessage: String?
+    @State private var isConfigurationLocked: Bool
 
     private let availableLenses: [RepeatableCameraLens]
     private let preferredLens: RepeatableCameraLens
     private let referenceStore: TimelapseSessionStore
+    private let captureConfigurationStore: ProjectCaptureConfigurationStore
 
     init(
         project: CameraProject,
@@ -190,24 +193,41 @@ struct CameraeNextWorkflowConfigurationView: View {
         self.isEmbeddedInProjectWorkspace = isEmbeddedInProjectWorkspace
         self.referenceRefreshID = referenceRefreshID
         let referenceStore = TimelapseSessionStore(project: project)
-        let cameraPolicy = CameraeNextProjectCameraPolicy(
-            summaries: referenceStore.sessionSummaries()
+        let captureConfigurationStore = ProjectCaptureConfigurationStore(
+            projectDirectory: project.directoryURL
         )
+        let sessionSummaries = referenceStore.sessionSummaries()
+        let cameraPolicy = CameraeNextProjectCameraPolicy(summaries: sessionSummaries)
         let preferredLens = cameraPolicy.lockedLens ?? RepeatableCameraLens.wide
         let availableLenses = RepeatableCameraLens.availableBackLenses()
-        var initialConfiguration = project.module == .astrophotography
-            ? CameraeNextCaptureConfiguration.astroDefault
-            : CameraeNextCaptureConfiguration.repeatableDefault
-        initialConfiguration.sourceFormat = CameraeSettingsStore.shared.defaultSourceFormat(for: project.module)
-        if let lockedLens = cameraPolicy.lockedLens {
-            initialConfiguration.cameraLens = lockedLens
-            initialConfiguration.cameraZoomFactor = cameraPolicy.lockedZoomFactor
-        } else if !availableLenses.contains(preferredLens), let fallback = availableLenses.first {
-            initialConfiguration.cameraLens = fallback
+        let savedConfiguration = try? captureConfigurationStore.loadOrMigrate(
+            module: project.module,
+            summaries: sessionSummaries
+        )
+        var initialConfiguration: CameraeNextCaptureConfiguration
+        if let savedConfiguration, savedConfiguration.module == project.module {
+            initialConfiguration = savedConfiguration
+        } else {
+            initialConfiguration = project.module == .astrophotography
+                ? CameraeNextCaptureConfiguration.astroDefault
+                : CameraeNextCaptureConfiguration.repeatableDefault
+            initialConfiguration.sourceFormat = CameraeSettingsStore.shared.defaultSourceFormat(
+                for: project.module
+            )
+            if let lockedLens = cameraPolicy.lockedLens {
+                initialConfiguration.cameraLens = lockedLens
+                initialConfiguration.cameraZoomFactor = cameraPolicy.lockedZoomFactor
+            } else if !availableLenses.contains(preferredLens), let fallback = availableLenses.first {
+                initialConfiguration.cameraLens = fallback
+            }
         }
         self.availableLenses = availableLenses
         self.preferredLens = preferredLens
         self.referenceStore = referenceStore
+        self.captureConfigurationStore = captureConfigurationStore
+        _isConfigurationLocked = State(
+            initialValue: savedConfiguration?.module == project.module
+        )
         _configuration = State(initialValue: initialConfiguration)
         _referenceURL = State(initialValue: project.referenceFrameURL)
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
@@ -263,11 +283,15 @@ struct CameraeNextWorkflowConfigurationView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     referenceCard
-                    modePicker
-                    captureCard
-                    cameraCard
-                    adjustmentsCard
-                    if presentation.showsVideoSettings { videoSettingsCard }
+                    if isConfigurationLocked {
+                        lockedConfigurationCard
+                    } else {
+                        modePicker
+                        captureCard
+                        cameraCard
+                        adjustmentsCard
+                        if presentation.showsVideoSettings { videoSettingsCard }
+                    }
                     planningCard
                 }
                 .padding(.horizontal, 16)
@@ -368,6 +392,17 @@ struct CameraeNextWorkflowConfigurationView: View {
         } message: {
             Text(referenceErrorMessage ?? "")
         }
+        .alert(
+            "Configuração do projeto",
+            isPresented: Binding(
+                get: { configurationErrorMessage != nil },
+                set: { if !$0 { configurationErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(configurationErrorMessage ?? "")
+        }
         .onAppear(perform: synchronizeReference)
         .onChange(of: referenceRefreshID) { _, _ in synchronizeReference() }
     }
@@ -388,7 +423,29 @@ struct CameraeNextWorkflowConfigurationView: View {
         if let format = planning.result?.resolvedPlan.sourceFormat {
             resolved.sourceFormat = format
         }
-        onStart(resolved)
+        do {
+            let persisted = try captureConfigurationStore.saveInitial(resolved)
+            configuration = persisted
+            isConfigurationLocked = true
+            onStart(persisted)
+        } catch {
+            configurationErrorMessage = error.localizedDescription
+        }
+    }
+
+    private var lockedConfigurationCard: some View {
+        CameraeNextCard(theme: theme) {
+            VStack(alignment: .leading, spacing: 8) {
+                CameraeNextSectionLabel(title: "CONFIGURAÇÃO DO PROJETO", theme: theme)
+                Text(configuration.projectSummary)
+                    .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
+                    .foregroundStyle(theme.text)
+                Text("As próximas capturas reutilizam automaticamente o tipo e as configurações definidos na primeira captura.")
+                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                    .foregroundStyle(theme.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 
     private var modePicker: some View {

@@ -6,25 +6,20 @@ struct ProjectListScreen: View {
     let module: CameraModule
     @Binding var path: NavigationPath
 
-    @State private var filter = ProjectListFilter.recent
+    @State private var filter = CameraeNextProjectCatalogFilter.recent
+    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var errorMessage: String?
     @State private var pendingTemporaryProject: PendingTemporaryProject?
+    @State private var projectToDelete: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
-    private var projects: [CameraProject] { projectStore.activeProjects(for: module) }
-    private var lastOpenedProject: CameraProject? { projects.first }
-
-    private var remainingProjects: [CameraProject] {
-        let remaining = projects.filter { $0.id != lastOpenedProject?.id }
-        switch filter {
-        case .recent: return remaining
-        case .inProgress: return remaining.filter { ($0.summary?.mediaCount ?? 0) == 0 }
-        case .completed: return remaining.filter { ($0.summary?.mediaCount ?? 0) > 0 }
-        case .favorites: return []
-        }
+    private var catalog: CameraeNextProjectCatalogModel {
+        .init(projects: projectStore.projects, module: module, filter: filter, sort: sort)
     }
+    private var lastOpenedProject: CameraProject? { catalog.featuredProject }
+    private var remainingProjects: [CameraProject] { catalog.remainingProjects }
 
     var body: some View {
         ZStack {
@@ -50,6 +45,12 @@ struct ProjectListScreen: View {
                             ProjectListHeroCard(project: lastOpenedProject, theme: theme)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            archiveButton(for: lastOpenedProject)
+                        }
+                        .overlay(alignment: .topTrailing) {
+                            actionsMenu(for: lastOpenedProject)
+                        }
                         .padding(.top, 12)
                     } else {
                         ProjectListEmptyHero(theme: theme, createAction: beginCreatingProject)
@@ -60,7 +61,7 @@ struct ProjectListScreen: View {
                         Text("PROJETOS")
                             .tracking(1.6)
                         Spacer()
-                        Text("\(projects.count)")
+                        Text("\(catalog.projectCount)")
                             .foregroundStyle(theme.accent)
                     }
                     .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
@@ -82,12 +83,14 @@ struct ProjectListScreen: View {
                                 }
                                 .buttonStyle(.plain)
                                 .swipeActions(edge: .trailing) {
-                                    Button {
-                                        setArchived(project, true)
-                                    } label: {
-                                        Label("Arquivar", systemImage: "archivebox")
-                                    }
+                                    archiveButton(for: project)
                                     .tint(theme.accent)
+                                }
+                                .contextMenu {
+                                    archiveButton(for: project)
+                                }
+                                .overlay(alignment: .topTrailing) {
+                                    actionsMenu(for: project)
                                 }
                             }
                         }
@@ -119,7 +122,7 @@ struct ProjectListScreen: View {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Menu {
                     Picker("Filtrar projetos", selection: $filter) {
-                        ForEach(ProjectListFilter.allCases) { option in
+                        ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
                             Label(option.title, systemImage: option.systemImage).tag(option)
                         }
                     }
@@ -127,6 +130,17 @@ struct ProjectListScreen: View {
                     Image(systemName: "line.3.horizontal.decrease")
                 }
                 .accessibilityLabel("Filtrar projetos")
+
+                Menu {
+                    Picker(CameraeL10n.sortProjects, selection: $sort) {
+                        ForEach(CameraeNextProjectCatalogSort.allCases) { option in
+                            Label(option.title, systemImage: option.systemImage).tag(option)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .accessibilityLabel(CameraeL10n.sortProjects)
 
                 Button {
                     beginCreatingProject()
@@ -155,6 +169,17 @@ struct ProjectListScreen: View {
         } message: {
             Text(errorMessage ?? "")
         }
+        .alert(CameraeL10n.deleteProject, isPresented: Binding(
+            get: { projectToDelete != nil },
+            set: { if !$0 { projectToDelete = nil } }
+        )) {
+            Button(CameraeL10n.cancel, role: .cancel) {
+                projectToDelete = nil
+            }
+            Button(CameraeL10n.deleteProject, role: .destructive, action: deleteSelectedProject)
+        } message: {
+            Text(CameraeL10n.deleteProjectConfirmation)
+        }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
             projectStore.reload()
@@ -165,7 +190,7 @@ struct ProjectListScreen: View {
     private var filterBar: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                ForEach(ProjectListFilter.allCases) { option in
+                ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
                     Button(option.title) { filter = option }
                         .font(.custom("Outfit-Regular", size: 10, relativeTo: .caption2))
                         .foregroundStyle(filter == option ? .white : theme.text)
@@ -179,9 +204,9 @@ struct ProjectListScreen: View {
 
     private var emptyFilteredState: some View {
         VStack(spacing: 8) {
-            Image(systemName: filter == .favorites ? "star" : "rectangle.stack")
+            Image(systemName: filter == .archived ? "archivebox" : "rectangle.stack")
                 .font(.title2)
-            Text(projects.isEmpty ? "Nenhum projeto ainda" : "Nenhum projeto neste filtro")
+            Text(catalog.projectCount == 0 ? "Nenhum projeto ainda" : "Nenhum projeto neste filtro")
                 .font(.custom("Outfit-Medium", size: 15, relativeTo: .subheadline))
         }
         .foregroundStyle(theme.muted)
@@ -240,6 +265,43 @@ struct ProjectListScreen: View {
             }
         }
     }
+
+    @ViewBuilder
+    private func archiveButton(for project: CameraProject) -> some View {
+        Button {
+            setArchived(project, !project.isArchived)
+        } label: {
+            Label(
+                project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
+                systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
+            )
+        }
+    }
+
+    private func actionsMenu(for project: CameraProject) -> some View {
+        ProjectCatalogActionsMenu(
+            project: project,
+            theme: theme,
+            setArchived: { isArchived in
+                setArchived(project, isArchived)
+            },
+            requestDelete: {
+                projectToDelete = project
+            }
+        )
+    }
+
+    private func deleteSelectedProject() {
+        guard let project = projectToDelete else { return }
+        projectToDelete = nil
+        Task {
+            do {
+                try await projectStore.deleteProject(project)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
 }
 
 private struct PendingTemporaryProject {
@@ -273,24 +335,43 @@ struct ProjectListTheme {
     }
 }
 
-private enum ProjectListFilter: String, CaseIterable, Identifiable {
-    case recent, inProgress, completed, favorites
-    var id: String { rawValue }
-    var title: String {
-        switch self {
-        case .recent: "Recentes"
-        case .inProgress: "Em andamento"
-        case .completed: "Concluídos"
-        case .favorites: "Favoritos"
+struct ProjectCatalogActionsMenu: View {
+    let project: CameraProject
+    let theme: ProjectListTheme
+    let setArchived: (Bool) -> Void
+    let requestDelete: () -> Void
+
+    var body: some View {
+        Menu {
+            ForEach(ProjectCatalogActionPolicy.actions(for: project), id: \.self) { action in
+                switch action {
+                case .archive:
+                    Button {
+                        setArchived(true)
+                    } label: {
+                        Label(CameraeL10n.archive, systemImage: "archivebox")
+                    }
+                case .unarchive:
+                    Button {
+                        setArchived(false)
+                    } label: {
+                        Label(CameraeL10n.unarchive, systemImage: "archivebox.fill")
+                    }
+                case .delete:
+                    Button(role: .destructive, action: requestDelete) {
+                        Label(CameraeL10n.deleteProject, systemImage: "trash")
+                    }
+                }
+            }
+        } label: {
+            Image(systemName: "ellipsis")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 42, height: 42)
+                .background(.black.opacity(0.58), in: Circle())
+                .padding(10)
         }
-    }
-    var systemImage: String {
-        switch self {
-        case .recent: "clock"
-        case .inProgress: "circle.dotted"
-        case .completed: "checkmark.circle"
-        case .favorites: "star"
-        }
+        .accessibilityLabel("Opções do projeto \(project.name)")
     }
 }
 
@@ -299,12 +380,15 @@ struct ProjectListHeroCard: View {
     let theme: ProjectListTheme
 
     private var summary: ProjectRowSummary { .init(project: project) }
-    private var completed: Bool { (project.summary?.mediaCount ?? 0) > 0 }
+    private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                ProjectListThumbnail(imageURL: project.referenceFrameURL, label: nil, height: 137, cornerRadius: 0, theme: theme)
+            ProjectListImageHeader(
+                project: project,
+                height: layout.thumbnailSize.height,
+                theme: theme
+            ) {
                 Text(CameraeL10n.lastOpened)
                     .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
                     .tracking(0.64)
@@ -316,22 +400,20 @@ struct ProjectListHeroCard: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
-                Text(project.name)
-                    .font(.custom("Outfit-SemiBold", size: 17, relativeTo: .headline))
-                    .foregroundStyle(theme.text)
-                    .lineLimit(1)
                 Text(summary.subtitle)
                     .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
                 HStack(spacing: 14) {
                     metric("camera", "\(project.summary?.sessionCount ?? 0)x")
-                    metric("photo.stack", "\(project.summary?.mediaCount ?? 0)f")
                     if let bytes = project.summary?.totalKnownBytes {
                         metric("externaldrive", ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file))
                     }
                     Spacer(minLength: 2)
-                    ProjectListStatusBadge(completed: completed, theme: theme)
+                    ProjectListCaptureCountBadge(
+                        count: project.summary?.mediaCount ?? 0,
+                        theme: theme
+                    )
                 }
                 .padding(.top, 3)
             }
@@ -354,45 +436,111 @@ struct ProjectListHeroCard: View {
     }
 }
 
+struct ProjectListRowLayout: Equatable {
+    let containerWidth: CGFloat
+    let thumbnailHeight: CGFloat = 160
+    let informationHeight: CGFloat = 84
+
+    var thumbnailSize: CGSize {
+        CGSize(width: containerWidth, height: thumbnailHeight)
+    }
+
+    var minimumHeight: CGFloat {
+        thumbnailHeight + informationHeight
+    }
+
+    var thumbnailRange: ClosedRange<CGFloat> {
+        0...thumbnailHeight
+    }
+
+    var informationRange: ClosedRange<CGFloat> {
+        thumbnailHeight...minimumHeight
+    }
+}
+
 struct ProjectListRow: View {
     let project: CameraProject
     let theme: ProjectListTheme
-    private var completed: Bool { (project.summary?.mediaCount ?? 0) > 0 }
+    private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
-        HStack(spacing: 12) {
-            ProjectListThumbnail(imageURL: project.referenceFrameURL, label: "\(project.summary?.mediaCount ?? 0)f", height: 60, cornerRadius: 12, theme: theme)
-                .frame(width: 60)
-            VStack(alignment: .leading, spacing: 4) {
-                Text(project.name)
-                    .font(.custom("Outfit-SemiBold", size: 14, relativeTo: .subheadline))
-                    .foregroundStyle(theme.text)
+        VStack(alignment: .leading, spacing: 0) {
+            ProjectListImageHeader(
+                project: project,
+                height: layout.thumbnailSize.height,
+                theme: theme
+            ) {
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 42, height: 42)
+                    .background(.black.opacity(0.55), in: Circle())
+                    .padding(10)
+            }
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(
+                    project.captureConfiguration?.projectSummary
+                        ?? ProjectRowSummary(project: project).subtitle.uppercased()
+                )
+                    .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                    .foregroundStyle(theme.accent)
                     .lineLimit(1)
                 Text(ProjectRowSummary(project: project).subtitle)
-                    .font(.custom("Outfit-Regular", size: 10, relativeTo: .caption2))
+                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
-                HStack {
-                    Text(completed ? CameraeL10n.statusCompleted : CameraeL10n.statusInProgress)
-                        .foregroundStyle(completed ? Color.green : theme.accent)
-                    Spacer()
-                    Text(project.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                        .foregroundStyle(theme.muted)
-                }
-                .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+                Text(project.updatedAt.formatted(date: .abbreviated, time: .shortened))
+                    .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
             }
-            Image(systemName: "chevron.right")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(theme.muted)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(minHeight: layout.informationHeight, alignment: .topLeading)
         }
-        .padding(12)
-        .frame(minHeight: 88)
+        .frame(minHeight: layout.minimumHeight)
         .background(theme.card)
         .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay { RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(theme.border, lineWidth: 1) }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(CameraeL10n.openProject(project.name))
         .accessibilityIdentifier(CameraeAccessibility.openProject(project.id))
+    }
+}
+
+private struct ProjectListImageHeader<Accessory: View>: View {
+    let project: CameraProject
+    let height: CGFloat
+    let theme: ProjectListTheme
+    @ViewBuilder let accessory: () -> Accessory
+
+    var body: some View {
+        ZStack(alignment: .bottomLeading) {
+            ProjectListThumbnail(
+                imageURL: project.referenceFrameURL,
+                label: nil,
+                height: height,
+                cornerRadius: 0,
+                theme: theme
+            )
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.72)],
+                startPoint: .center,
+                endPoint: .bottom
+            )
+            Text(project.name)
+                .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
+        }
+        .frame(height: height)
+        .overlay(alignment: .topTrailing) {
+            accessory()
+        }
     }
 }
 
@@ -407,7 +555,14 @@ private struct ProjectListThumbnail: View {
         ZStack(alignment: .bottomLeading) {
             LinearGradient(colors: theme.gradient, startPoint: .leading, endPoint: .trailing)
             if imageURL != nil {
-                ReferenceThumbnail(imageURL: imageURL, systemImage: theme.systemImage, width: nil, height: height, maxPixelSize: 900)
+                ReferenceThumbnail(
+                    imageURL: imageURL,
+                    systemImage: theme.systemImage,
+                    width: nil,
+                    height: height,
+                    maxPixelSize: 900,
+                    cornerRadius: cornerRadius
+                )
                     .overlay(theme.accent.opacity(0.12))
             }
             if let label {
@@ -423,16 +578,17 @@ private struct ProjectListThumbnail: View {
     }
 }
 
-private struct ProjectListStatusBadge: View {
-    let completed: Bool
+private struct ProjectListCaptureCountBadge: View {
+    let count: Int
     let theme: ProjectListTheme
+
     var body: some View {
-        Text(completed ? CameraeL10n.statusCompleted : CameraeL10n.statusInProgress)
+        Text(CameraeL10n.captureCount(count))
             .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
-            .foregroundStyle(completed ? Color.green : theme.accent)
+            .foregroundStyle(theme.accent)
             .padding(.horizontal, 10)
             .frame(height: 22)
-            .background(completed ? Color.green.opacity(0.15) : theme.surface, in: Capsule())
+            .background(theme.surface, in: Capsule())
     }
 }
 

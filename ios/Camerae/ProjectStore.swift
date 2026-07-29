@@ -57,6 +57,12 @@ struct CameraProject: Identifiable, Equatable, Hashable {
         return directoryURL.appendingPathComponent(key)
     }
 
+    var captureConfiguration: CameraeNextCaptureConfiguration? {
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directoryURL)
+        let summaries = TimelapseSessionStore(project: self).sessionSummaries()
+        return try? store.loadOrMigrate(module: module, summaries: summaries)
+    }
+
     var libraryRootURL: URL {
         directoryURL
             .deletingLastPathComponent()

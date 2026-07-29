@@ -26,6 +26,11 @@ These rules apply to every code or product change in this repository.
 ## Verification
 
 - Use TDD for product changes.
+- Treat Figma as the visual source of truth and typed interface-capability policies as the functional source of truth.
+- Every composed screen must document its required user capabilities and cover them with tests that are independent of layout geometry.
+- When changing a screen hierarchy, thumbnail, navigation container, toolbar, menu, or modal, run the screen's capability-contract tests to prove that required actions remain reachable.
+- Views consume normalized current-version project models only; legacy-format detection and migration belong in versioned stores/resolvers, never in SwiftUI branches.
+- Every persistent schema change must include forward decoding, a one-time idempotent migration when historical evidence exists, and tests for current, legacy, empty, and unsupported-newer documents.
 - Run the relevant tests before committing.
 - Keep the PR template complete enough to explain release value, validation, risk, and rollback.
 - Ready PRs must pass the GitHub Actions policy, iOS, and processing checks that apply to their target branch.
