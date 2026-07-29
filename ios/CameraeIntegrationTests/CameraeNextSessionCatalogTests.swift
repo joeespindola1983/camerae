@@ -129,7 +129,7 @@ struct CameraeNextSessionCatalogTests {
         #expect(prompt.message.contains("frame de referência do projeto"))
     }
 
-    @Test func everyRecordedVideoIsAlignableWhenTheProjectHasAReference() {
+    @Test func theReferenceVideoHidesAlignmentWhileLaterVideosRemainAlignable() {
         let first = fixture(
             frameCount: 1,
             videoClipURL: URL(fileURLWithPath: "/tmp/first.mov"),
@@ -144,12 +144,24 @@ struct CameraeNextSessionCatalogTests {
 
         #expect(CameraeNextSessionAlignmentAvailability(
             summary: first,
-            projectReferenceURL: referenceURL
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
+        ) == .referenceClip)
+        #expect(!CameraeNextSessionAlignmentAvailability(
+            summary: first,
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
+        ).showsAlignmentAction)
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: second,
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
         ) == .available)
         #expect(CameraeNextSessionAlignmentAvailability(
             summary: second,
-            projectReferenceURL: referenceURL
-        ) == .available)
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
+        ).showsAlignmentAction)
     }
 
     @Test func alignmentEligibilityNeverDependsOnAnotherVideo() {
@@ -219,11 +231,36 @@ struct CameraeNextSessionCatalogTests {
 
         #expect(catalog.referenceFrameURL == photoURL)
         #expect(catalog.alignmentReferenceFrameURL == firstVideoFrameURL)
+        #expect(catalog.alignmentReferenceSessionID == firstVideo.id)
         #expect(CameraeNextSessionAlignmentReference.resolve(
             projectReferenceURL: photoURL,
             catalogReferenceURL: catalog.referenceFrameURL,
             geometricReferenceURL: catalog.alignmentReferenceFrameURL
         ) == firstVideoFrameURL)
+    }
+
+    @Test func legacyVideoWithoutAReferenceFrameNeverBecomesTheAlignmentReference() {
+        let legacyVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/legacy.mov"),
+            captureKind: .video,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let usableReferenceURL = URL(fileURLWithPath: "/tmp/usable-reference.jpg")
+        let usableVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/usable.mov"),
+            captureKind: .video,
+            referenceFrameURL: usableReferenceURL,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let catalog = CameraeNextSessionCatalogModel(
+            summaries: [usableVideo, legacyVideo]
+        )
+
+        #expect(catalog.alignmentReferenceFrameURL == usableReferenceURL)
+        #expect(catalog.alignmentReferenceSessionID == usableVideo.id)
     }
 
     @Test func astroCaptureKeepsProcessingDestination() {

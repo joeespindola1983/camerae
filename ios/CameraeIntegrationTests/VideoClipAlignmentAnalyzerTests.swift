@@ -5,10 +5,10 @@ import CameraeMedia
 
 @Suite("Video clip alignment analyzer")
 struct VideoClipAlignmentAnalyzerTests {
-    @Test("video registration uses the same stable 200 ms frame for reference and moving clips")
-    func stableReferenceFramePolicy() {
-        #expect(CameraeVideoReferenceFramePolicy.sampleTime(duration: 8) == 0.2)
-        #expect(CameraeVideoReferenceFramePolicy.sampleFraction(duration: 8) == 0.025)
+    @Test("video reference images use the midpoint validated by the alignment lab")
+    func midpointReferenceFramePolicy() {
+        #expect(CameraeVideoReferenceFramePolicy.sampleTime(duration: 8) == 4)
+        #expect(CameraeVideoReferenceFramePolicy.sampleFraction(duration: 8) == 0.5)
         #expect(CameraeVideoReferenceFramePolicy.sampleTime(duration: 0.1) == 0.05)
     }
 
@@ -82,19 +82,52 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(rejected.applicableCorrections.isEmpty)
     }
 
-    @Test("single initial frame never recovers a high local residual from later samples")
-    func initialFrameRejectsLocalResidual() async throws {
+    @Test("stable geometry across the video recovers appearance-change residuals")
+    func temporalConsensusRecoversAppearanceChange() async throws {
         let itemID = UUID()
         let videoURL = URL(fileURLWithPath: "/high-residual-video.mp4")
         let extractor = ClipFrameExtractorStub(framesByURL: [
             videoURL: try Self.frames(markers: [11, 12, 13, 14, 15])
         ])
         let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
-            11: Self.highResidualMeasurement(tx: -0.021),
-            12: Self.highResidualMeasurement(tx: -0.013),
-            13: Self.highResidualMeasurement(tx: -0.002),
-            14: Self.highResidualMeasurement(tx: -0.007),
-            15: Self.highResidualMeasurement(tx: -0.011)
+            11: Self.appearanceChangeMeasurement(tx: -0.011),
+            12: Self.appearanceChangeMeasurement(tx: -0.010),
+            13: Self.appearanceChangeMeasurement(tx: -0.012),
+            14: Self.appearanceChangeMeasurement(tx: -0.011),
+            15: Self.appearanceChangeMeasurement(tx: -0.010)
+        ])
+        let referenceFrame = try #require(Self.frames(markers: [1]).first)
+
+        let plan = try await VideoClipAlignmentAnalyzer(
+            extractor: extractor,
+            evaluator: evaluator
+        ).analyze(
+            referenceFrame: referenceFrame,
+            referenceFingerprint: "reference-v1",
+            source: .init(itemID: itemID, url: videoURL, duration: 7)
+        )
+
+        #expect(plan.decision == .review)
+        #expect(plan.corrections[itemID]?.quality.reasonCodes == [
+            "temporallyConsistentAppearanceChange"
+        ])
+        #expect(await extractor.requestedFractions == VideoClipAlignmentAnalyzer.sampleFractions)
+        #expect(await evaluator.evaluatedPairs == 5)
+    }
+
+    @Test("appearance changes with unstable geometry remain rejected")
+    func temporalConsensusRejectsUnstableGeometry() async throws {
+        let itemID = UUID()
+        let videoURL = URL(fileURLWithPath: "/unstable-video.mp4")
+        let extractor = ClipFrameExtractorStub(framesByURL: [
+            videoURL: try Self.frames(markers: [11, 12, 13, 14, 15])
+        ])
+        let evaluator = ClipPairEvaluatorStub(measurementsByMarker: [
+            11: Self.appearanceChangeMeasurement(tx: -0.20),
+            12: Self.appearanceChangeMeasurement(tx: -0.08),
+            13: Self.appearanceChangeMeasurement(tx: 0.04),
+            14: Self.appearanceChangeMeasurement(tx: 0.16),
+            15: Self.appearanceChangeMeasurement(tx: 0.28)
         ])
         let referenceFrame = try #require(Self.frames(markers: [1]).first)
 
@@ -108,7 +141,7 @@ struct VideoClipAlignmentAnalyzerTests {
         )
 
         #expect(plan.decision == .reject)
-        #expect(plan.corrections[itemID]?.quality.reasonCodes == ["highLocalResidual"])
+        #expect(plan.applicableCorrections.isEmpty)
     }
 
     @Test("analysis cache is reused until an asset fingerprint changes")
@@ -189,9 +222,8 @@ struct VideoClipAlignmentAnalyzerTests {
         #expect(plan.referenceItemID == itemID)
         #expect(plan.decision == .apply)
         #expect(abs((plan.corrections[itemID]?.transform.tx ?? 0) + 0.03) < 0.000_001)
-        #expect(await extractor.requestedFractions.count == 1)
-        #expect(abs((await extractor.requestedFractions.first ?? 0) - 0.025) < 0.000_001)
-        #expect(await evaluator.evaluatedPairs == 1)
+        #expect(await extractor.requestedFractions == VideoClipAlignmentAnalyzer.sampleFractions)
+        #expect(await evaluator.evaluatedPairs == 5)
     }
 
     @Test("replacing the project reference invalidates single-video analysis cache")
@@ -229,7 +261,7 @@ struct VideoClipAlignmentAnalyzerTests {
             referenceFingerprint: "reference-v1",
             source: source
         )
-        #expect(await extractor.requestedFractions.count == 1)
+        #expect(await extractor.requestedFractions.count == 5)
         #expect(await analyzer.lastDiagnostics.cacheHit)
 
         _ = try await analyzer.analyze(
@@ -237,7 +269,7 @@ struct VideoClipAlignmentAnalyzerTests {
             referenceFingerprint: "reference-v2",
             source: source
         )
-        #expect(await extractor.requestedFractions.count == 2)
+        #expect(await extractor.requestedFractions.count == 10)
         #expect(!(await analyzer.lastDiagnostics.cacheHit))
     }
 
@@ -262,15 +294,20 @@ struct VideoClipAlignmentAnalyzerTests {
         )
     }
 
-    private static func highResidualMeasurement(tx: Double) -> VideoClipAlignmentMeasurement {
+    private static func appearanceChangeMeasurement(tx: Double) -> VideoClipAlignmentMeasurement {
         .init(
             model: .translation,
             transform: .init(a: 1, b: 0, c: 0, d: 1, tx: tx, ty: 0.003),
             validRegion: .full,
             quality: .init(
                 decision: .reject,
-                score: 0.6,
-                reasonCodes: ["highLocalResidual"]
+                score: 0,
+                reasonCodes: [
+                    "insufficientInliers",
+                    "inconsistentMatches",
+                    "insufficientCoverage",
+                    "highLocalResidual"
+                ]
             )
         )
     }

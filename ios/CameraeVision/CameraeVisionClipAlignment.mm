@@ -115,10 +115,12 @@ std::optional<camerae_vision::AlignmentResult> TryModel(
 ) {
     camerae_vision::AlignmentSettings settings;
     settings.motionModel = model;
-    settings.maxDimension = 960;
-    settings.maxFeatures = 3000;
+    settings.detector = camerae_vision::AlignmentDetector::SIFT;
+    settings.maxDimension = 1720;
+    settings.maxFeatures = 12000;
     settings.matchRatio = 0.80f;
     settings.mutualMatching = true;
+    settings.useCLAHE = true;
     settings.ransacThreshold = 2.5;
     try {
         return camerae_vision::alignImages(reference, moving, settings);
