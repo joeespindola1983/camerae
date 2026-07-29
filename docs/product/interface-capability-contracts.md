@@ -38,6 +38,19 @@ when the view hierarchy changes.
 
 ## Repeatable capture catalog
 
+Every Repeatable project can contain Photo, Video, and Timelapse captures.
+Each visible capture card must expose a layout-independent type presentation:
+
+| Capture type | Required SF Symbol |
+| --- | --- |
+| Photo | `camera.fill` |
+| Video | `video.fill` |
+| Timelapse | `timelapse` |
+
+The executable contract lives in
+`CameraeNextSessionCatalogTests.captureTypeIcon`. The corresponding light and
+dark Figma Screens are `09B` and `09D`.
+
 The first recorded video that contains a usable saved reference frame is the
 project's geometric reference. Its capture card must expose playback, sharing,
 and deletion, but must not offer alignment against itself.
@@ -59,6 +72,22 @@ The legacy fallback is protected by
 `CameraeNextSessionCatalogTests.legacyVideoWithoutAReferenceFrameNeverBecomesTheAlignmentReference`.
 The corresponding Figma Screen is
 `05 · Repeatable — Projeto · Capturas · Referência + Alinháveis`.
+
+## Project capture configuration
+
+Every Repeatable project configuration must keep all three capture types
+reachable. Changing capture type restores that type's last captured defaults,
+which remain editable.
+
+The physical camera and zoom become immutable when the first capture starts.
+No subsequent Photo, Video, or Timelapse preset may change them.
+
+The executable contract lives in
+`CameraeNextWorkflowConfigurationTests.projectHardwareLockAndCaptureTypeDefaults`
+and `projectCaptureKind`. The corresponding Figma components are
+`Capture Type Selector`, `Capture Type Badge`, and the `Locked` variants of
+`Camera Setup State`; the corresponding light and dark Screens are `09A` and
+`09C`.
 
 ## Change checklist
 

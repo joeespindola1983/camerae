@@ -6,6 +6,29 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [9.2.1] - 2026-07-29
+
+**Status:** QA candidate
+**Areas:** Repeatable mixed captures, project navigation, video duration, 4K/60 export
+
+### Fixed
+
+- Keeps project-card navigation keyed by the stable project ID so the recently opened project remains tappable while its metadata and list position refresh.
+- Restores video duration from the project's latest recorded clip, normalizes near-preset recordings such as 29 seconds back to 30 seconds, and labels non-preset durations as Other.
+- Preserve the recorded resolution, frame rate, HEVC codec, and source bitrate when exporting aligned Repeatable videos, including 4K at 60 fps, and reject silent capture or export downgrades.
+- Select the largest full-sensor recording format before using stabilization support as a tie-breaker, preventing an unintended fallback to 1720 × 1290.
+- Keep electronic video stabilization disabled for tripod-based Repeatable capture, preserving native field of view and resolution for alignment.
+
+### Added
+
+- Added obvious Photo, Video, and Timelapse SF Symbol badges to capture-type selection and every project capture card.
+- Added independent editable defaults for Photo, Video, and Timelapse inside the same Repeatable project.
+
+### Changed
+
+- Locks only the project's physical camera and zoom after the first capture; all other capture settings remain preselected and editable.
+- Migrates legacy immutable capture configurations to schema 3 hardware contracts with independent per-type presets.
+
 ## [9.2.0] - 2026-07-28
 
 **Status:** QA candidate

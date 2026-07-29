@@ -5,6 +5,57 @@ import Testing
 
 @Suite("Edit composition planner")
 struct EditCompositionPlanTests {
+    @Test("single 4K 60 HEVC clip preserves its delivery format")
+    func preservesFourKSixtyDeliveryFormat() throws {
+        let projectID = UUID()
+        let sessionID = UUID()
+        let itemID = UUID()
+        let reference = MediaAssetReference(
+            projectID: projectID,
+            sessionID: sessionID,
+            kind: .repeatableVideo,
+            relativePath: "video.mov"
+        )
+        let descriptor = MediaAssetDescriptor(
+            reference: reference,
+            sourceModule: .repeatable,
+            projectName: "Repeatable",
+            sessionName: "4K 60",
+            sourceCreatedAt: .now,
+            duration: 4,
+            pixelWidth: 3840,
+            pixelHeight: 2160,
+            frameRate: 59.94,
+            videoCodec: "hevc",
+            videoBitRate: 100_000_000,
+            hasAudio: false,
+            fileSize: 1,
+            isAvailable: true
+        )
+        let document = EditProjectDocument(
+            projectID: projectID,
+            canvas: .landscape16x9,
+            items: [.init(id: itemID, asset: reference, addedAt: .now)],
+            updatedAt: .now
+        )
+
+        let plan = try EditCompositionPlanner().makePlan(
+            document: document,
+            assets: [
+                reference.id: ResolvedMediaAsset(
+                    descriptor: descriptor,
+                    url: URL(fileURLWithPath: "/tmp/4k60.mov")
+                )
+            ]
+        )
+
+        #expect(plan.renderWidth == 3840)
+        #expect(plan.renderHeight == 2160)
+        #expect(plan.frameRate == 60)
+        #expect(plan.videoCodec == "hevc")
+        #expect(plan.videoBitRate == 100_000_000)
+    }
+
     @Test("render size never upscales a portrait source beyond its oriented pixels")
     func adaptiveRenderSizeAvoidsUpscaling() {
         #expect(

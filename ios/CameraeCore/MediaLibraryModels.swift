@@ -9,6 +9,9 @@ public struct MediaAssetDescriptor: Equatable, Hashable, Sendable {
     public let duration: TimeInterval
     public let pixelWidth: Int
     public let pixelHeight: Int
+    public let frameRate: Double?
+    public let videoCodec: String?
+    public let videoBitRate: Double?
     public let hasAudio: Bool
     public let fileSize: UInt64
     public let isAvailable: Bool
@@ -22,6 +25,9 @@ public struct MediaAssetDescriptor: Equatable, Hashable, Sendable {
         duration: TimeInterval,
         pixelWidth: Int,
         pixelHeight: Int,
+        frameRate: Double? = nil,
+        videoCodec: String? = nil,
+        videoBitRate: Double? = nil,
         hasAudio: Bool,
         fileSize: UInt64,
         isAvailable: Bool
@@ -34,6 +40,9 @@ public struct MediaAssetDescriptor: Equatable, Hashable, Sendable {
         self.duration = duration
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
+        self.frameRate = frameRate
+        self.videoCodec = videoCodec
+        self.videoBitRate = videoBitRate
         self.hasAudio = hasAudio
         self.fileSize = fileSize
         self.isAvailable = isAvailable
