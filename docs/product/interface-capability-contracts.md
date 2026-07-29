@@ -36,6 +36,30 @@ The executable contract lives in
 useful for visual approval, while this test protects the business capability
 when the view hierarchy changes.
 
+## Repeatable capture catalog
+
+The first recorded video that contains a usable saved reference frame is the
+project's geometric reference. Its capture card must expose playback, sharing,
+and deletion, but must not offer alignment against itself.
+
+Every later recorded video with available source media must expose:
+
+- playback using the aligned export when one exists, otherwise the original;
+- Process alignment against the project video reference;
+- sharing of the default playback artifact;
+- deletion through the project capture actions.
+
+A legacy video without a saved reference frame cannot silently become the
+geometric reference. The next oldest usable video becomes the reference
+instead.
+
+The executable capability contract lives in
+`CameraeNextSessionCatalogTests.theReferenceVideoHidesAlignmentWhileLaterVideosRemainAlignable`.
+The legacy fallback is protected by
+`CameraeNextSessionCatalogTests.legacyVideoWithoutAReferenceFrameNeverBecomesTheAlignmentReference`.
+The corresponding Figma Screen is
+`05 · Repeatable — Projeto · Capturas · Referência + Alinháveis`.
+
 ## Change checklist
 
 For every composed-screen change:
