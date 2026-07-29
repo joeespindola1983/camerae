@@ -11,8 +11,8 @@ configs:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "9.1.0"
-    CURRENT_PROJECT_VERSION: "29"
+    MARKETING_VERSION: "9.2.0"
+    CURRENT_PROJECT_VERSION: "30"
 targets:
   CameraeCore:
     type: framework

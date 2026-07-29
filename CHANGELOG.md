@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [9.2.0] - 2026-07-28
+
+**Status:** QA candidate
+**Areas:** Project catalog, storage, capture configuration, migration, Figma
+
 ### Added
 
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
