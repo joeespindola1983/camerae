@@ -174,33 +174,34 @@ actor VideoClipAlignmentAnalyzer {
             return cached
         }
 
-        let sampleFraction = CameraeVideoReferenceFramePolicy.sampleFraction(
-            duration: source.duration
-        )
         let movingFrames = try await extractor.frames(
             for: source,
-            fractions: [sampleFraction]
+            fractions: Self.sampleFractions
         )
-        guard movingFrames.count == 1, let movingFrame = movingFrames.first else {
+        guard movingFrames.count == Self.sampleFractions.count else {
             throw VideoClipAlignmentAnalysisError.insufficientReferenceSamples
         }
         try Task.checkCancellation()
         CameraeAlignmentDiagnostics.event(
             "analysis.mode",
-            "fixedFirstFrame fraction=\(sampleFraction)"
+            "fixedReferenceTemporalConsensus fractions=\(Self.sampleFractions)"
         )
-        let measurement = try await evaluator.evaluate(
-            reference: referenceFrame,
-            moving: movingFrame
-        )
-        logSample(measurement, fraction: sampleFraction, sourceIndex: 0)
-        let candidate = ClipAlignmentCandidate(
-            itemID: source.itemID,
-            model: measurement.model,
-            transform: measurement.transform,
-            validRegion: measurement.validRegion,
-            quality: measurement.quality
-        )
+        var measurements: [VideoClipAlignmentMeasurement] = []
+        measurements.reserveCapacity(movingFrames.count)
+        for (index, movingFrame) in movingFrames.enumerated() {
+            try Task.checkCancellation()
+            let measurement = try await evaluator.evaluate(
+                reference: referenceFrame,
+                moving: movingFrame
+            )
+            measurements.append(measurement)
+            logSample(
+                measurement,
+                fraction: Self.sampleFractions[index],
+                sourceIndex: 0
+            )
+        }
+        let candidate = consensus(itemID: source.itemID, measurements: measurements)
         let plan = try planner.makePlan(
             referenceItemID: source.itemID,
             candidates: [candidate]
@@ -208,7 +209,7 @@ actor VideoClipAlignmentAnalyzer {
         lastDiagnostics = .init(
             cacheHit: false,
             sampledFrameCount: movingFrames.count + 1,
-            evaluatedPairCount: 1
+            evaluatedPairCount: measurements.count
         )
         cache(plan, for: cacheKey)
         return plan
@@ -238,9 +239,9 @@ actor VideoClipAlignmentAnalyzer {
         itemID: UUID,
         measurements: [VideoClipAlignmentMeasurement]
     ) -> ClipAlignmentCandidate {
-        let recoverableLocalResiduals = measurements.filter(isRecoverableLocalResidual)
-        let recovered = recoverableLocalResiduals.count >= 3
-            ? recoverableLocalResiduals.map(recoveredLocalResidual)
+        let recoverableAppearanceChanges = measurements.filter(isRecoverableAppearanceChange)
+        let recovered = recoverableAppearanceChanges.count >= 3
+            ? recoverableAppearanceChanges.map(recoveredAppearanceChange)
             : []
         let usable = measurements.filter { $0.quality.decision != .reject } + recovered
         guard usable.count >= 2 else {
@@ -285,16 +286,25 @@ actor VideoClipAlignmentAnalyzer {
         )
     }
 
-    private func isRecoverableLocalResidual(
+    private func isRecoverableAppearanceChange(
         _ measurement: VideoClipAlignmentMeasurement
     ) -> Bool {
-        measurement.quality.decision == .reject &&
-            measurement.quality.score >= 0.55 &&
+        let appearanceChangeReasons: Set<String> = [
+            "insufficientInliers",
+            "inconsistentMatches",
+            "insufficientCoverage",
+            "highLocalResidual"
+        ]
+        let reasons = Set(measurement.quality.reasonCodes)
+        return measurement.quality.decision == .reject &&
             measurement.transform.isFinite &&
-            Set(measurement.quality.reasonCodes) == ["highLocalResidual"]
+            [.translation, .similarity].contains(measurement.model) &&
+            measurement.validRegion.area >= 0.75 &&
+            reasons.contains("highLocalResidual") &&
+            reasons.isSubset(of: appearanceChangeReasons)
     }
 
-    private func recoveredLocalResidual(
+    private func recoveredAppearanceChange(
         _ measurement: VideoClipAlignmentMeasurement
     ) -> VideoClipAlignmentMeasurement {
         VideoClipAlignmentMeasurement(
@@ -304,8 +314,7 @@ actor VideoClipAlignmentAnalyzer {
             quality: .init(
                 decision: .review,
                 score: measurement.quality.score,
-                reasonCodes: measurement.quality.reasonCodes +
-                    ["temporallyConsistentLocalResidual"]
+                reasonCodes: ["temporallyConsistentAppearanceChange"]
             )
         )
     }
@@ -444,11 +453,9 @@ actor VideoClipAlignmentAnalyzer {
 }
 
 enum CameraeVideoReferenceFramePolicy {
-    static let stableOffset: TimeInterval = 0.2
-
     static func sampleTime(duration: TimeInterval) -> TimeInterval {
         guard duration.isFinite, duration > 0 else { return 0 }
-        return min(stableOffset, duration / 2)
+        return duration / 2
     }
 
     static func sampleFraction(duration: TimeInterval) -> Double {

@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ## [9.2.0] - 2026-07-28
 
 **Status:** QA candidate
-**Areas:** Project catalog, storage, capture configuration, migration, Figma
+**Areas:** Project catalog, storage, capture configuration, migration, Repeatable video alignment, Camerae Vision, Figma
 
 ### Added
 
@@ -26,11 +26,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added one-time migration for captured legacy projects so historical capture type, camera, format, duration, interval, and Astro stack size become a normalized immutable project configuration.
 - Added independent project sorting by last activity or creation date with newest projects first.
 - Added the fixed project capture type and configuration summary to project cards and subsequent capture setup.
+- Uses the midpoint of the first Repeatable video as the project alignment reference and evaluates five points across every later clip before applying one constant reframe.
+- Hides video alignment from the reference clip while preserving playback, sharing, and deletion.
 
 ### Fixed
 
 - Restored project-list thumbnails for Astro captures and legacy projects while continuing to prefer an explicit Repeatable reference image.
 - Localized the Repeatable capture-empty state, capture count and action, plus the Edit empty state, across all six release languages.
+- Improved Repeatable video registration for appearance and contrast changes with SIFT, CLAHE, higher-resolution feature extraction, and temporally consistent confidence recovery.
+- Keeps geometrically unstable, low-overlap, extreme-scale, and unsafe-projective Repeatable video matches blocked.
 
 ## [9.1.0] - 2026-07-28
 

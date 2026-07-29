@@ -110,10 +110,15 @@ struct CameraeNextProcessVideoAlignmentPrompt: Equatable, Sendable {
 
 enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
     case available
+    case referenceClip
     case referenceUnavailable
     case mediaUnavailable
 
-    init(summary: TimelapseSessionSummary, projectReferenceURL: URL?) {
+    init(
+        summary: TimelapseSessionSummary,
+        projectReferenceURL: URL?,
+        referenceSessionID: UUID? = nil
+    ) {
         guard projectReferenceURL != nil else {
             self = .referenceUnavailable
             return
@@ -123,8 +128,14 @@ enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
             self = .mediaUnavailable
             return
         }
+        guard summary.id != referenceSessionID else {
+            self = .referenceClip
+            return
+        }
         self = .available
     }
+
+    var showsAlignmentAction: Bool { self == .available }
 }
 
 enum CameraeNextSessionAlignmentReference {
@@ -170,6 +181,7 @@ struct CameraeNextSessionCatalogModel: Equatable {
     let sessions: [TimelapseSessionSummary]
     let referenceFrameURL: URL?
     let alignmentReferenceFrameURL: URL?
+    let alignmentReferenceSessionID: UUID?
 
     init(summaries: [TimelapseSessionSummary]) {
         let populated = summaries.filter { $0.frameCount > 0 }
@@ -185,14 +197,16 @@ struct CameraeNextSessionCatalogModel: Equatable {
             .first
 
         referenceFrameURL = explicitReference ?? automaticReference
-        alignmentReferenceFrameURL = populated
+        let alignmentReference = populated
             .filter {
                 $0.captureKind == .video &&
-                    ($0.videoClipURL != nil || $0.videoURL != nil)
+                    ($0.videoClipURL != nil || $0.videoURL != nil) &&
+                    $0.referenceFrameURL != nil
             }
             .sorted { $0.session.createdAt < $1.session.createdAt }
-            .compactMap(\.referenceFrameURL)
             .first
+        alignmentReferenceFrameURL = alignmentReference?.referenceFrameURL
+        alignmentReferenceSessionID = alignmentReference?.id
         sessions = populated
             .filter { $0.session.purpose != .projectReference }
             .sorted { $0.session.createdAt > $1.session.createdAt }
@@ -603,17 +617,23 @@ struct CameraeNextSessionCatalogView: View {
             )
         case let .videoMenu(url):
             Menu {
-                Button("Processar alinhamento", systemImage: "viewfinder") {
-                    switch CameraeNextSessionAlignmentAvailability(
-                        summary: summary,
-                        projectReferenceURL: alignmentReferenceURL
-                    ) {
-                    case .available:
-                        pendingVideoAlignmentConfirmation = summary
-                    case .referenceUnavailable:
-                        errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
-                    case .mediaUnavailable:
-                        errorMessage = "O vídeo original desta sessão não está disponível."
+                let availability = CameraeNextSessionAlignmentAvailability(
+                    summary: summary,
+                    projectReferenceURL: alignmentReferenceURL,
+                    referenceSessionID: catalog.alignmentReferenceSessionID
+                )
+                if availability.showsAlignmentAction {
+                    Button("Processar alinhamento", systemImage: "viewfinder") {
+                        switch availability {
+                        case .available:
+                            pendingVideoAlignmentConfirmation = summary
+                        case .referenceClip:
+                            break
+                        case .referenceUnavailable:
+                            errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
+                        case .mediaUnavailable:
+                            errorMessage = "O vídeo original desta sessão não está disponível."
+                        }
                     }
                 }
                 Button("Compartilhar", systemImage: "square.and.arrow.up") {
