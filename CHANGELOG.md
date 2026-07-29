@@ -6,6 +6,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+## [9.2.1] - 2026-07-29
+
+**Status:** QA candidate
+**Areas:** Repeatable mixed captures, project navigation, video duration, 4K/60 export
+
 ### Fixed
 
 - Keeps project-card navigation keyed by the stable project ID so the recently opened project remains tappable while its metadata and list position refresh.
@@ -18,14 +23,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Added obvious Photo, Video, and Timelapse SF Symbol badges to capture-type selection and every project capture card.
 - Added independent editable defaults for Photo, Video, and Timelapse inside the same Repeatable project.
+
+### Changed
+
+- Locks only the project's physical camera and zoom after the first capture; all other capture settings remain preselected and editable.
+- Migrates legacy immutable capture configurations to schema 3 hardware contracts with independent per-type presets.
+
+## [9.2.0] - 2026-07-28
+
+**Status:** QA candidate
+**Areas:** Project catalog, storage, capture configuration, migration, Repeatable video alignment, Camerae Vision, Figma
+
+### Added
+
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
 - Added a themed project-storage screen for Repeatable and Astro, matching the canonical light and dark examples in Figma.
 - Added project-level capture configuration locking so Photo, Timelapse, and Video projects automatically reuse the type and exact settings selected for their first capture.
 
 ### Changed
 
-- Locks only the project's physical camera and zoom after the first capture; all other capture settings remain preselected and editable.
-- Migrates legacy immutable capture configurations to schema 3 hardware contracts with independent per-type presets.
 - Automatically discards a newly created temporary project when the user leaves without creating or importing any durable content.
 - Standardized every project-list thumbnail as a fixed, orientation-independent image area with the project name over the image and all metadata below it.
 - Replaced project completion badges with actual capture totals and added archived-project filtering with reversible archive actions.
@@ -39,6 +55,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 ### Fixed
 
 - Restored project-list thumbnails for Astro captures and legacy projects while continuing to prefer an explicit Repeatable reference image.
+- Localized the Repeatable capture-empty state, capture count and action, plus the Edit empty state, across all six release languages.
 - Improved Repeatable video registration for appearance and contrast changes with SIFT, CLAHE, higher-resolution feature extraction, and temporally consistent confidence recovery.
 - Keeps geometrically unstable, low-overlap, extreme-scale, and unsafe-projective Repeatable video matches blocked.
 
