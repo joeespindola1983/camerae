@@ -47,6 +47,10 @@ struct EditVideoComposerTests {
             EditVideoExportPresetPolicy.presetName(renderWidth: 1920, renderHeight: 1080)
                 == AVAssetExportPreset1920x1080
         )
+        #expect(
+            EditVideoExportPresetPolicy.presetName(renderWidth: 3840, renderHeight: 2160)
+                == AVAssetExportPreset3840x2160
+        )
     }
 
     @Test("export diagnostics preserve AVFoundation domain, code, and underlying error")

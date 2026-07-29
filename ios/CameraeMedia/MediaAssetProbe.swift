@@ -7,6 +7,9 @@ public struct MediaAssetTechnicalMetadata: Equatable, Sendable {
     public let duration: TimeInterval
     public let pixelWidth: Int
     public let pixelHeight: Int
+    public let frameRate: Double
+    public let videoCodec: String
+    public let videoBitRate: Double
     public let hasAudio: Bool
     public let fileSize: UInt64
 
@@ -14,12 +17,18 @@ public struct MediaAssetTechnicalMetadata: Equatable, Sendable {
         duration: TimeInterval,
         pixelWidth: Int,
         pixelHeight: Int,
+        frameRate: Double = 30,
+        videoCodec: String = "h264",
+        videoBitRate: Double = 0,
         hasAudio: Bool,
         fileSize: UInt64
     ) {
         self.duration = duration
         self.pixelWidth = pixelWidth
         self.pixelHeight = pixelHeight
+        self.frameRate = frameRate
+        self.videoCodec = videoCodec
+        self.videoBitRate = videoBitRate
         self.hasAudio = hasAudio
         self.fileSize = fileSize
     }
@@ -55,12 +64,30 @@ public struct MediaAssetProbe: MediaAssetProbing {
         guard width > 0, height > 0 else {
             throw MediaAssetProbeError.invalidDimensions
         }
+        let nominalFrameRate = Double(try await videoTrack.load(.nominalFrameRate))
+        let frameRate = nominalFrameRate.isFinite && nominalFrameRate > 0
+            ? nominalFrameRate
+            : 30
+        let estimatedDataRate = Double(try await videoTrack.load(.estimatedDataRate))
+        let videoBitRate = estimatedDataRate.isFinite && estimatedDataRate > 0
+            ? estimatedDataRate
+            : 0
+        let formatDescriptions = try await videoTrack.load(.formatDescriptions)
+        let mediaSubtype = formatDescriptions.first.map(CMFormatDescriptionGetMediaSubType)
+        let videoCodec = switch mediaSubtype {
+        case kCMVideoCodecType_HEVC: "hevc"
+        case kCMVideoCodecType_H264: "h264"
+        default: "h264"
+        }
         let hasAudio = try await !asset.loadTracks(withMediaType: .audio).isEmpty
 
         return MediaAssetTechnicalMetadata(
             duration: seconds,
             pixelWidth: width,
             pixelHeight: height,
+            frameRate: frameRate,
+            videoCodec: videoCodec,
+            videoBitRate: videoBitRate,
             hasAudio: hasAudio,
             fileSize: UInt64(fileSize)
         )
