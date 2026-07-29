@@ -25,7 +25,10 @@ public actor SessionCatalog {
         sessionsDirectory = project.directoryURL.appendingPathComponent("Sessions", isDirectory: true)
     }
 
-    public func createSession(captureKind: SessionCaptureKind) async throws -> SessionRecord {
+    public func createSession(
+        captureKind: SessionCaptureKind,
+        purpose: SessionPurpose = .capture
+    ) async throws -> SessionRecord {
         try fileManager.createDirectory(at: sessionsDirectory, withIntermediateDirectories: true)
         let now = dateProvider.now()
         let id = await idProvider.next()
@@ -37,6 +40,7 @@ public actor SessionCatalog {
             projectID: project.id,
             module: project.module,
             captureKind: captureKind,
+            purpose: purpose,
             name: directory.lastPathComponent,
             directoryURL: directory,
             createdAt: now
@@ -139,6 +143,40 @@ public actor SessionCatalog {
         try write(document)
         guard let summary = document.summary else { throw SessionCatalogError.invalidManifest }
         return summary
+    }
+
+    public func removeOriginalFrames(sessionID: UUID) throws -> OriginalFrameRemovalSummary {
+        guard captures[sessionID] == nil else {
+            throw SessionCatalogError.captureInProgress
+        }
+        let document = try document(for: sessionID)
+        guard document.session.captureKind == .timelapse,
+              document.session.purpose == .capture else {
+            throw SessionCatalogError.originalFramesNotRemovable
+        }
+
+        let urls = try fileManager.contentsOfDirectory(
+            at: document.session.directoryURL,
+            includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        )
+        let frames = urls.filter { url in
+            url.lastPathComponent.hasPrefix("frame_") &&
+            Self.originalFrameExtensions.contains(url.pathExtension.lowercased()) &&
+            ((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true)
+        }
+        let knownBytes = frames.reduce(into: UInt64(0)) { result, url in
+            let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+            result += UInt64(max(size, 0))
+        }
+
+        for frame in frames {
+            try fileManager.removeItem(at: frame)
+        }
+
+        let repaired = try repair(document)
+        try write(repaired)
+        return OriginalFrameRemovalSummary(frameCount: frames.count, knownBytes: knownBytes)
     }
 
     private func repair(_ document: SessionManifestDocument) throws -> SessionManifestDocument {
@@ -272,5 +310,7 @@ public actor SessionCatalog {
 public enum SessionCatalogError: Error, Equatable {
     case sessionNotFound
     case captureNotStarted
+    case captureInProgress
+    case originalFramesNotRemovable
     case invalidManifest
 }

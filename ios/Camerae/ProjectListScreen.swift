@@ -11,7 +11,6 @@ struct ProjectListScreen: View {
     @State private var projectName = ""
     @State private var errorMessage: String?
     @State private var pendingTemporaryProject: PendingTemporaryProject?
-    @State private var emptyProjectToRemove: CameraProject?
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var projects: [CameraProject] { projectStore.activeProjects(for: module) }
@@ -156,16 +155,6 @@ struct ProjectListScreen: View {
         } message: {
             Text(errorMessage ?? "")
         }
-        .alert("Projeto temporário vazio", isPresented: Binding(
-            get: { emptyProjectToRemove != nil },
-            set: { if !$0 { emptyProjectToRemove = nil } }
-        )) {
-            Button("Remover projeto", role: .destructive) {
-                removeEmptyTemporaryProject()
-            }
-        } message: {
-            Text("Nenhuma captura foi criada. Este projeto temporário será removido para manter sua lista organizada.")
-        }
         .onAppear {
             AppOrientationLock.shared.restorePortrait()
             projectStore.reload()
@@ -227,31 +216,15 @@ struct ProjectListScreen: View {
 
         Task {
             do {
-                let sessions = try await TimelapseSessionStore(project: pendingTemporaryProject.project)
-                    .sessionSummariesFromCatalog()
-                let hasCapture = sessions.contains {
-                    $0.frameCount > 0 || $0.videoURL != nil || $0.videoClipURL != nil
+                let hasDurableContent = try await TimelapseSessionStore(
+                    project: pendingTemporaryProject.project
+                ).hasDurableProjectContent()
+                if CameraeNextTemporaryProjectPolicy.shouldAutomaticallyDiscard(
+                    hasDurableContent: hasDurableContent
+                ) {
+                    try await projectStore.deleteProject(pendingTemporaryProject.project)
                 }
-
-                if hasCapture {
-                    self.pendingTemporaryProject = nil
-                } else {
-                    emptyProjectToRemove = pendingTemporaryProject.project
-                }
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func removeEmptyTemporaryProject() {
-        guard let project = emptyProjectToRemove else { return }
-        emptyProjectToRemove = nil
-
-        Task {
-            do {
-                try await projectStore.deleteProject(project)
-                pendingTemporaryProject = nil
+                self.pendingTemporaryProject = nil
             } catch {
                 errorMessage = error.localizedDescription
             }

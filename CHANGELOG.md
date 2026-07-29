@@ -6,6 +6,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
+- Added a themed project-storage screen for Repeatable and Astro, matching the canonical light and dark examples in Figma.
+
+### Changed
+
+- Automatically discards a newly created temporary project when the user leaves without creating or importing any durable content.
+
+### Fixed
+
+- Restored project-list thumbnails for Astro captures and legacy projects while continuing to prefer an explicit Repeatable reference image.
+
 ## [9.1.0] - 2026-07-28
 
 **Status:** Release candidate

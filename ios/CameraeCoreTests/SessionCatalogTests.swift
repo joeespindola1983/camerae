@@ -259,6 +259,67 @@ struct SessionCatalogComponentTests {
         #expect(summary?.frameSummary.knownBytes == 5)
         #expect(summary?.frameSummary.nextFrameIndex == 3)
     }
+
+    @Test("removing timelapse originals preserves the manifest and rendered outputs")
+    func removesOnlyTimelapseOriginals() async throws {
+        let library = try SessionTemporaryLibrary()
+        defer { library.remove() }
+        let catalog = SessionCatalog(project: library.project)
+        let session = try await catalog.createSession(captureKind: .timelapse)
+        try await catalog.beginCapture(sessionID: session.id)
+        _ = try await catalog.saveFrame(Data([1, 2, 3]), sessionID: session.id, index: 1)
+        _ = try await catalog.saveFrame(Data([4, 5]), sessionID: session.id, index: 2, format: .heic)
+        try await catalog.finishCapture(sessionID: session.id)
+
+        let manifestURL = session.directoryURL.appendingPathComponent("manifest.json")
+        let timelapseURL = session.directoryURL.appendingPathComponent("timelapse.mp4")
+        let alignedURL = session.directoryURL.appendingPathComponent("aligned.mp4")
+        let metadataURL = session.directoryURL.appendingPathComponent("capture_plan.json")
+        try Data([6]).write(to: timelapseURL)
+        try Data([7]).write(to: alignedURL)
+        try Data([8]).write(to: metadataURL)
+
+        let removed = try await catalog.removeOriginalFrames(sessionID: session.id)
+        let summary = try await catalog.loadSummaries().first
+
+        #expect(removed.frameCount == 2)
+        #expect(removed.knownBytes == 5)
+        #expect(!FileManager.default.fileExists(
+            atPath: session.directoryURL.appendingPathComponent("frame_000001.jpg").path
+        ))
+        #expect(!FileManager.default.fileExists(
+            atPath: session.directoryURL.appendingPathComponent("frame_000002.heic").path
+        ))
+        #expect(FileManager.default.fileExists(atPath: manifestURL.path))
+        #expect(FileManager.default.fileExists(atPath: timelapseURL.path))
+        #expect(FileManager.default.fileExists(atPath: alignedURL.path))
+        #expect(FileManager.default.fileExists(atPath: metadataURL.path))
+        #expect(summary?.frameSummary == .empty)
+        #expect(summary?.videoSummary?.videoFileName == "timelapse.mp4")
+    }
+
+    @Test("project references cannot be removed by timelapse cleanup")
+    func preservesProjectReferenceFrames() async throws {
+        let library = try SessionTemporaryLibrary()
+        defer { library.remove() }
+        let catalog = SessionCatalog(project: library.project)
+        let reference = try await catalog.createSession(
+            captureKind: .photo,
+            purpose: .projectReference
+        )
+        try await catalog.beginCapture(sessionID: reference.id)
+        let frameURL = try await catalog.saveFrame(
+            Data([1, 2, 3]),
+            sessionID: reference.id,
+            index: 1
+        )
+        try await catalog.finishCapture(sessionID: reference.id)
+
+        await #expect(throws: SessionCatalogError.originalFramesNotRemovable) {
+            try await catalog.removeOriginalFrames(sessionID: reference.id)
+        }
+        #expect(FileManager.default.fileExists(atPath: frameURL.path))
+    }
 }
 
 private final class SessionTemporaryLibrary: @unchecked Sendable {

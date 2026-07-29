@@ -69,6 +69,16 @@ struct TimelapseSessionSummary: Identifiable, Equatable, Hashable {
     var id: UUID { session.id }
 }
 
+struct ProjectStorageInventory: Equatable, Sendable {
+    let removableFrameCount: Int
+    let removableFrameBytes: UInt64
+    let preservedArtifactCount: Int
+    let preservedBytes: UInt64
+    let referenceCount: Int
+
+    var hasRemovableFrames: Bool { removableFrameCount > 0 }
+}
+
 struct OriginalFrameExportProgress: Equatable, Sendable {
     let processedFrames: Int
     let totalFrames: Int
@@ -387,6 +397,83 @@ final class TimelapseSessionStore {
                 hasRenderedOutput: (summary.astroSummary?.hasRenderedClip ?? false) ||
                     videoURL != nil || clipURL != nil
             )
+        }
+    }
+
+    func projectStorageInventory() async throws -> ProjectStorageInventory {
+        let summaries = try await SessionCatalog(project: project.coreRecord).loadSummaries()
+        let removable = summaries.filter {
+            $0.session.captureKind == .timelapse &&
+            $0.session.purpose == .capture
+        }
+        let removableFrameCount = removable.reduce(0) { $0 + $1.frameSummary.count }
+        let removableFrameBytes = removable.reduce(UInt64(0)) { $0 + $1.frameSummary.knownBytes }
+        let referenceCount = summaries.reduce(0) { result, summary in
+            result + (summary.session.purpose == .projectReference && summary.frameSummary.count > 0 ? 1 : 0)
+        }
+        let sessionArtifacts = summaries.reduce(0) { result, summary in
+            var count = result
+            if summary.session.purpose == .capture,
+               summary.session.captureKind == .photo,
+               summary.frameSummary.count > 0 {
+                count += 1
+            }
+            if summary.videoSummary?.videoFileName != nil { count += 1 }
+            if summary.videoSummary?.clipFileName != nil { count += 1 }
+            if fileManager.fileExists(
+                atPath: summary.session.directoryURL.appendingPathComponent("aligned.mp4").path
+            ) {
+                count += 1
+            }
+            return count
+        }
+        let exportArtifacts = ((try? fileManager.contentsOfDirectory(
+            at: exportsDirectory,
+            includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )) ?? []).reduce(0) { result, url in
+            result + (((try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true) ? 1 : 0)
+        }
+        let storage = try ProjectStorageScanner().scan(projectDirectory: project.directoryURL)
+
+        return ProjectStorageInventory(
+            removableFrameCount: removableFrameCount,
+            removableFrameBytes: removableFrameBytes,
+            preservedArtifactCount: sessionArtifacts + exportArtifacts,
+            preservedBytes: storage.totalBytes >= removableFrameBytes
+                ? storage.totalBytes - removableFrameBytes
+                : 0,
+            referenceCount: referenceCount
+        )
+    }
+
+    func removeOriginalTimelapseFrames() async throws -> OriginalFrameRemovalSummary {
+        let catalog = SessionCatalog(project: project.coreRecord)
+        let removableSessions = try await catalog.loadSummaries().filter {
+            $0.session.captureKind == .timelapse &&
+            $0.session.purpose == .capture &&
+            $0.frameSummary.count > 0
+        }
+        var removed = OriginalFrameRemovalSummary.empty
+        for summary in removableSessions {
+            let result = try await catalog.removeOriginalFrames(sessionID: summary.id)
+            removed = OriginalFrameRemovalSummary(
+                frameCount: removed.frameCount + result.frameCount,
+                knownBytes: removed.knownBytes + result.knownBytes
+            )
+        }
+        return removed
+    }
+
+    func hasDurableProjectContent() async throws -> Bool {
+        let summaries = try await sessionSummariesFromCatalog()
+        return summaries.contains {
+            $0.frameCount > 0 ||
+            $0.videoURL != nil ||
+            $0.videoClipURL != nil ||
+            $0.alignedVideoURL != nil ||
+            $0.isAstroProcessed ||
+            $0.hasRenderedOutput
         }
     }
 

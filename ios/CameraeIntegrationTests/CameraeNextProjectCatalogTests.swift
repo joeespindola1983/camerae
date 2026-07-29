@@ -44,10 +44,10 @@ struct CameraeNextProjectCatalogTests {
         #expect(done.remainingProjects.map(\.name) == ["Completed"])
     }
 
-    @Test("temporary project policy only removes a project without captures")
+    @Test("temporary project policy silently discards only a project without durable content")
     func temporaryProjectPolicy() {
-        #expect(CameraeNextTemporaryProjectPolicy.shouldOfferRemoval(hasCapturedMedia: false))
-        #expect(!CameraeNextTemporaryProjectPolicy.shouldOfferRemoval(hasCapturedMedia: true))
+        #expect(CameraeNextTemporaryProjectPolicy.shouldAutomaticallyDiscard(hasDurableContent: false))
+        #expect(!CameraeNextTemporaryProjectPolicy.shouldAutomaticallyDiscard(hasDurableContent: true))
     }
 
     @Test("project catalogs keep the design-system screen inset in both workflows")
