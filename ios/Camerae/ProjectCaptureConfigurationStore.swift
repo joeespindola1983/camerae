@@ -71,9 +71,17 @@ struct ProjectCaptureConfigurationStore {
         module: CameraModule,
         summaries: [TimelapseSessionSummary]
     ) throws -> ProjectCaptureProfile? {
-        if let existing = try loadProfile(), existing.module == module {
-            if try storedSchemaVersion() < Self.schemaVersion {
-                try save(existing, origin: .migratedConfiguration)
+        if var existing = try loadProfile(), existing.module == module {
+            let storedVersion = try storedSchemaVersion()
+            let original = existing
+            existing.refreshVideoDefault(from: summaries)
+            if storedVersion < Self.schemaVersion || existing != original {
+                try save(
+                    existing,
+                    origin: storedVersion < Self.schemaVersion
+                        ? .migratedConfiguration
+                        : .updatedDefaults
+                )
             }
             return existing
         }
@@ -220,6 +228,22 @@ struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
         return value
     }
 
+    mutating func refreshVideoDefault(from summaries: [TimelapseSessionSummary]) {
+        guard let latestVideo = summaries
+            .filter({
+                $0.captureKind == .video
+                    && ($0.videoURL != nil || $0.videoClipURL != nil || $0.alignedVideoURL != nil)
+                    && ($0.captureDuration ?? 0) > 0
+            })
+            .max(by: { $0.session.createdAt < $1.session.createdAt }),
+              let duration = latestVideo.captureDuration else {
+            return
+        }
+        var video = configuration(for: .video)
+        video.videoDurationSeconds = CameraeNextVideoDurationPolicy.normalized(duration)
+        presets[.video] = normalized(video, for: .video)
+    }
+
     private func normalized(
         _ configuration: CameraeNextCaptureConfiguration,
         for kind: RepeatableCaptureKind
@@ -227,6 +251,11 @@ struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
         var result = hardware.applying(to: configuration)
         result.module = module
         result.repeatableKind = kind
+        if kind == .video {
+            result.videoDurationSeconds = CameraeNextVideoDurationPolicy.normalized(
+                result.videoDurationSeconds
+            )
+        }
         return result
     }
 
@@ -240,6 +269,22 @@ struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
             : CameraeNextCaptureConfiguration.repeatableDefault
         configuration.repeatableKind = kind
         return hardware.applying(to: configuration)
+    }
+}
+
+enum CameraeNextVideoDurationPolicy {
+    static let presetSeconds = [30, 60, 120]
+    private static let presetToleranceSeconds = 2
+
+    static func normalized(_ seconds: Int) -> Int {
+        let positiveSeconds = max(1, seconds)
+        return presetSeconds.first(where: {
+            abs($0 - positiveSeconds) <= presetToleranceSeconds
+        }) ?? positiveSeconds
+    }
+
+    static func normalized(_ duration: TimeInterval) -> Int {
+        normalized(max(1, Int(duration.rounded())))
     }
 }
 
@@ -290,7 +335,7 @@ enum LegacyProjectCaptureConfigurationMigration {
         if let duration = firstCapture.captureDuration, duration > 0 {
             switch firstCapture.captureKind {
             case .video:
-                configuration.videoDurationSeconds = max(1, Int(duration.rounded()))
+                configuration.videoDurationSeconds = CameraeNextVideoDurationPolicy.normalized(duration)
             case .timelapse:
                 configuration.durationMinutes = max(1, Int((duration / 60).rounded(.up)))
                 if firstCapture.frameCount > 1 {

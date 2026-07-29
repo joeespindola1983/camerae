@@ -182,7 +182,8 @@ struct CameraeNextWorkflowConfigurationTests {
         lens: RepeatableCameraLens,
         zoom: Double,
         fileExtension: String,
-        hasVideo: Bool = false
+        hasVideo: Bool = false,
+        createdAt: Date = Date(timeIntervalSince1970: 1)
     ) -> TimelapseSessionSummary {
         let sessionDirectory = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let session = TimelapseSession(
@@ -198,7 +199,7 @@ struct CameraeNextWorkflowConfigurationTests {
             cameraZoomFactor: zoom,
             name: "legacy",
             directoryURL: sessionDirectory,
-            createdAt: Date(timeIntervalSince1970: 1)
+            createdAt: createdAt
         )
         return TimelapseSessionSummary(
             session: session,
@@ -310,6 +311,68 @@ struct CameraeNextWorkflowConfigurationTests {
         timelapse.durationMinutes = 10
         #expect(CameraeNextDurationSelection(configuration: timelapse).selectedValue == 0)
         #expect(timelapse.durationMinutes == 10)
+    }
+
+    @Test("Recorded video durations close to a preset restore the intended preset")
+    func recordedVideoDurationNormalization() {
+        #expect(CameraeNextVideoDurationPolicy.normalized(29) == 30)
+        #expect(CameraeNextVideoDurationPolicy.normalized(59) == 60)
+        #expect(CameraeNextVideoDurationPolicy.normalized(119) == 120)
+        #expect(CameraeNextVideoDurationPolicy.normalized(25) == 25)
+
+        var recordedVideo = CameraeNextCaptureConfiguration.repeatableDefault
+        recordedVideo.repeatableKind = .video
+        recordedVideo.videoDurationSeconds = 29
+        let profile = ProjectCaptureProfile(initialConfiguration: recordedVideo)
+
+        #expect(profile.selectedConfiguration.videoDurationSeconds == 30)
+        #expect(CameraeNextDurationSelection(configuration: profile.selectedConfiguration).selectedValue == 30)
+    }
+
+    @Test("The latest recorded clip refreshes the project's video duration default")
+    func latestClipRefreshesVideoDefault() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeLatestVideoDefault-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        var savedVideo = CameraeNextCaptureConfiguration.repeatableDefault
+        savedVideo.repeatableKind = .video
+        savedVideo.videoDurationSeconds = 60
+        _ = try store.saveDefaults(savedVideo)
+
+        let olderClip = makeLegacySummary(
+            directory: directory,
+            kind: .video,
+            frameCount: 0,
+            duration: 60,
+            lens: .wide,
+            zoom: 1,
+            fileExtension: "mp4",
+            hasVideo: true,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        let latestClip = makeLegacySummary(
+            directory: directory,
+            kind: .video,
+            frameCount: 0,
+            duration: 29,
+            lens: .wide,
+            zoom: 1,
+            fileExtension: "mp4",
+            hasVideo: true,
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+
+        let refreshed = try #require(
+            try store.loadProfileOrMigrate(
+                module: .repeatable,
+                summaries: [olderClip, latestClip]
+            )
+        )
+
+        #expect(refreshed.configuration(for: .video).videoDurationSeconds == 30)
+        #expect(try store.loadProfile()?.configuration(for: .video).videoDurationSeconds == 30)
     }
 
     @Test("Repeatable photo is a single-frame workflow without timed or Astro controls")

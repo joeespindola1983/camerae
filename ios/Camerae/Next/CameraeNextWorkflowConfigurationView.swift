@@ -155,7 +155,7 @@ struct CameraeNextWorkflowConfigurationPresentation: Equatable, Sendable {
 }
 
 struct CameraeNextDurationSelection: Equatable, Sendable {
-    static let videoPresetSeconds = [30, 60, 120]
+    static let videoPresetSeconds = CameraeNextVideoDurationPolicy.presetSeconds
     static let timelapsePresetMinutes = [15, 30, 60]
 
     let selectedValue: Int
