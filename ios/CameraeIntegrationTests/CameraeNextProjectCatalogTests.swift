@@ -45,6 +45,38 @@ struct CameraeNextProjectCatalogTests {
         #expect(archivedProjects.visibleProjects.map(\.name) == ["Archived"])
     }
 
+    @Test("creation sorting keeps newest projects first without changing the selected filter")
+    func creationDateSorting() {
+        let olderRecentlyOpened = makeProject(
+            name: "Older but active",
+            module: .repeatable,
+            day: 1,
+            lastOpenedDay: 5
+        )
+        let newest = makeProject(
+            name: "Newest",
+            module: .repeatable,
+            day: 4,
+            lastOpenedDay: 4
+        )
+
+        let byActivity = CameraeNextProjectCatalogModel(
+            projects: [olderRecentlyOpened, newest],
+            module: .repeatable,
+            filter: .recent,
+            sort: .lastActivity
+        )
+        let byCreation = CameraeNextProjectCatalogModel(
+            projects: [olderRecentlyOpened, newest],
+            module: .repeatable,
+            filter: .recent,
+            sort: .createdNewest
+        )
+
+        #expect(byActivity.visibleProjects.map(\.name) == ["Older but active", "Newest"])
+        #expect(byCreation.visibleProjects.map(\.name) == ["Newest", "Older but active"])
+    }
+
     @Test("temporary project policy only removes a project without captures")
     func temporaryProjectPolicy() {
         #expect(CameraeNextTemporaryProjectPolicy.shouldOfferRemoval(hasCapturedMedia: false))
@@ -81,10 +113,14 @@ struct CameraeNextProjectCatalogTests {
         name: String,
         module: CameraModule,
         day: Int,
+        lastOpenedDay: Int? = nil,
         archived: Bool = false,
         mediaCount: Int = 0
     ) -> CameraProject {
         let date = Date(timeIntervalSince1970: TimeInterval(day * 86_400))
+        let lastOpenedAt = Date(
+            timeIntervalSince1970: TimeInterval((lastOpenedDay ?? day) * 86_400)
+        )
         let record = ProjectRecord(
             id: UUID(),
             module: module.coreValue,
@@ -92,7 +128,7 @@ struct CameraeNextProjectCatalogTests {
             directoryURL: URL(fileURLWithPath: "/tmp/\(name)"),
             createdAt: date,
             updatedAt: date,
-            lastOpenedAt: date,
+            lastOpenedAt: lastOpenedAt,
             isArchived: archived
         )
         let summary = ProjectSummary(

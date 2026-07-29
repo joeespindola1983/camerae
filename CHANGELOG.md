@@ -16,6 +16,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Replaced project completion badges with actual capture totals and added archived-project filtering with reversible archive actions.
 - Restored explicit project action menus after thumbnail changes and added tested interface-capability contracts that preserve archive, unarchive, and delete access across layout refactors.
 - Added one-time migration for captured legacy projects so historical capture type, camera, format, duration, interval, and Astro stack size become a normalized immutable project configuration.
+- Added independent project sorting by last activity or creation date with newest projects first.
 - Added the fixed project capture type and configuration summary to project cards and subsequent capture setup.
 
 ## [9.1.0] - 2026-07-28

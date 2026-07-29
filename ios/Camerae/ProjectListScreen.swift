@@ -7,6 +7,7 @@ struct ProjectListScreen: View {
     @Binding var path: NavigationPath
 
     @State private var filter = CameraeNextProjectCatalogFilter.recent
+    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var errorMessage: String?
@@ -16,7 +17,7 @@ struct ProjectListScreen: View {
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var catalog: CameraeNextProjectCatalogModel {
-        .init(projects: projectStore.projects, module: module, filter: filter)
+        .init(projects: projectStore.projects, module: module, filter: filter, sort: sort)
     }
     private var lastOpenedProject: CameraProject? { catalog.featuredProject }
     private var remainingProjects: [CameraProject] { catalog.remainingProjects }
@@ -130,6 +131,17 @@ struct ProjectListScreen: View {
                     Image(systemName: "line.3.horizontal.decrease")
                 }
                 .accessibilityLabel("Filtrar projetos")
+
+                Menu {
+                    Picker(CameraeL10n.sortProjects, selection: $sort) {
+                        ForEach(CameraeNextProjectCatalogSort.allCases) { option in
+                            Label(option.title, systemImage: option.systemImage).tag(option)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .accessibilityLabel(CameraeL10n.sortProjects)
 
                 Button {
                     beginCreatingProject()

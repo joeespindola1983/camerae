@@ -46,6 +46,13 @@ enum CameraeL10n {
     static var withCaptures: String { text("project.filter.with_captures", "Com capturas") }
     static var projectsSection: String { text("project.section", "PROJETOS") }
     static var filterProjects: String { text("project.filter", "Filtrar projetos") }
+    static var sortProjects: String { text("project.sort", "Ordenar projetos") }
+    static var sortLastActivity: String {
+        text("project.sort.last_activity", "Última atividade")
+    }
+    static var sortCreatedNewest: String {
+        text("project.sort.created_newest", "Data de criação · mais novos primeiro")
+    }
     static var createProject: String { text("project.create", "Criar projeto") }
     static var newProject: String { text("project.new", "Novo projeto") }
     static var projectName: String { text("project.name", "Nome do projeto") }

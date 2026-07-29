@@ -36,17 +36,47 @@ enum CameraeNextProjectCatalogFilter: String, CaseIterable, Identifiable, Sendab
     }
 }
 
+enum CameraeNextProjectCatalogSort: String, CaseIterable, Identifiable, Sendable {
+    case lastActivity
+    case createdNewest
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .lastActivity: CameraeL10n.sortLastActivity
+        case .createdNewest: CameraeL10n.sortCreatedNewest
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .lastActivity: "clock.arrow.circlepath"
+        case .createdNewest: "calendar.badge.clock"
+        }
+    }
+}
+
 struct CameraeNextProjectCatalogModel: Equatable {
     let projects: [CameraProject]
     let module: CameraModule
     let filter: CameraeNextProjectCatalogFilter
+    var sort: CameraeNextProjectCatalogSort = .lastActivity
 
     private var moduleProjects: [CameraProject] {
         projects
             .filter { $0.module == module }
             .sorted { lhs, rhs in
-                let lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
-                let rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
+                let lhsDate: Date
+                let rhsDate: Date
+                switch sort {
+                case .lastActivity:
+                    lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
+                    rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
+                case .createdNewest:
+                    lhsDate = lhs.createdAt
+                    rhsDate = rhs.createdAt
+                }
                 if lhsDate == rhsDate { return lhs.name < rhs.name }
                 return lhsDate > rhsDate
             }
@@ -96,6 +126,7 @@ struct CameraeNextProjectCatalogView: View {
     @Binding var path: NavigationPath
 
     @State private var filter = CameraeNextProjectCatalogFilter.recent
+    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var errorMessage: String?
@@ -106,7 +137,7 @@ struct CameraeNextProjectCatalogView: View {
     private var theme: ProjectListTheme { .init(module: module) }
     private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
     private var catalog: CameraeNextProjectCatalogModel {
-        .init(projects: projectStore.projects, module: module, filter: filter)
+        .init(projects: projectStore.projects, module: module, filter: filter, sort: sort)
     }
 
     var body: some View {
@@ -218,6 +249,17 @@ struct CameraeNextProjectCatalogView: View {
                     Image(systemName: "line.3.horizontal.decrease")
                 }
                 .accessibilityLabel(CameraeL10n.filterProjects)
+
+                Menu {
+                    Picker(CameraeL10n.sortProjects, selection: $sort) {
+                        ForEach(CameraeNextProjectCatalogSort.allCases) { option in
+                            Label(option.title, systemImage: option.systemImage).tag(option)
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .accessibilityLabel(CameraeL10n.sortProjects)
 
                 Button(action: beginCreatingProject) {
                     Image(systemName: "plus")
