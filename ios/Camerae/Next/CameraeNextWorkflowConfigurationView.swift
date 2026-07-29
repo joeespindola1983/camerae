@@ -196,12 +196,14 @@ struct CameraeNextWorkflowConfigurationView: View {
         let captureConfigurationStore = ProjectCaptureConfigurationStore(
             projectDirectory: project.directoryURL
         )
-        let cameraPolicy = CameraeNextProjectCameraPolicy(
-            summaries: referenceStore.sessionSummaries()
-        )
+        let sessionSummaries = referenceStore.sessionSummaries()
+        let cameraPolicy = CameraeNextProjectCameraPolicy(summaries: sessionSummaries)
         let preferredLens = cameraPolicy.lockedLens ?? RepeatableCameraLens.wide
         let availableLenses = RepeatableCameraLens.availableBackLenses()
-        let savedConfiguration = try? captureConfigurationStore.load()
+        let savedConfiguration = try? captureConfigurationStore.loadOrMigrate(
+            module: project.module,
+            summaries: sessionSummaries
+        )
         var initialConfiguration: CameraeNextCaptureConfiguration
         if let savedConfiguration, savedConfiguration.module == project.module {
             initialConfiguration = savedConfiguration

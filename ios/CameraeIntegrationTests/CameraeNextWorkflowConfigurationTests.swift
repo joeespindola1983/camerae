@@ -41,6 +41,87 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(try store.load() == initialVideo)
     }
 
+    @Test("captured legacy projects migrate once into an immutable project configuration")
+    func legacyProjectConfigurationMigration() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeLegacyCapture-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        let firstCapture = makeLegacySummary(
+            directory: directory,
+            kind: .timelapse,
+            frameCount: 121,
+            duration: 600,
+            lens: .telephoto,
+            zoom: 2,
+            fileExtension: "jpg"
+        )
+
+        let migratedConfiguration = try store.loadOrMigrate(
+            module: .repeatable,
+            summaries: [firstCapture]
+        )
+        let migrated = try #require(migratedConfiguration)
+
+        #expect(migrated.repeatableKind == .timelapse)
+        #expect(migrated.durationMinutes == 10)
+        #expect(abs(migrated.intervalSeconds - 5) < 0.001)
+        #expect(migrated.cameraLens == .telephoto)
+        #expect(migrated.cameraZoomFactor == 2)
+        #expect(migrated.sourceFormat == .jpeg)
+
+        let laterVideo = makeLegacySummary(
+            directory: directory,
+            kind: .video,
+            frameCount: 0,
+            duration: 30,
+            lens: .wide,
+            zoom: 1,
+            fileExtension: "mp4",
+            hasVideo: true
+        )
+        let resolvedAgain = try store.loadOrMigrate(module: .repeatable, summaries: [laterVideo])
+        #expect(resolvedAgain == migrated)
+    }
+
+    @Test("empty legacy projects stay configurable because there is no capture contract to migrate")
+    func emptyLegacyProjectDoesNotMigrate() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeEmptyLegacy-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+
+        #expect(try store.loadOrMigrate(module: .repeatable, summaries: []) == nil)
+    }
+
+    @Test("capture configuration decodes schema one and rejects unsupported future schemas")
+    func captureConfigurationSchemaCompatibility() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeConfigurationSchema-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("capture_configuration.json")
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        let configuration = CameraeNextCaptureConfiguration.repeatableDefault
+
+        try writeConfigurationDocument(
+            schemaVersion: 1,
+            configuration: configuration,
+            to: fileURL
+        )
+        #expect(try store.load() == configuration)
+
+        try writeConfigurationDocument(
+            schemaVersion: 99,
+            configuration: configuration,
+            to: fileURL
+        )
+        #expect(throws: ProjectCaptureConfigurationError.unsupportedSchema(99)) {
+            try store.load()
+        }
+    }
+
     @Test(
         "photo, timelapse, and video projects restore their initial capture kind",
         arguments: RepeatableCaptureKind.captureOptions
@@ -57,6 +138,61 @@ struct CameraeNextWorkflowConfigurationTests {
         _ = try store.saveInitial(configuration)
 
         #expect(try store.load()?.repeatableKind == kind)
+    }
+
+    private func makeLegacySummary(
+        directory: URL,
+        kind: RepeatableCaptureKind,
+        frameCount: Int,
+        duration: TimeInterval,
+        lens: RepeatableCameraLens,
+        zoom: Double,
+        fileExtension: String,
+        hasVideo: Bool = false
+    ) -> TimelapseSessionSummary {
+        let sessionDirectory = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        let session = TimelapseSession(
+            id: UUID(),
+            projectID: UUID(),
+            module: .repeatable,
+            captureKind: kind,
+            purpose: .capture,
+            referenceMotion: nil,
+            referenceGeoPose: nil,
+            referenceOrientation: nil,
+            cameraLens: lens,
+            cameraZoomFactor: zoom,
+            name: "legacy",
+            directoryURL: sessionDirectory,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        return TimelapseSessionSummary(
+            session: session,
+            captureKind: kind,
+            frameCount: frameCount,
+            captureDuration: duration,
+            referenceFrameURL: sessionDirectory.appendingPathComponent("frame_0001.\(fileExtension)"),
+            videoURL: hasVideo ? sessionDirectory.appendingPathComponent("capture.mp4") : nil,
+            videoClipURL: nil,
+            alignedVideoURL: nil,
+            isAstroProcessed: false,
+            hasRenderedOutput: hasVideo
+        )
+    }
+
+    private func writeConfigurationDocument(
+        schemaVersion: Int,
+        configuration: CameraeNextCaptureConfiguration,
+        to fileURL: URL
+    ) throws {
+        let configurationData = try JSONEncoder().encode(configuration)
+        let configurationObject = try JSONSerialization.jsonObject(with: configurationData)
+        let document: [String: Any] = [
+            "schemaVersion": schemaVersion,
+            "configuration": configurationObject
+        ]
+        try JSONSerialization.data(withJSONObject: document)
+            .write(to: fileURL, options: .atomic)
     }
 
     @Test("Astro starts from the photo stacking defaults")
