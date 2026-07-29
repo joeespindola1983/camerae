@@ -8,7 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [9.2.1] - 2026-07-29
 
-**Status:** QA candidate
+**Status:** Approved
 **Areas:** Repeatable mixed captures, project navigation, video duration, 4K/60 export
 
 ### Fixed
