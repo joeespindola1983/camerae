@@ -8,6 +8,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ### Added
 
+- Added authentic Repeatable day/night and changing-condition App Store screenshot candidates for iPhone and iPad, plus reproducible alignment diagnostics for all three video pairs.
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
 - Added a themed project-storage screen for Repeatable and Astro, matching the canonical light and dark examples in Figma.
 - Added project-level capture configuration locking so Photo, Timelapse, and Video projects automatically reuse the type and exact settings selected for their first capture.

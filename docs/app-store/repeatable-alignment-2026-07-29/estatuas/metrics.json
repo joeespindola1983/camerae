@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "detector": "sift",
+  "motionModel": "similarity",
+  "automaticModelSelection": true,
+  "referenceKeypoints": 12000,
+  "movingKeypoints": 2310,
+  "candidateMatches": 59,
+  "inlierMatches": 4,
+  "inlierRatio": 0.067797,
+  "reprojectionRMSE": 0.482102,
+  "overlapRatio": 0.983222,
+  "grayMAEBefore": 115.024825,
+  "grayMAEAfter": 115.622922,
+  "eccCorrelation": 0.000000,
+  "inlierCoverageRatio": 0.000645,
+  "inlierGridCoverageRatio": 0.125000,
+  "projectedAreaRatio": 1.018924,
+  "minimumEdgeScale": 1.009418,
+  "maximumEdgeScale": 1.009418,
+  "maximumCornerDisplacementRatio": 0.030075,
+  "edgeAlignmentError": 9.412723,
+  "decision": "reject",
+  "feasibilityScore": 0.000000,
+  "reasonCodes": ["insufficientInliers", "inconsistentMatches", "insufficientCoverage", "highLocalResidual"],
+  "feasibilityReasons": [
+    "poucos pontos geometricamente consistentes",
+    "a maioria das correspondencias e inconsistente",
+    "pontos concentrados em uma area muito pequena",
+    "residuo local muito alto; possivel paralaxe ou cena movel"
+  ],
+  "modelCandidates": [
+    {"model": "similarity", "succeeded": true, "decision": "reject", "score": 0.000000, "reprojectionRMSE": 0.482102, "edgeAlignmentError": 9.412723},
+    {"model": "affine", "succeeded": true, "decision": "reject", "score": 0.000000, "reprojectionRMSE": 0.950913, "edgeAlignmentError": 10.298758},
+    {"model": "homography", "succeeded": true, "decision": "reject", "score": 0.000000, "reprojectionRMSE": 0.686384, "edgeAlignmentError": 13.293314}
+  ],
+  "transformMovingToReference": [
+    [1.008607, 0.040447, -29.230090],
+    [-0.040447, 1.008607, 49.349949],
+    [0.000000, 0.000000, 1.000000]
+  ]
+}

@@ -22,3 +22,8 @@ Before upload:
 3. verify dimensions, alpha transparency, copy, localization, and screenshot
    order;
 4. run the release gate for the target release branch.
+
+The Repeatable marketing compositions can be reproduced with
+`scripts/generate-repeatable-app-store-screenshots.mjs`. The script expects six
+pre-extracted, native-resolution PNG frames and produces the official iPhone
+6.9-inch and iPad 13-inch sizes without generative image editing.
