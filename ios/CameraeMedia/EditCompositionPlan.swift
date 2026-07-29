@@ -8,6 +8,9 @@ public struct EditCompositionSegment: Equatable, Sendable {
     public let duration: TimeInterval
     public let sourcePixelWidth: Int
     public let sourcePixelHeight: Int
+    public let sourceFrameRate: Double?
+    public let sourceVideoCodec: String?
+    public let sourceVideoBitRate: Double?
     public let spatialTransform: ClipAlignmentTransform
 
     public init(
@@ -17,6 +20,9 @@ public struct EditCompositionSegment: Equatable, Sendable {
         duration: TimeInterval,
         sourcePixelWidth: Int,
         sourcePixelHeight: Int,
+        sourceFrameRate: Double? = nil,
+        sourceVideoCodec: String? = nil,
+        sourceVideoBitRate: Double? = nil,
         spatialTransform: ClipAlignmentTransform = .identity
     ) {
         self.itemID = itemID
@@ -25,6 +31,9 @@ public struct EditCompositionSegment: Equatable, Sendable {
         self.duration = duration
         self.sourcePixelWidth = sourcePixelWidth
         self.sourcePixelHeight = sourcePixelHeight
+        self.sourceFrameRate = sourceFrameRate
+        self.sourceVideoCodec = sourceVideoCodec
+        self.sourceVideoBitRate = sourceVideoBitRate
         self.spatialTransform = spatialTransform
     }
 }
@@ -34,6 +43,8 @@ public struct EditCompositionPlan: Equatable, Sendable {
     public let renderWidth: Int
     public let renderHeight: Int
     public let frameRate: Int
+    public let videoCodec: String
+    public let videoBitRate: Int
     public let segments: [EditCompositionSegment]
     public let totalDuration: TimeInterval
     public let commonCrop: ClipAlignmentNormalizedRect
@@ -43,6 +54,8 @@ public struct EditCompositionPlan: Equatable, Sendable {
         renderWidth: Int,
         renderHeight: Int,
         frameRate: Int,
+        videoCodec: String = "h264",
+        videoBitRate: Int = 0,
         segments: [EditCompositionSegment],
         totalDuration: TimeInterval,
         commonCrop: ClipAlignmentNormalizedRect = .full
@@ -51,6 +64,8 @@ public struct EditCompositionPlan: Equatable, Sendable {
         self.renderWidth = renderWidth
         self.renderHeight = renderHeight
         self.frameRate = frameRate
+        self.videoCodec = videoCodec
+        self.videoBitRate = videoBitRate
         self.segments = segments
         self.totalDuration = totalDuration
         self.commonCrop = commonCrop
@@ -97,6 +112,9 @@ public struct EditCompositionPlanner: Sendable {
                 duration: descriptor.duration,
                 sourcePixelWidth: descriptor.pixelWidth,
                 sourcePixelHeight: descriptor.pixelHeight,
+                sourceFrameRate: descriptor.frameRate,
+                sourceVideoCodec: descriptor.videoCodec,
+                sourceVideoBitRate: descriptor.videoBitRate,
                 spatialTransform: spatialAlignment?.corrections[item.id]?.transform ?? .identity
             ))
             cursor += descriptor.duration
@@ -108,15 +126,45 @@ public struct EditCompositionPlanner: Sendable {
                 (width: $0.sourcePixelWidth, height: $0.sourcePixelHeight)
             }
         )
+        let frameRate = EditFrameRatePolicy.frameRate(
+            sourceFrameRates: segments.compactMap(\.sourceFrameRate)
+        )
+        let videoCodec = EditVideoCodecPolicy.codec(
+            sourceCodecs: segments.compactMap(\.sourceVideoCodec)
+        )
+        let sourceBitRate = segments
+            .compactMap(\.sourceVideoBitRate)
+            .filter { $0.isFinite && $0 > 0 }
+            .max()
+            .map { Int($0.rounded()) } ?? 0
         return EditCompositionPlan(
             canvas: document.canvas,
             renderWidth: size.width,
             renderHeight: size.height,
-            frameRate: 30,
+            frameRate: frameRate,
+            videoCodec: videoCodec,
+            videoBitRate: sourceBitRate,
             segments: segments,
             totalDuration: cursor,
             commonCrop: spatialAlignment?.commonCrop ?? .full
         )
+    }
+}
+
+enum EditFrameRatePolicy {
+    static func frameRate(sourceFrameRates: [Double]) -> Int {
+        let valid = sourceFrameRates.filter { $0.isFinite && $0 > 0 }
+        return min(max(Int((valid.min() ?? 30).rounded()), 1), 120)
+    }
+}
+
+enum EditVideoCodecPolicy {
+    static func codec(sourceCodecs: [String]) -> String {
+        guard !sourceCodecs.isEmpty,
+              sourceCodecs.allSatisfy({ $0.caseInsensitiveCompare("hevc") == .orderedSame }) else {
+            return "h264"
+        }
+        return "hevc"
     }
 }
 

@@ -128,7 +128,7 @@ public actor EditVideoComposer: EditVideoComposing {
         }
 
         EditVideoComposerDiagnostics.event("export.validation.started")
-        try await validateExport(at: temporaryURL)
+        try await validateExport(at: temporaryURL, expected: plan)
         EditVideoComposerDiagnostics.event("export.validation.completed")
         if fileManager.fileExists(atPath: outputURL.path) {
             try fileManager.removeItem(at: outputURL)
@@ -234,11 +234,16 @@ public actor EditVideoComposer: EditVideoComposing {
         reader.add(videoOutput)
 
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-        let averageBitRate = max(plan.renderWidth * plan.renderHeight * 6, 4_000_000)
+        let pixelRateBitRate = Int(
+            Double(plan.renderWidth * plan.renderHeight * 6)
+                * max(Double(plan.frameRate) / 30, 1)
+        )
+        let averageBitRate = max(plan.videoBitRate, pixelRateBitRate, 4_000_000)
+        let codec: AVVideoCodecType = plan.videoCodec == "hevc" ? .hevc : .h264
         let videoInput = AVAssetWriterInput(
             mediaType: .video,
             outputSettings: [
-                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoCodecKey: codec,
                 AVVideoWidthKey: plan.renderWidth,
                 AVVideoHeightKey: plan.renderHeight,
                 AVVideoCompressionPropertiesKey: [
@@ -266,7 +271,7 @@ public actor EditVideoComposer: EditVideoComposing {
         writer.startSession(atSourceTime: .zero)
         EditVideoComposerDiagnostics.event(
             "export.writer.started",
-            "codec=h264 render=\(plan.renderWidth)x\(plan.renderHeight) bitrate=\(averageBitRate)"
+            "codec=\(plan.videoCodec) render=\(plan.renderWidth)x\(plan.renderHeight) fps=\(plan.frameRate) bitrate=\(averageBitRate)"
         )
         await progress(0)
 
@@ -385,22 +390,51 @@ public actor EditVideoComposer: EditVideoComposing {
         return (composition, videoComposition)
     }
 
-    private func validateExport(at url: URL) async throws {
+    private func validateExport(
+        at url: URL,
+        expected plan: EditCompositionPlan
+    ) async throws {
         let values = try url.resourceValues(forKeys: [.fileSizeKey])
         guard (values.fileSize ?? 0) > 0 else { throw EditVideoComposerError.emptyOutput }
         let asset = AVURLAsset(url: url)
-        guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
+        guard let track = try await asset.loadTracks(withMediaType: .video).first else {
             throw EditVideoComposerError.emptyOutput
         }
         let duration = CMTimeGetSeconds(try await asset.load(.duration))
         guard duration.isFinite, duration > 0 else { throw EditVideoComposerError.emptyOutput }
+        let naturalSize = try await track.load(.naturalSize)
+        let preferredTransform = try await track.load(.preferredTransform)
+        let oriented = CGRect(origin: .zero, size: naturalSize).applying(preferredTransform)
+        let width = Int(abs(oriented.width).rounded())
+        let height = Int(abs(oriented.height).rounded())
+        let frameRate = Double(try await track.load(.nominalFrameRate))
+        let frameRateTolerance = max(Double(plan.frameRate) * 0.02, 1)
+        let formatDescriptions = try await track.load(.formatDescriptions)
+        let mediaSubtype = formatDescriptions.first.map(CMFormatDescriptionGetMediaSubType)
+        let codecMatches = plan.videoCodec == "hevc"
+            ? mediaSubtype == kCMVideoCodecType_HEVC
+            : mediaSubtype == kCMVideoCodecType_H264
+        guard width == plan.renderWidth,
+              height == plan.renderHeight,
+              frameRate.isFinite,
+              abs(frameRate - Double(plan.frameRate)) <= frameRateTolerance,
+              codecMatches else {
+            EditVideoComposerDiagnostics.event(
+                "export.validation.mismatch",
+                "expected=\(plan.renderWidth)x\(plan.renderHeight)@\(plan.frameRate)/\(plan.videoCodec) actual=\(width)x\(height)@\(frameRate)/\(String(describing: mediaSubtype))"
+            )
+            throw EditVideoComposerError.outputFormatMismatch
+        }
     }
 }
 
 enum EditVideoExportPresetPolicy {
     nonisolated static func presetName(renderWidth: Int, renderHeight: Int) -> String {
-        renderHeight > renderWidth
-            ? AVAssetExportPresetHighestQuality
+        if renderHeight > renderWidth {
+            return AVAssetExportPresetHighestQuality
+        }
+        return renderWidth > 1920 || renderHeight > 1080
+            ? AVAssetExportPreset3840x2160
             : AVAssetExportPreset1920x1080
     }
 }
@@ -499,6 +533,7 @@ public enum EditVideoComposerError: LocalizedError, Equatable {
     case exportFailed
     case cancelled
     case emptyOutput
+    case outputFormatMismatch
     case spatialAlignmentUnsupported
     case readerConfigurationFailed
     case readerFailed
@@ -515,6 +550,7 @@ public enum EditVideoComposerError: LocalizedError, Equatable {
         case .exportFailed: return "não foi possível concluir a exportação"
         case .cancelled: return "exportação cancelada"
         case .emptyOutput: return "o MP4 exportado está vazio ou inválido"
+        case .outputFormatMismatch: return "o MP4 exportado não preservou a resolução, o FPS e o codec planejados"
         case .spatialAlignmentUnsupported: return "este compositor não aceita alinhamento espacial"
         case .readerConfigurationFailed: return "não foi possível preparar a leitura do vídeo alinhado"
         case .readerFailed: return "não foi possível ler os frames do vídeo alinhado"

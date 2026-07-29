@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Fixed
+
+- Preserve the recorded resolution, frame rate, HEVC codec, and source bitrate when exporting aligned Repeatable videos, including 4K at 60 fps, and reject silent capture or export downgrades.
+- Select the largest full-sensor recording format before using stabilization support as a tie-breaker, preventing an unintended fallback to 1720 × 1290.
+- Keep electronic video stabilization disabled for tripod-based Repeatable capture, preserving native field of view and resolution for alignment.
+
 ### Added
 
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
