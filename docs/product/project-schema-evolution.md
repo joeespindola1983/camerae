@@ -50,3 +50,31 @@ Every persistent schema evolution covers:
 4. Empty legacy state.
 5. Unsupported newer-version rejection.
 6. Hardware immutability and per-type default independence after normalization.
+
+## Project organization
+
+Groups are stored in the independent, authoritative
+`project-organization-v1.json` document under Camerae Application Support.
+Project manifests and media directories are not rewritten merely to organize a
+catalog.
+
+- Absence of the organization document is the empty current state. Therefore
+  every pre-feature project opens normally in Ungrouped.
+- Membership stores only stable project and organization UUIDs.
+- The resolver accepts roots and one subgroup level, removes duplicate or
+  orphaned nodes, removes memberships for missing projects, and rejects
+  cross-module membership before the snapshot reaches SwiftUI.
+- Normalization is idempotent and persists the current representation once.
+- Unsupported newer schemas fail closed and are not replaced with an empty
+  document.
+- Deleting an organization removes its logical subtree and memberships only.
+  Project manifests, directories, references, captures, videos, timelapses,
+  exports, and cache remain untouched.
+
+Because no historical organization file existed before schema 1, there is no
+heuristic legacy grouping migration. Inventing groups from project names or
+locations would risk incorrect organization. Existing projects intentionally
+remain visible in Ungrouped until the user moves them.
+
+The persistence and migration boundary is covered by
+`ProjectOrganizationDocumentTests` and `ProjectOrganizationCatalogTests`.

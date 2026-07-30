@@ -100,13 +100,109 @@ struct CameraeNextProjectCatalogTests {
         #expect(layout.thumbnailRange.upperBound <= layout.informationRange.lowerBound)
     }
 
-    @Test("every project card keeps reversible archive and destructive delete capabilities")
+    @Test("every Repeatable project card keeps move, reversible archive, and destructive delete capabilities")
     func projectCardCapabilities() {
         let active = makeProject(name: "Active", module: .repeatable, day: 1)
         let archived = makeProject(name: "Archived", module: .repeatable, day: 2, archived: true)
 
-        #expect(ProjectCatalogActionPolicy.actions(for: active) == [.archive, .delete])
-        #expect(ProjectCatalogActionPolicy.actions(for: archived) == [.unarchive, .delete])
+        #expect(ProjectCatalogActionPolicy.actions(for: active) == [.move, .archive, .delete])
+        #expect(ProjectCatalogActionPolicy.actions(for: archived) == [.move, .unarchive, .delete])
+    }
+
+    @Test("organization catalogs present root groups, subgroups, then direct projects")
+    func organizationHierarchy() {
+        let rootID = UUID()
+        let subgroupID = UUID()
+        let rootProject = makeProject(name: "Fachada", module: .repeatable, day: 4)
+        let subgroupProject = makeProject(name: "Escultura", module: .repeatable, day: 3)
+        let ungrouped = makeProject(name: "Praça", module: .repeatable, day: 2)
+        let root = makeOrganizationNode(id: rootID, parentID: nil, name: "Catedral", day: 4)
+        let subgroup = makeOrganizationNode(
+            id: subgroupID,
+            parentID: rootID,
+            name: "Detalhes",
+            day: 3
+        )
+        let snapshot = ProjectOrganizationSnapshot(
+            nodes: [subgroup, root],
+            memberships: [
+                .init(projectID: rootProject.id, nodeID: rootID),
+                .init(projectID: subgroupProject.id, nodeID: subgroupID)
+            ]
+        )
+        let model = CameraeNextProjectOrganizationModel(
+            projects: [ungrouped, subgroupProject, rootProject],
+            module: .repeatable,
+            organization: snapshot,
+            filter: .recent,
+            sort: .createdNewest
+        )
+
+        #expect(model.rootNodes.map(\.name) == ["Catedral"])
+        #expect(model.childNodes(of: rootID).map(\.name) == ["Detalhes"])
+        #expect(model.directProjects(in: rootID).map(\.name) == ["Fachada"])
+        #expect(model.directProjects(in: subgroupID).map(\.name) == ["Escultura"])
+        #expect(model.ungroupedProjects.map(\.name) == ["Praça"])
+        #expect(model.descendantProjects(in: rootID).map(\.name) == ["Fachada", "Escultura"])
+    }
+
+    @Test("group cards expose rename, archive, and delete-with-preservation capabilities")
+    func organizationCapabilities() {
+        let active = makeOrganizationNode(id: UUID(), parentID: nil, name: "Ativo", day: 1)
+        let archived = ProjectOrganizationNode(
+            id: UUID(),
+            module: .repeatable,
+            parentID: nil,
+            name: "Arquivado",
+            createdAt: .distantPast,
+            updatedAt: .distantPast,
+            isArchived: true
+        )
+
+        #expect(
+            ProjectOrganizationActionPolicy.actions(for: active) ==
+            [.rename, .archive, .deletePreservingProjects]
+        )
+        #expect(
+            ProjectOrganizationActionPolicy.actions(for: archived) ==
+            [.rename, .unarchive, .deletePreservingProjects]
+        )
+    }
+
+    @Test("archiving a group keeps its active subgroups and projects reachable")
+    func archivedGroupKeepsContentsReachable() {
+        let rootID = UUID()
+        let childID = UUID()
+        let project = makeProject(name: "Ativo", module: .repeatable, day: 3)
+        let archivedRoot = ProjectOrganizationNode(
+            id: rootID,
+            module: .repeatable,
+            parentID: nil,
+            name: "Catedral",
+            createdAt: .distantPast,
+            updatedAt: .distantPast,
+            isArchived: true
+        )
+        let activeChild = makeOrganizationNode(
+            id: childID,
+            parentID: rootID,
+            name: "Esculturas",
+            day: 2
+        )
+        let model = CameraeNextProjectOrganizationModel(
+            projects: [project],
+            module: .repeatable,
+            organization: .init(
+                nodes: [archivedRoot, activeChild],
+                memberships: [.init(projectID: project.id, nodeID: childID)]
+            ),
+            filter: .archived
+        )
+
+        #expect(model.rootNodes.map(\.id) == [rootID])
+        #expect(model.childNodes(of: rootID).map(\.id) == [childID])
+        #expect(model.directProjects(in: childID).map(\.id) == [project.id])
+        #expect(model.ungroupedProjects.isEmpty)
     }
 
     @Test("project navigation identity survives metadata and last-opened updates")
@@ -166,5 +262,23 @@ struct CameraeNextProjectCatalogTests {
             generation: 0
         )
         return CameraProject(record: record, summary: summary)
+    }
+
+    private func makeOrganizationNode(
+        id: UUID,
+        parentID: UUID?,
+        name: String,
+        day: Int
+    ) -> ProjectOrganizationNode {
+        let date = Date(timeIntervalSince1970: TimeInterval(day * 86_400))
+        return ProjectOrganizationNode(
+            id: id,
+            module: .repeatable,
+            parentID: parentID,
+            name: name,
+            createdAt: date,
+            updatedAt: date,
+            isArchived: false
+        )
     }
 }

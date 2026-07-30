@@ -14,6 +14,9 @@ struct CameraeNextRootView: View {
                 .navigationDestination(for: CameraProject.self) { project in
                     CameraeNextProjectRuntimeView(project: project, path: $path)
                 }
+                .navigationDestination(for: ProjectOrganizationRoute.self) { route in
+                    CameraeNextProjectOrganizationRouteView(route: route, path: $path)
+                }
         }
         .environmentObject(projectStore)
         .environmentObject(settings)

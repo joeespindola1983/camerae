@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [Unreleased]
 
+### Added
+
+- Added two-level Repeatable project organization with groups, subgroups, project moves, archive controls, safe organization deletion, and zero-to-four-thumbnail mosaics.
+- Added a versioned organization document that keeps existing projects ungrouped by default and never rewrites project manifests or media.
+- Added paired light and dark Figma Screens for iPhone and iPad plus creation, movement, action-menu, safe-delete, and empty states.
+- Added complete project-organization localization for Portuguese, Spanish, English, French, German, and Russian.
+
+### Changed
+
+- Shows Repeatable groups before ungrouped projects and subgroups before projects directly assigned to a group.
+- Extends the typed interface-capability contract so Repeatable project cards always retain Move, Archive or Unarchive, and Delete actions.
+
 ## [9.2.1] - 2026-07-29
 
 **Status:** Approved

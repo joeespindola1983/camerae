@@ -19,8 +19,10 @@ returned by `ProjectCatalogActionPolicy`.
 
 | Project state | Required actions |
 | --- | --- |
-| Active | Archive, Delete |
-| Archived | Unarchive, Delete |
+| Active Repeatable | Move, Archive, Delete |
+| Archived Repeatable | Move, Unarchive, Delete |
+| Active Astro | Archive, Delete |
+| Archived Astro | Unarchive, Delete |
 
 Additional invariants:
 
@@ -35,6 +37,41 @@ The executable contract lives in
 `CameraeNextProjectCatalogTests.projectCardCapabilities`. UI evidence remains
 useful for visual approval, while this test protects the business capability
 when the view hierarchy changes.
+
+## Repeatable project organization
+
+Organization is independent of capture type and project media. The catalog has
+exactly two organization levels: group and subgroup. A project belongs to at
+most one organization node.
+
+Every visible group or subgroup card must expose the actions returned by
+`ProjectOrganizationActionPolicy`.
+
+| Organization state | Required actions |
+| --- | --- |
+| Active | Rename, Archive, Delete organization |
+| Archived | Rename, Unarchive, Delete organization |
+
+Additional invariants:
+
+- Root groups appear before ungrouped projects.
+- Subgroups appear before projects directly assigned to a group.
+- A project can move to a root group, subgroup, or Ungrouped.
+- Deleting a group also removes its subgroup organization and returns every
+  descendant project to Ungrouped.
+- Deleting a subgroup returns its projects to Ungrouped.
+- Organization deletion never deletes a project directory, reference, capture,
+  video, timelapse, export, or cache.
+- Card mosaics show zero to four descendant project thumbnails and use `+N`
+  when more projects exist.
+- Menus remain reachable independently of mosaic geometry, image orientation,
+  compact width, or iPad layout.
+
+The executable contracts live in
+`CameraeNextProjectCatalogTests.organizationHierarchy`,
+`organizationCapabilities`, and `projectCardCapabilities`. The canonical Figma
+component is `Project Group Card`; the paired light/dark iPhone and iPad Screens
+are `10A` through `10R`.
 
 ## Repeatable capture catalog
 
