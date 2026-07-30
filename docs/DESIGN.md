@@ -42,6 +42,21 @@ Renaming or reordering a page must not mutate its descendants. Component IDs
 and screen IDs remain stable when only their owning page's name or position
 changes.
 
+### App Screens organization
+
+Current application screens are grouped first by device class and then by
+route:
+
+- `iPhone · Current Screens`: 49 route states;
+- `iPad · Current Screens` (`742:1389`): the same 49 route states;
+- legacy and exploratory frames: separate from both current catalogs.
+
+Every current route code must exist once in each device section. A screen
+catalog audit must report no missing route codes, overlapping frames, clipped
+frames, or duplicate current screen names. Device sections reuse the same
+canonical component instances; they may adapt composition and constrained
+content width without forking the component contract.
+
 ## Design hierarchy
 
 The expected dependency direction is:

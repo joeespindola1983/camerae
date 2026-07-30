@@ -2,7 +2,7 @@
 
 ## Status
 
-- Phase: `P7 · Final validation`
+- Phase: `P7 · Complete`
 - Branch: `codex/figma-swiftui-canonical-sync`
 - Target: `9.4.0`
 - Figma file: `c8gsnSu31erYFG3u3QMQgN`
@@ -378,6 +378,37 @@ workflow, and that archived groups do not expose an invalid create action.
 Validation:
 
 - `CameraeNextProjectCatalogTests`: 13 tests passed.
+
+## Final App Screens audit
+
+`11 · App Screens` is now organized into explicit iPhone and iPad sections,
+with legacy explorations kept separate from the current screen catalog.
+
+- iPhone: 49 current route states;
+- iPad: 49 corresponding route states;
+- missing route codes: none;
+- overlapping frames: none;
+- clipped frames: none;
+- duplicate current screen names: none.
+
+The iPad catalog mirrors the complete iPhone route vocabulary instead of
+mixing a partial tablet sample among phone screens. Tablet compositions use
+the same canonical components and preserve their native adaptive presentation,
+including 620-point primary content widths and 700-point settings content
+widths where constrained reading width is appropriate.
+
+The audited iPad section is `iPad · Current Screens` (`742:1389`). Expanding
+the Figma catalog to full device parity did not expand the approved SwiftUI
+scope: existing native adaptive containers already provide the device
+geometry, while the typed capability and presentation policies protect the
+shared behavior.
+
+Final validation on 2026-07-30:
+
+- Figma route and layout audit: 49 iPhone states and 49 iPad states passed;
+- `CameraeNextProjectCatalogTests`: 13 tests passed;
+- `CameraeNextSessionCatalogTests`: 30 tests passed;
+- selected test run: 43 tests passed.
 
 ## Acceptance criteria
 
