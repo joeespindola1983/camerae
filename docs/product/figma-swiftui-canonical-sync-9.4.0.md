@@ -2,7 +2,7 @@
 
 ## Status
 
-- Phase: `P4 · First screen migration`
+- Phase: `P6 · First SwiftUI contract integration`
 - Branch: `codex/figma-swiftui-canonical-sync`
 - Target: `9.4.0`
 - Figma file: `c8gsnSu31erYFG3u3QMQgN`
@@ -324,6 +324,30 @@ The former Repeatable Dark screens were renamed as `LEGACY` exploration rather
 than migrated. Repeatable has no production Dark appearance contract, so
 presenting those frames as current Screens would contradict both SwiftUI and
 the normalized Figma theme model.
+
+## Phase 5–6 first SwiftUI integration
+
+The Repeatable workspace now exposes:
+
+- `CameraeNextProjectWorkspaceAction`;
+- `CameraeNextProjectWorkspaceCapabilityPolicy`;
+- `CameraeNextProjectWorkspacePresentation`;
+- tab presentations that retain their typed project section.
+
+The capability tests prove that Configurar and Capturas are always reachable,
+that Tripé is exposed on capable devices, and that an already-saved guide
+remains reachable if the current device is incompatible. Presentation tests
+also prove project-title retention, canonical tab order, saved-guide status,
+and capture count without inspecting SwiftUI geometry.
+
+`CameraeNextProjectRuntimeView` and `CameraeNextProjectTabs` consume this
+presentation directly. Native `NavigationStack` remains responsible for the
+actual iOS navigation chrome.
+
+Validation on 2026-07-30:
+
+- `CameraeNextSessionCatalogTests`: 30 tests passed;
+- generic iOS `build-for-testing`: succeeded.
 
 ## Acceptance criteria
 

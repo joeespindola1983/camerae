@@ -24,6 +24,62 @@ enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
     }
 }
 
+enum CameraeNextProjectWorkspaceAction: Equatable, Sendable {
+    case configure
+    case openTripod
+    case openCaptures
+
+    var section: CameraeNextProjectSection {
+        switch self {
+        case .configure: .configuration
+        case .openTripod: .tripod
+        case .openCaptures: .captures
+        }
+    }
+}
+
+enum CameraeNextProjectWorkspaceCapabilityPolicy {
+    static func actions(
+        spatialGuidanceAvailability: SpatialGuidanceAvailability,
+        hasSpatialReference: Bool
+    ) -> [CameraeNextProjectWorkspaceAction] {
+        CameraeNextProjectSection.visibleSections(
+            spatialGuidanceAvailability: spatialGuidanceAvailability,
+            hasSpatialReference: hasSpatialReference
+        ).map {
+            switch $0 {
+            case .configuration: .configure
+            case .tripod: .openTripod
+            case .captures: .openCaptures
+            }
+        }
+    }
+}
+
+struct CameraeNextProjectWorkspacePresentation: Equatable, Sendable {
+    let projectTitle: String
+    let tabs: [CameraeNextProjectTabPresentation]
+
+    init(
+        projectTitle: String,
+        spatialGuidanceAvailability: SpatialGuidanceAvailability,
+        hasSpatialReference: Bool,
+        captureCount: Int
+    ) {
+        self.projectTitle = projectTitle
+        tabs = CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+            spatialGuidanceAvailability: spatialGuidanceAvailability,
+            hasSpatialReference: hasSpatialReference
+        ).map {
+            CameraeNextProjectTabPresentation(
+                section: $0.section,
+                hasTripodReference: hasSpatialReference,
+                captureCount: captureCount
+            )
+        }
+    }
+}
+
 struct CameraeNextRepeatableProjectWorkspaceState: Equatable, Sendable {
     var section: CameraeNextProjectSection = .configuration
     var isFinalizingCapture = false
@@ -188,20 +244,13 @@ enum CameraeNextSessionAlignmentReference {
 struct CameraeNextProjectTabs: View {
     @Binding var selection: CameraeNextProjectSection
     let theme: CameraeNextTheme
-    let sections: [CameraeNextProjectSection]
-    let hasTripodReference: Bool
-    let captureCount: Int
+    let presentations: [CameraeNextProjectTabPresentation]
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(sections, id: \.self) { section in
-                let presentation = CameraeNextProjectTabPresentation(
-                    section: section,
-                    hasTripodReference: hasTripodReference,
-                    captureCount: captureCount
-                )
+            ForEach(presentations, id: \.section) { presentation in
                 Button {
-                    selection = section
+                    selection = presentation.section
                 } label: {
                     HStack(spacing: 5) {
                         if let systemImage = presentation.systemImage {
@@ -211,13 +260,16 @@ struct CameraeNextProjectTabs: View {
                         Text(presentation.title)
                             .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
                     }
-                    .foregroundStyle(selection == section ? Color.white : theme.text)
+                    .foregroundStyle(selection == presentation.section ? Color.white : theme.text)
                     .frame(maxWidth: .infinity)
                     .frame(height: 44)
-                    .background(selection == section ? theme.accent : Color.clear, in: Capsule())
+                    .background(
+                        selection == presentation.section ? theme.accent : Color.clear,
+                        in: Capsule()
+                    )
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == section ? .isSelected : [])
+                .accessibilityAddTraits(selection == presentation.section ? .isSelected : [])
             }
         }
         .padding(3)
@@ -229,6 +281,7 @@ struct CameraeNextProjectTabs: View {
 }
 
 struct CameraeNextProjectTabPresentation: Equatable, Sendable {
+    let section: CameraeNextProjectSection
     let title: String
     let systemImage: String?
 
@@ -237,6 +290,7 @@ struct CameraeNextProjectTabPresentation: Equatable, Sendable {
         hasTripodReference: Bool,
         captureCount: Int
     ) {
+        self.section = section
         switch section {
         case .configuration:
             title = section.title

@@ -247,6 +247,15 @@ struct CameraeNextProjectRuntimeView: View {
         SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
     }
 
+    private var repeatableWorkspacePresentation: CameraeNextProjectWorkspacePresentation {
+        CameraeNextProjectWorkspacePresentation(
+            projectTitle: project.name,
+            spatialGuidanceAvailability: spatialGuidanceAvailability,
+            hasSpatialReference: hasSpatialReference,
+            captureCount: projectCaptureCount
+        )
+    }
+
     var body: some View {
         Group {
             if project.module == .edit {
@@ -256,12 +265,7 @@ struct CameraeNextProjectRuntimeView: View {
                     CameraeNextProjectTabs(
                         selection: $repeatableWorkspace.section,
                         theme: .init(workflow: .repeatable),
-                        sections: CameraeNextProjectSection.visibleSections(
-                            spatialGuidanceAvailability: spatialGuidanceAvailability,
-                            hasSpatialReference: hasSpatialReference
-                        ),
-                        hasTripodReference: hasSpatialReference,
-                        captureCount: projectCaptureCount
+                        presentations: repeatableWorkspacePresentation.tabs
                     )
 
                     switch repeatableWorkspace.section {
@@ -301,7 +305,7 @@ struct CameraeNextProjectRuntimeView: View {
                 workflowConfiguration(isEmbeddedInProjectWorkspace: false)
             }
         }
-        .navigationTitle(project.name)
+        .navigationTitle(repeatableWorkspacePresentation.projectTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: refreshProjectTabIndicators)
         .task { await projectStore.markOpened(project) }
