@@ -2,7 +2,7 @@
 
 ## Status
 
-- Phase: `P1 · Foundations`
+- Phase: `P4 · First screen migration`
 - Branch: `codex/figma-swiftui-canonical-sync`
 - Target: `9.4.0`
 - Figma file: `c8gsnSu31erYFG3u3QMQgN`
@@ -257,6 +257,73 @@ before production supports them would create a false handoff contract.
 The eight valid variants intentionally omit impossible combinations. A
 Standard workspace cannot select Tripod, and Spatial variants distinguish a
 missing guide from a saved guide.
+
+### Navigation Header
+
+- Figma component set: `Navigation Header` (`709:35`)
+- Documentation: `Navigation Header / Documentation` (`710:2`)
+- Owning page: `02 · Components` (`15:5`)
+- SwiftUI mapping:
+  - native `NavigationStack` title and toolbar composition
+  - typed presentation contracts to be introduced under TDD
+- Variant contract:
+  - Root
+  - Catalog Toolbar
+  - Detail
+  - Detail Action
+  - Modal
+- Editable text:
+  - title
+  - leading label
+  - trailing label
+
+This component documents the native iOS navigation contract. It does not
+authorize replacing `NavigationStack` with a custom-drawn header. The previous
+hero-style `Screen Header` was retained as `Screen Header / Legacy` (`24:2`) so
+historical evidence remains available without competing with the production
+contract.
+
+### Project Workspace Chrome
+
+- Figma component set: `Project Workspace Chrome` (`712:116`)
+- Documentation: `Project Workspace Chrome / Documentation` (`713:92`)
+- Owning page: `02 · Components` (`15:5`)
+- Composed canonical instances:
+  - `Navigation Header`
+  - `Project Tabs`
+- Variant contract:
+  - the same eight valid Layout, Guide, and Selection combinations exposed by
+    `Project Tabs`
+- Nested instance properties:
+  - project title
+  - tab labels
+  - capture count
+
+The nested instances are exposed so Screens can change project-specific text
+without detaching either canonical component.
+
+## Phase 4 first screen migration
+
+The first Repeatable workspace family in `11 · App Screens` now consumes
+`Project Workspace Chrome`:
+
+- Configuration: `09A · Repeatable — Projeto · Configurar · Spatial · Light`
+  (`636:719`)
+- Captures: `09B · Repeatable — Projeto · Capturas (3) · Spatial · Light`
+  (`636:837`)
+- Tripod: `09C · Repeatable — Projeto · Tripé salvo · Spatial · Light`
+  (`718:1321`)
+
+All three screens retain the project title, expose the conditional Tripod tab,
+show the saved-guide indicator, and use the same capture count. The Tripod
+screen reuses the approved saved-guide body from the Spatial Guidance
+documentation while replacing its obsolete text-only navigation with canonical
+instances.
+
+The former Repeatable Dark screens were renamed as `LEGACY` exploration rather
+than migrated. Repeatable has no production Dark appearance contract, so
+presenting those frames as current Screens would contradict both SwiftUI and
+the normalized Figma theme model.
 
 ## Acceptance criteria
 
