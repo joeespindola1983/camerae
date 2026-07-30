@@ -4,7 +4,57 @@ All notable Camerae changes are recorded in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Historical entries before this file was introduced were reconstructed from immutable Git tags and commit history. When the original release commit did not contain detailed notes, the entry is intentionally described as a consolidated historical milestone.
 
+## App Store release status
+
+This table is the operational source of truth for production submissions to
+Apple. It is intentionally separate from internal QA and release-candidate
+status. Update it whenever App Store Connect changes state; Firebase and other
+test distributions do not require an entry here.
+
+| Version | Apple status | Public availability | Last updated |
+| --- | --- | --- | --- |
+| `9.1.0` | In Review | Not yet available | 2026-07-30 |
+| `8.5.1` | Approved | Available on the App Store | 2026-07-30 |
+
 ## [Unreleased]
+
+### Added
+
+- Added a reusable, versioned video-tutorial pattern with captions, first-use
+  completion, contextual replay, and textual fallback while media is not
+  packaged; Spatial Guidance is its first consumer.
+- Added Repeatable Spatial Guidance on eligible LiDAR iPhones, with explicit
+  capture start, automatic minimum-map completion, local world-map persistence,
+  relocalization, and a dedicated Tripod project tab.
+- Added draggable tripod-base and fixed 45-centimeter camera-direction controls,
+  plus an estimated ghost tripod derived from mapped height and three nearby
+  foot clusters with conservative fallbacks.
+- Added a yellow plumb laser and ground halo, a clean reference screenshot, and
+  navigation that restores the tripod and direction without rebuilding the
+  captured wireframe.
+- Added one black/white creation-contrast toggle and navigation-only black/white
+  plus 25%/50%/100% appearance controls for tripod and camera.
+- Added atomic remapping that preserves the last usable guide, keeps saved
+  guides discoverable on incompatible devices, and offers safe recovery or
+  continuation without Spatial Guidance.
+- Added two-level Repeatable project organization with groups, subgroups,
+  project moves, archive controls, safe organization deletion, and
+  zero-to-four-thumbnail mosaics.
+- Added a versioned organization document that keeps existing projects
+  ungrouped by default and never rewrites project manifests or media.
+- Added paired light and dark Figma Screens for iPhone and iPad plus creation,
+  movement, action-menu, safe-delete, and empty states.
+- Added complete project-organization localization for Portuguese, Spanish,
+  English, French, German, and Russian.
+
+### Changed
+
+- Organized the canonical Figma file into stable design-system, workflow, domain, application, and website pages, and documented the corresponding design governance and Spatial Guidance handoff.
+- Reconciled the canonical Spatial Guidance page with the validated
+  center-and-direction flow and retained the earlier numeric pose-delta concept
+  as legacy design evidence.
+- Shows Repeatable groups before ungrouped projects and subgroups before projects directly assigned to a group.
+- Extends the typed interface-capability contract so Repeatable project cards always retain Move, Archive or Unarchive, and Delete actions.
 
 ## [9.2.1] - 2026-07-29
 
@@ -61,7 +111,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [9.1.0] - 2026-07-28
 
-**Status:** Release candidate
+**Internal status:** Release candidate
+
+**App Store status:** In Review; not yet publicly available
 **Areas:** Repeatable, single-photo capture, contour alignment, catalog, Figma
 
 ### Added
@@ -112,7 +164,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [8.5.1] - 2026-07-24
 
-**Status:** QA candidate
+**Internal status:** Released
+
+**App Store status:** Approved by Apple and available on the App Store
 **Areas:** Repeatable, video alignment, reference images, playback, sharing
 
 ### Fixed

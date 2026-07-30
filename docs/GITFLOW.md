@@ -125,6 +125,18 @@ O workflow `iOS Build` valida a política em todo Draft PR direcionado a `develo
 
 Os workflows de Firebase e App Store permanecem somente por `workflow_dispatch`. Nenhum workflow publica automaticamente em pushes, PRs ou tags.
 
+## Registro de submissões à App Store
+
+O início de `CHANGELOG.md` mantém uma tabela operacional separada para versões
+enviadas à Apple. Estados internos como QA candidate e release candidate não
+substituem o estado da submissão.
+
+Atualize a tabela e a entrada da versão quando o App Store Connect mudar entre
+Prepared, Submitted, In Review, Approved, Available ou Rejected. Registre a
+data da confirmação e diferencie explicitamente aprovação da Apple de
+disponibilidade pública. Distribuições Firebase e builds locais não entram
+nesse registro.
+
 ## GitHub repository settings
 
 After this workflow exists on `develop`, protect `develop` with a GitHub ruleset:

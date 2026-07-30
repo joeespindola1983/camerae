@@ -7,7 +7,57 @@ struct CameraeNextSessionCatalogTests {
         let state = CameraeNextRepeatableProjectWorkspaceState()
 
         #expect(state.section == .configuration)
-        #expect(CameraeNextProjectSection.allCases.map(\.title) == ["Configurar", "Capturas"])
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .available,
+                hasSpatialReference: false
+            )
+                .map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: false
+            )
+                .map(\.title) == ["Configurar", "Capturas"]
+        )
+    }
+
+    @Test func savedSpatialGuideRemainsDiscoverableOnAnIncompatibleDevice() {
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: true
+            ).map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .incompatibleReference) ==
+                [.remapReference, .continueWithoutReference]
+        )
+    }
+
+    @Test func projectTabLabelsExposeTripodStatusAndCaptureCount() {
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .tripod,
+                hasTripodReference: true,
+                captureCount: 4
+            ).systemImage == "checkmark.circle.fill"
+        )
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .tripod,
+                hasTripodReference: false,
+                captureCount: 4
+            ).systemImage == "circle.dashed"
+        )
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .captures,
+                hasTripodReference: true,
+                captureCount: 4
+            ).title == "Capturas (4)"
+        )
     }
 
     @Test func completedRepeatableCaptureReturnsToCatalogWhileFinalizingInline() {
