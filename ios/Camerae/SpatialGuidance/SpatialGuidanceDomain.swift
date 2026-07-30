@@ -138,6 +138,7 @@ enum SpatialGuidanceFailure: String, Codable, Equatable, Sendable {
 enum SpatialGuidancePhase: Equatable, Sendable {
     case idle
     case initializingMapping
+    case readyToStartMapping
     case mapping
     case insufficientCoverage
     case reviewingScene
@@ -163,7 +164,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
 
     var showsLiveCamera: Bool {
         switch self {
-        case .mapping, .insufficientCoverage, .reviewingScene,
+        case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene,
              .selectingTripodBase, .tripodBaseSelected, .readyToMount,
              .selectingTripodDirection, .tripodDirectionSelected,
              .relocalizing, .positioning, .aligned:
@@ -177,6 +178,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
 enum SpatialGuidanceEvent: Equatable, Sendable {
     case startMapping
     case mappingSessionReady
+    case beginSceneCapture
     case mappingEvaluated(SpatialMappingQualityLevel)
     case freezeScene
     case tripodBaseSelected
@@ -204,7 +206,8 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
         case (_, .reset): .idle
         case (.idle, .startMapping), (.saved, .startMapping),
              (.failed, .startMapping): .initializingMapping
-        case (.initializingMapping, .mappingSessionReady): .mapping
+        case (.initializingMapping, .mappingSessionReady): .readyToStartMapping
+        case (.readyToStartMapping, .beginSceneCapture): .mapping
         case (.mapping, .mappingEvaluated(.insufficient)),
              (.insufficientCoverage, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.mapping, .mappingEvaluated(.ready)),
@@ -267,7 +270,7 @@ enum SpatialTripodDirection {
 }
 
 enum SpatialStandardTripod {
-    static let heightMeters = 1.35
+    static let heightMeters = 1.0
     static let legRadiusMeters = 0.38
     static let legHubHeightMeters = 0.72
 
@@ -287,6 +290,32 @@ enum SpatialStandardTripod {
                 z: base.z + sin(angle) * legRadiusMeters
             )
         }
+    }
+}
+
+enum SpatialTripodHeightEstimator {
+    static let sampleRadiusMeters = 0.24
+    static let minimumHeightMeters = 0.55
+    static let maximumHeightMeters = 1.65
+    static let minimumSampleCount = 12
+
+    static func estimate(
+        base: SpatialVector3,
+        points: [SpatialVector3]
+    ) -> Double? {
+        let heights = points.compactMap { point -> Double? in
+            guard hypot(point.x - base.x, point.z - base.z) <= sampleRadiusMeters else {
+                return nil
+            }
+            let height = point.y - base.y
+            return height >= 0.08 ? height : nil
+        }.sorted()
+        guard heights.count >= minimumSampleCount else { return nil }
+        let percentileIndex = min(
+            heights.count - 1,
+            Int((Double(heights.count - 1) * 0.95).rounded())
+        )
+        return min(max(heights[percentileIndex], minimumHeightMeters), maximumHeightMeters)
     }
 }
 
@@ -317,6 +346,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let orientation: SpatialCaptureOrientation
     let tripodBaseCenter: SpatialVector3?
     let tripodDirectionPoint: SpatialVector3?
+    let tripodHeightMeters: Double?
     let targetPose: SpatialPoseSample?
     let worldMapFileName: String
     let keyframeFileNames: [String]
@@ -332,6 +362,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         orientation: SpatialCaptureOrientation,
         tripodBaseCenter: SpatialVector3? = nil,
         tripodDirectionPoint: SpatialVector3? = nil,
+        tripodHeightMeters: Double? = nil,
         targetPose: SpatialPoseSample? = nil,
         worldMapFileName: String,
         keyframeFileNames: [String]
@@ -346,6 +377,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.orientation = orientation
         self.tripodBaseCenter = tripodBaseCenter
         self.tripodDirectionPoint = tripodDirectionPoint
+        self.tripodHeightMeters = tripodHeightMeters
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames
@@ -356,6 +388,7 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
     case noReference
     case referenceSaved
     case unsupported
+    case readyToStartMapping
     case mapping
     case insufficientCoverage
     case reviewingScene
@@ -377,6 +410,8 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case navigateScene
     case reviewReference
     case remapReference
+    case beginSceneCapture
+    case restartSceneCapture
     case continueWithoutReference
     case retryRelocalization
     case saveReference
@@ -402,6 +437,8 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
             [.navigateScene, .reviewReference, .remapReference]
         case .unsupported:
             [.continueWithoutReference]
+        case .readyToStartMapping:
+            [.beginSceneCapture, .restartSceneCapture, .cancel]
         case .mapping, .insufficientCoverage:
             [.cancel]
         case .reviewingScene:

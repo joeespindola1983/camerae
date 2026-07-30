@@ -68,6 +68,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var isBusy = false
     @Published private(set) var tripodBaseCenter: SpatialVector3?
     @Published private(set) var tripodDirectionPoint: SpatialVector3?
+    @Published private(set) var tripodHeightMeters = SpatialStandardTripod.heightMeters
 
     let sceneView: ARSCNView
 
@@ -79,6 +80,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     private var reference: SpatialReferenceBundle?
     private var targetAnchorRestored = false
     private var sceneMeshIsFrozen = false
+    private var meshAnchors: [UUID: ARMeshAnchor] = [:]
 
     override init() {
         sceneView = ARSCNView(frame: .zero)
@@ -99,9 +101,33 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             fail(.trackingUnavailable, message: error.localizedDescription)
             return
         }
-        mappingStartedAt = .now
         let configuration = makeConfiguration()
         sceneView.session.run(configuration, options: [.resetTracking, .removeExistingAnchors])
+    }
+
+    func beginSceneCapture() {
+        guard phase == .readyToStartMapping else { return }
+        observedCameraPositions = []
+        keyframes = []
+        lastKeyframeAt = nil
+        mappingQuality = .insufficient
+        meshAnchors = [:]
+        tripodBaseCenter = nil
+        tripodDirectionPoint = nil
+        tripodHeightMeters = SpatialStandardTripod.heightMeters
+        sceneMeshIsFrozen = false
+        sceneView.scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
+        mappingStartedAt = .now
+        try? machine.send(.beginSceneCapture)
+        phase = machine.phase
+        sceneView.session.run(
+            makeConfiguration(),
+            options: [.resetTracking, .removeExistingAnchors]
+        )
+    }
+
+    func restartLocalCapture() {
+        startMapping()
     }
 
     func startRelocalization(reference: SpatialReferenceBundle) {
@@ -181,6 +207,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             orientation: orientation,
             tripodBaseCenter: tripodBaseCenter,
             tripodDirectionPoint: tripodDirectionPoint,
+            tripodHeightMeters: tripodHeightMeters,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: names
@@ -319,6 +346,10 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
 
     func confirmTripodBase() {
         guard let base = tripodBaseCenter, phase == .tripodBaseSelected else { return }
+        tripodHeightMeters = SpatialTripodHeightEstimator.estimate(
+            base: base,
+            points: reconstructedMeshPoints()
+        ) ?? SpatialStandardTripod.heightMeters
         try? machine.send(.confirmTripodBase)
         phase = machine.phase
         if let cameraTransform = sceneView.session.currentFrame?.camera.transform {
@@ -379,6 +410,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         sceneMeshIsFrozen = false
         tripodBaseCenter = nil
         tripodDirectionPoint = nil
+        tripodHeightMeters = SpatialStandardTripod.heightMeters
+        meshAnchors = [:]
         sceneView.delegate = self
         sceneView.session.delegate = self
     }
@@ -580,10 +613,18 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             root.addChildNode(arrow)
         }
         sceneView.scene.rootNode.addChildNode(root)
-        showStandardTripod(base: base, direction: direction)
+        showStandardTripod(
+            base: base,
+            direction: direction,
+            height: reference?.manifest.tripodHeightMeters ?? tripodHeightMeters
+        )
     }
 
-    private func showStandardTripod(base: SpatialVector3, direction: SpatialVector3) {
+    private func showStandardTripod(
+        base: SpatialVector3,
+        direction: SpatialVector3,
+        height: Double
+    ) {
         sceneView.scene.rootNode.childNode(
             withName: spatialGuidanceStandardTripodNodeName,
             recursively: true
@@ -605,8 +646,12 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         let root = SCNNode()
         root.name = spatialGuidanceStandardTripodNodeName
         let ground = SIMD3<Float>(Float(base.x), Float(base.y), Float(base.z))
-        let hub = ground + SIMD3<Float>(0, Float(SpatialStandardTripod.legHubHeightMeters), 0)
-        let top = ground + SIMD3<Float>(0, Float(SpatialStandardTripod.heightMeters), 0)
+        let hubHeight = min(
+            SpatialStandardTripod.legHubHeightMeters,
+            height * 0.62
+        )
+        let hub = ground + SIMD3<Float>(0, Float(hubHeight), 0)
+        let top = ground + SIMD3<Float>(0, Float(height), 0)
 
         let column = makeTripodCylinder(
             from: ground,
@@ -667,9 +712,22 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     }
 
     private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {
+        meshAnchors[anchor.identifier] = anchor
         guard !sceneMeshIsFrozen else { return }
         node.name = spatialGuidanceMeshNodeName
         node.geometry = SCNGeometry.spatialWireframe(from: anchor.geometry)
+    }
+
+    private func reconstructedMeshPoints() -> [SpatialVector3] {
+        meshAnchors.values.flatMap { anchor in
+            anchor.spatialWorldVertices().map { point in
+                SpatialVector3(
+                    x: Double(point.x),
+                    y: Double(point.y),
+                    z: Double(point.z)
+                )
+            }
+        }
     }
 }
 
@@ -681,7 +739,6 @@ extension SpatialGuidanceSessionModel: ARSessionDelegate {
             case .initializingMapping:
                 try? machine.send(.mappingSessionReady)
                 phase = machine.phase
-                updateMapping(frame: frame)
             case .mapping, .insufficientCoverage, .reviewingScene:
                 updateMapping(frame: frame)
             case .relocalizing, .positioning, .aligned:
@@ -798,6 +855,20 @@ private extension UIImage {
         let renderer = UIGraphicsImageRenderer(size: target)
         return renderer.image { _ in
             draw(in: CGRect(origin: .zero, size: target))
+        }
+    }
+}
+
+private extension ARMeshAnchor {
+    func spatialWorldVertices() -> [SIMD3<Float>] {
+        let source = geometry.vertices
+        return (0..<source.count).map { index in
+            let pointer = source.buffer.contents()
+                .advanced(by: source.offset + source.stride * index)
+                .assumingMemoryBound(to: Float.self)
+            let local = SIMD4<Float>(pointer[0], pointer[1], pointer[2], 1)
+            let world = transform * local
+            return SIMD3<Float>(world.x, world.y, world.z)
         }
     }
 }

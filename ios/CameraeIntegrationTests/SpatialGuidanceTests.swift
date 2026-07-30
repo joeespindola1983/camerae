@@ -110,6 +110,7 @@ struct SpatialGuidanceTests {
         try machine.send(.startMapping)
         #expect(machine.phase == .initializingMapping)
         try machine.send(.mappingSessionReady)
+        try machine.send(.beginSceneCapture)
         #expect(machine.phase == .mapping)
         try machine.send(.mappingEvaluated(.insufficient))
         #expect(machine.phase == .insufficientCoverage)
@@ -118,6 +119,7 @@ struct SpatialGuidanceTests {
         try machine.send(.reset)
         try machine.send(.startMapping)
         try machine.send(.mappingSessionReady)
+        try machine.send(.beginSceneCapture)
         try machine.send(.mappingEvaluated(.ready))
         #expect(machine.phase == .reviewingScene)
         try machine.send(.freezeScene)
@@ -151,12 +153,20 @@ struct SpatialGuidanceTests {
         #expect(!machine.phase.showsLiveCamera)
 
         try machine.send(.mappingSessionReady)
+        #expect(machine.phase == .readyToStartMapping)
+        #expect(machine.phase.showsLiveCamera)
+
+        try machine.send(.beginSceneCapture)
         #expect(machine.phase == .mapping)
         #expect(machine.phase.showsLiveCamera)
     }
 
     @Test("scene review and tripod-base selection keep their required actions reachable")
     func sceneDefinitionCapabilityContract() {
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .readyToStartMapping) ==
+                [.beginSceneCapture, .restartSceneCapture, .cancel]
+        )
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .reviewingScene) ==
                 [.defineScene, .continueMapping, .cancel]
@@ -184,6 +194,7 @@ struct SpatialGuidanceTests {
         var machine = SpatialGuidanceStateMachine()
         try machine.send(.startMapping)
         try machine.send(.mappingSessionReady)
+        try machine.send(.beginSceneCapture)
         try machine.send(.mappingEvaluated(.ready))
         try machine.send(.freezeScene)
         try machine.send(.tripodBaseSelected)
@@ -241,7 +252,27 @@ struct SpatialGuidanceTests {
             #expect(foot.y == base.y)
         }
         #expect(feet[0].z < base.z)
-        #expect(SpatialStandardTripod.heightMeters > 1)
+        #expect(SpatialStandardTripod.heightMeters == 1)
+    }
+
+    @Test("tripod height uses nearby reconstructed volume and rejects distant scene geometry")
+    func reconstructedTripodHeight() throws {
+        let base = SpatialVector3(x: 0, y: 0, z: 0)
+        let tube = (0..<30).map { index in
+            SpatialVector3(x: 0.04, y: Double(index) * 0.04, z: 0.03)
+        }
+        let distantWall = [
+            SpatialVector3(x: 1.2, y: 2.8, z: 0),
+            SpatialVector3(x: 1.2, y: 3.2, z: 0),
+        ]
+
+        let height = try #require(
+            SpatialTripodHeightEstimator.estimate(base: base, points: tube + distantWall)
+        )
+
+        #expect(height > 1)
+        #expect(height < 1.3)
+        #expect(SpatialTripodHeightEstimator.estimate(base: base, points: distantWall) == nil)
     }
 
     @Test("saving a replacement archives the complete previous reference")
@@ -297,9 +328,11 @@ struct SpatialGuidanceTests {
             JSONSerialization.jsonObject(with: currentManifestData) as? [String: Any]
         )
         legacyManifest.removeValue(forKey: "tripodDirectionPoint")
+        legacyManifest.removeValue(forKey: "tripodHeightMeters")
         try JSONSerialization.data(withJSONObject: legacyManifest)
             .write(to: manifestURL, options: .atomic)
         #expect(try store.load()?.manifest.tripodDirectionPoint == nil)
+        #expect(try store.load()?.manifest.tripodHeightMeters == nil)
 
         let future = """
         {"schemaVersion":99,"id":"00000000-0000-0000-0000-000000000000"}
@@ -341,6 +374,7 @@ struct SpatialGuidanceTests {
             orientation: .portrait,
             tripodBaseCenter: .init(x: 0.4, y: 0, z: -1.2),
             tripodDirectionPoint: .init(x: 0.4, y: 0, z: -2.2),
+            tripodHeightMeters: 1.18,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]

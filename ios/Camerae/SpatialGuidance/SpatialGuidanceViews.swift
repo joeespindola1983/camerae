@@ -311,6 +311,8 @@ struct SpatialGuidanceFlowView: View {
                     title: "Preparando câmera",
                     detail: "Iniciando o LiDAR e reconhecendo o chão ao redor do tripé."
                 )
+            case .readyToStartMapping:
+                mappingStartPanel
             case .mapping, .insufficientCoverage:
                 mappingPanel
             case .reviewingScene:
@@ -357,6 +359,23 @@ struct SpatialGuidanceFlowView: View {
         .frame(maxWidth: 390)
     }
 
+    private var mappingStartPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(label: "ARKIT PRONTO", tone: .success)
+            Text("Posicione-se para começar")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            Text("Confira se o tripé, o chão e os elementos fixos importantes estão visíveis. A captura só começa após sua confirmação.")
+                .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+                .foregroundStyle(CameraeColor.captureForegroundMuted)
+            captureAction(title: "Iniciar captura", style: .primary) {
+                model.beginSceneCapture()
+            }
+            captureAction(title: "Reiniciar local", style: .secondary) {
+                model.restartLocalCapture()
+            }
+        }
+    }
+
     private var mappingPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             SpatialProgressCardView(
@@ -369,6 +388,9 @@ struct SpatialGuidanceFlowView: View {
             Text("Ao atingir o mínimo confiável, a captura termina automaticamente e você marca a posição do tripé.")
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
+            captureAction(title: "Reiniciar local", style: .secondary) {
+                model.restartLocalCapture()
+            }
         }
     }
 

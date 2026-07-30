@@ -34,6 +34,7 @@ test distributions do not require an entry here.
 - Uses aspect fill inside the compact, scrollable Tripod preview so the image fills its bounded frame without distortion.
 - Enlarges the Tripod reference preview by 1.75× and hides the reconstructed LiDAR mesh from the final saved screenshot while retaining the position and direction markers.
 - Renders a translucent standard tripod from the confirmed center and direction, with a central tube, three legs, and an oriented head during setup and later scene navigation.
+- Requires explicit confirmation after ARKit becomes ready, provides a full location reset, and scales the standard tripod from nearby reconstructed height evidence with a safe one-meter fallback.
 
 ### Changed
 

@@ -63,13 +63,16 @@ The first release provides:
 1. The compatible Repeatable project shows **Mapear local**.
 2. Selecting the action immediately starts camera and LiDAR preparation; a
    loading state remains visible until the first AR frame arrives.
-3. Initial guidance asks the person to:
+3. Once ARKit is ready, the live camera pauses at an explicit confirmation.
+   **Start capture** resets tracking, anchors, metrics, and guide images before
+   collection begins. **Restart location** returns to the same clean checkpoint.
+4. Initial guidance asks the person to:
    - keep the tripod stationary;
    - walk slowly around it;
    - include the ground and distinctive static surroundings;
    - avoid people, moving vehicles, and rapid camera motion.
-4. The app starts world tracking, scene depth, and scene reconstruction.
-5. A pure quality evaluator combines:
+5. The app starts world tracking, scene depth, and scene reconstruction.
+6. A pure quality evaluator combines:
    - normal camera tracking;
    - suitable world-mapping status;
    - minimum elapsed scan time;
@@ -77,20 +80,23 @@ The first release provides:
    - detected floor;
    - minimum mapped volume;
    - acceptable thermal state.
-6. As soon as the minimum trustworthy quality contract is satisfied, the app
+7. As soon as the minimum trustworthy quality contract is satisfied, the app
    freezes the reconstructed scene and advances automatically. Suggested
    coverage is not required, preventing an arbitrarily large scene from
    blocking the flow.
-7. The person taps the center between the tripod legs and may drag the marker
+8. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-8. The app proposes an initial direction from the tripod toward the operator.
+9. The app estimates tripod height from reconstructed vertices close to the
+   confirmed base. It uses a bounded robust percentile and falls back to a
+   one-meter standard mesh when the thin tripod volume is insufficient.
+10. The app proposes an initial direction from the tripod toward the operator.
    The person may touch or drag across any reconstructed surface to rotate its
    fixed 45-centimeter handle. An arrow from the center provides explicit
    orientation while its visual length remains stable.
-9. Only after center and direction are confirmed does the app enable saving.
-10. The app records the tripod-base anchor, direction anchor, device, lens,
+11. Only after center and direction are confirmed does the app enable saving.
+12. The app records the tripod-base anchor, direction anchor, estimated height, device, lens,
    zoom, orientation, and guide images.
-11. The store writes a candidate bundle, validates it, and publishes it
+13. The store writes a candidate bundle, validates it, and publishes it
    atomically. Its final guide screenshot becomes the visual reference in the
    Tripod tab.
 
@@ -185,6 +191,7 @@ The version-one manifest records:
 - capture orientation;
 - tripod-base center in world-map coordinates;
 - tripod-direction point in world-map coordinates;
+- optional estimated tripod height;
 - optional legacy camera transform for forward decoding of existing references;
 - anchor identifiers;
 - world-map filename;
