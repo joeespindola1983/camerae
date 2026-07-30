@@ -124,7 +124,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         configuration: CameraeNextCaptureConfiguration,
         orientation: SpatialCaptureOrientation
     ) async throws -> SpatialReferenceManifest {
-        guard mappingQuality.canSave,
+        guard mappingQuality.canDefineScene,
+              sceneMeshIsFrozen,
               let tripodBaseCenter,
               let frame = sceneView.session.currentFrame else {
             throw SpatialGuidanceRuntimeError.mappingNotReady
@@ -201,7 +202,12 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     }
 
     func freezeMappedScene() {
-        guard phase == .reviewingScene else { return }
+        guard mappingQuality.canDefineScene,
+              phase == .mapping
+                || phase == .insufficientCoverage
+                || phase == .reviewingScene else {
+            return
+        }
         sceneMeshIsFrozen = true
         try? machine.send(.freezeScene)
         phase = machine.phase

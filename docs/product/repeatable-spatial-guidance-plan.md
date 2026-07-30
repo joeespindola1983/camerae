@@ -66,6 +66,9 @@ The first release provides:
    - minimum mapped volume;
    - acceptable thermal state.
 5. The app does not enable completion until the quality contract is satisfied.
+   It exposes **Stop and review** after a smaller safety threshold is reached;
+   full suggested coverage improves relocalization but is never required to map
+   an arbitrarily large scene.
 6. The person reviews the visible reconstructed mesh and freezes the scene.
 7. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.

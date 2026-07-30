@@ -227,6 +227,14 @@ struct SpatialGuidanceFlowView: View {
             Text("O botão de salvar só aparece quando tracking, cobertura, detalhes e imagens passam juntos.")
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
+            if model.mappingQuality.canDefineScene {
+                captureAction(title: "Parar e revisar", style: .primary) {
+                    model.freezeMappedScene()
+                }
+                Text("Você pode encerrar agora. Continuar caminhando melhora a chance de reconhecer o local na próxima visita.")
+                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption2))
+                    .foregroundStyle(CameraeColor.captureForegroundMuted)
+            }
         }
     }
 

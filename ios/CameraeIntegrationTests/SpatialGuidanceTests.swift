@@ -77,6 +77,32 @@ struct SpatialGuidanceTests {
         #expect(ready.progress == 1)
     }
 
+    @Test("a minimally trustworthy map can be stopped manually before full coverage")
+    func manualMappingCompletionGate() {
+        let tooEarly = SpatialMappingQualityEvaluator.evaluate(
+            .init(
+                elapsedSeconds: 4,
+                trackingIsNormal: true,
+                mappedAreaSquareMeters: 0.4,
+                featurePointCount: 120,
+                keyframeCount: 1
+            )
+        )
+        let reviewable = SpatialMappingQualityEvaluator.evaluate(
+            .init(
+                elapsedSeconds: 14,
+                trackingIsNormal: true,
+                mappedAreaSquareMeters: 2.4,
+                featurePointCount: 620,
+                keyframeCount: 3
+            )
+        )
+
+        #expect(!tooEarly.canDefineScene)
+        #expect(reviewable.canDefineScene)
+        #expect(!reviewable.canSave)
+    }
+
     @Test("the flow hides the ghost until relocalization and gates capture on pose tolerance")
     func stateMachine() throws {
         var machine = SpatialGuidanceStateMachine()
@@ -85,6 +111,10 @@ struct SpatialGuidanceTests {
         #expect(machine.phase == .mapping)
         try machine.send(.mappingEvaluated(.insufficient))
         #expect(machine.phase == .insufficientCoverage)
+        try machine.send(.freezeScene)
+        #expect(machine.phase == .selectingTripodBase)
+        try machine.send(.reset)
+        try machine.send(.startMapping)
         try machine.send(.mappingEvaluated(.ready))
         #expect(machine.phase == .reviewingScene)
         try machine.send(.freezeScene)

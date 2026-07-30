@@ -75,15 +75,22 @@ struct SpatialMappingQuality: Equatable, Sendable {
     let level: SpatialMappingQualityLevel
     let progress: Double
     let missingRequirements: Set<SpatialMappingRequirement>
+    let canDefineScene: Bool
 
     var canSave: Bool { level == .ready }
 
     static let insufficient = Self(
         level: .insufficient,
         progress: 0,
-        missingRequirements: Set(SpatialMappingRequirement.allCases)
+        missingRequirements: Set(SpatialMappingRequirement.allCases),
+        canDefineScene: false
     )
-    static let ready = Self(level: .ready, progress: 1, missingRequirements: [])
+    static let ready = Self(
+        level: .ready,
+        progress: 1,
+        missingRequirements: [],
+        canDefineScene: true
+    )
 }
 
 enum SpatialMappingQualityEvaluator {
@@ -111,7 +118,12 @@ enum SpatialMappingQualityEvaluator {
         return SpatialMappingQuality(
             level: missing.isEmpty ? .ready : .insufficient,
             progress: missing.isEmpty ? 1 : progress,
-            missingRequirements: missing
+            missingRequirements: missing,
+            canDefineScene: metrics.elapsedSeconds >= 12
+                && metrics.trackingIsNormal
+                && metrics.mappedAreaSquareMeters >= 2
+                && metrics.featurePointCount >= 500
+                && metrics.keyframeCount >= 3
         )
     }
 }
@@ -177,6 +189,8 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
              (.insufficientCoverage, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.mapping, .mappingEvaluated(.ready)),
              (.insufficientCoverage, .mappingEvaluated(.ready)): .reviewingScene
+        case (.mapping, .freezeScene),
+             (.insufficientCoverage, .freezeScene): .selectingTripodBase
         case (.reviewingScene, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.reviewingScene, .mappingEvaluated(.ready)): .reviewingScene
         case (.reviewingScene, .freezeScene): .selectingTripodBase
