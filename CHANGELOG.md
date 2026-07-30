@@ -32,6 +32,7 @@ test distributions do not require an entry here.
 - Fills the portrait Tripod preview with the wide reference image using aspect-preserving cropping, and shortens the direction arrow to 45 cm with a thicker 3D shaft.
 - Restores scrolling in the Tripod tab and presents the complete reference image centered within a compact bounded preview.
 - Uses aspect fill inside the compact, scrollable Tripod preview so the image fills its bounded frame without distortion.
+- Enlarges the Tripod reference preview by 1.75× and hides the reconstructed LiDAR mesh from the final saved screenshot while retaining the position and direction markers.
 
 ### Changed
 

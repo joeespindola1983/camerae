@@ -164,7 +164,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             withRootObject: worldMap,
             requiringSecureCoding: true
         )
-        if let snapshot = snapshotJPEG(), !keyframes.contains(snapshot) {
+        if let snapshot = snapshotJPEG(hidingSceneMesh: true), !keyframes.contains(snapshot) {
             keyframes.append(snapshot)
         }
         let names = keyframes.indices.map { index in
@@ -458,7 +458,18 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         }
     }
 
-    private func snapshotJPEG() -> Data? {
+    private func snapshotJPEG(hidingSceneMesh: Bool = false) -> Data? {
+        let meshNodes = sceneView.scene.rootNode.childNodes(passingTest: { node, _ in
+            node.name == spatialGuidanceMeshNodeName
+        })
+        if hidingSceneMesh {
+            meshNodes.forEach { $0.isHidden = true }
+        }
+        defer {
+            if hidingSceneMesh {
+                meshNodes.forEach { $0.isHidden = false }
+            }
+        }
         let image = sceneView.snapshot().resizedForSpatialGuide(maxLongEdge: 1_920)
         return image.jpegData(compressionQuality: 0.75)
     }
