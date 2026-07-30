@@ -4,6 +4,18 @@ All notable Camerae changes are recorded in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Historical entries before this file was introduced were reconstructed from immutable Git tags and commit history. When the original release commit did not contain detailed notes, the entry is intentionally described as a consolidated historical milestone.
 
+## App Store release status
+
+This table is the operational source of truth for production submissions to
+Apple. It is intentionally separate from internal QA and release-candidate
+status. Update it whenever App Store Connect changes state; Firebase and other
+test distributions do not require an entry here.
+
+| Version | Apple status | Public availability | Last updated |
+| --- | --- | --- | --- |
+| `9.1.0` | In Review | Not yet available | 2026-07-30 |
+| `8.5.1` | Approved | Available on the App Store | 2026-07-30 |
+
 ## [Unreleased]
 
 ### Added
@@ -74,7 +86,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [9.1.0] - 2026-07-28
 
-**Status:** Release candidate
+**Internal status:** Release candidate
+
+**App Store status:** In Review; not yet publicly available
 **Areas:** Repeatable, single-photo capture, contour alignment, catalog, Figma
 
 ### Added
@@ -125,7 +139,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [8.5.1] - 2026-07-24
 
-**Status:** QA candidate
+**Internal status:** Released
+
+**App Store status:** Approved by Apple and available on the App Store
 **Areas:** Repeatable, video alignment, reference images, playback, sharing
 
 ### Fixed
