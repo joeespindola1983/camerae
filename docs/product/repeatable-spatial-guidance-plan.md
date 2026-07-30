@@ -4,6 +4,8 @@
 
 - Product name: **Spatial Guidance** in design and code; **Guia espacial**
   in Portuguese user-facing copy.
+- Implementation status: local evaluation branch
+  `codex/repeatable-spatial-guide`; not promoted to QA or a release branch.
 - Initial module: Repeatable.
 - Future module: Astro, enabled by capability policy rather than a separate
   implementation.
@@ -210,6 +212,26 @@ Figma must cover:
 No SwiftUI hierarchy work begins before the flow, copy, component states, and
 node IDs are approved.
 
+### Approved node registry
+
+- Page content wrapper: `665:2`.
+- Component catalog: `665:4444`.
+- `Spatial Status Badge`: `666:17`.
+- `Spatial Progress Card`: `668:26`.
+- `Pose Delta`: `669:32`.
+- `Spatial Guide Card`: `670:20`.
+- `Ghost Rig`: `671:35`.
+- Configuration screens: `672:6`, `672:20`, and `672:34`.
+- First-visit mapping screens: `673:24`, `673:43`, and `673:62`.
+- Return and positioning screens: `674:42`, `674:62`, and `674:97`.
+- Recovery screens: `675:102`, `675:117`, and `675:132`.
+- Landscape positioning screen: `677:121`.
+
+The canonical positioning contract is `674:62`: the ghost remains hidden
+until relocalization is trustworthy, position, height, and rotation remain
+independent signals, and the camera action is enabled only in the aligned
+state.
+
 ## TDD plan
 
 ### Availability policy
@@ -299,6 +321,23 @@ and a physical-device test matrix.
 5. Diagnostics, accessibility, localization, recovery, and device validation.
 
 Each slice starts with failing tests and leaves the Draft PR buildable.
+
+## Local evaluation implementation
+
+The evaluation branch contains:
+
+- neutral availability, mapping-quality, state-machine, pose, manifest, and
+  interface-capability policies;
+- a versioned project-local store with staging, validation, atomic publication,
+  and retention of the previous complete reference;
+- an ARKit adapter using world tracking, classified mesh reconstruction, scene
+  depth, guide JPEGs, a saved world map, and a named camera-pose anchor;
+- reusable SwiftUI configuration and full-screen guidance flows;
+- Repeatable configuration and capture handoff without adding module-specific
+  names to the domain or persistence layers.
+
+This branch is intentionally handed off locally for physical-device testing.
+It does not imply QA approval, release selection, or Astro enablement.
 
 ## Git and verification
 
