@@ -20,6 +20,17 @@ test distributions do not require an entry here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [9.3.0] - 2026-07-30
+
+**Status:** Release candidate approved for stabilization
+**Areas:** Repeatable Spatial Guidance, project organization, tutorials, Figma governance
+
+### Added
+
 - Added a reusable, versioned video-tutorial pattern with captions, first-use
   completion, contextual replay, and textual fallback while media is not
   packaged; Spatial Guidance is its first consumer.
