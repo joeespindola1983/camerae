@@ -125,6 +125,10 @@ struct SpatialGuidanceTests {
         try machine.send(.tripodBaseSelected)
         #expect(machine.phase == .tripodBaseSelected)
         try machine.send(.confirmTripodBase)
+        #expect(machine.phase == .selectingTripodDirection)
+        try machine.send(.tripodDirectionSelected)
+        #expect(machine.phase == .tripodDirectionSelected)
+        try machine.send(.confirmTripodDirection)
         #expect(machine.phase == .readyToMount)
         try machine.send(.referenceSaved)
         #expect(machine.phase == .saved)
@@ -165,6 +169,14 @@ struct SpatialGuidanceTests {
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .tripodBaseSelected) ==
                 [.adjustTripodBase, .confirmTripodBase, .cancel]
         )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .selectingTripodDirection) ==
+                [.selectTripodDirection, .cancel]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .tripodDirectionSelected) ==
+                [.adjustTripodDirection, .confirmTripodDirection, .cancel]
+        )
     }
 
     @Test("saving a replacement archives the complete previous reference")
@@ -196,7 +208,7 @@ struct SpatialGuidanceTests {
         #expect(previous.keyframes == [Data("first-frame".utf8)])
     }
 
-    @Test("current, empty, corrupt, and unsupported-newer documents are explicit")
+    @Test("current, legacy, empty, and unsupported-newer documents are explicit")
     func storeCompatibility() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CameraeSpatialCompatibility-\(UUID().uuidString)", isDirectory: true)
@@ -215,6 +227,15 @@ struct SpatialGuidanceTests {
         let manifestURL = directory
             .appendingPathComponent("spatial_reference", isDirectory: true)
             .appendingPathComponent("manifest.json")
+        let currentManifestData = try Data(contentsOf: manifestURL)
+        var legacyManifest = try #require(
+            JSONSerialization.jsonObject(with: currentManifestData) as? [String: Any]
+        )
+        legacyManifest.removeValue(forKey: "tripodDirectionPoint")
+        try JSONSerialization.data(withJSONObject: legacyManifest)
+            .write(to: manifestURL, options: .atomic)
+        #expect(try store.load()?.manifest.tripodDirectionPoint == nil)
+
         let future = """
         {"schemaVersion":99,"id":"00000000-0000-0000-0000-000000000000"}
         """
@@ -254,6 +275,7 @@ struct SpatialGuidanceTests {
             cameraZoomFactor: 1,
             orientation: .portrait,
             tripodBaseCenter: .init(x: 0.4, y: 0, z: -1.2),
+            tripodDirectionPoint: .init(x: 0.4, y: 0, z: -2.2),
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]

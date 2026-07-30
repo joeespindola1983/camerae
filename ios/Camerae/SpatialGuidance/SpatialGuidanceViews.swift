@@ -61,15 +61,15 @@ struct SpatialGuidanceConfigurationCard: View {
 
     private var title: String {
         if availability != .available { return "Orientação espacial indisponível" }
-        return hasReference ? "Centro do tripé salvo" : "Mapeamento espacial"
+        return hasReference ? "Posição do tripé salva" : "Mapeamento espacial"
     }
 
     private var detail: String {
         switch availability {
         case .available:
             hasReference
-                ? "Navegue pela cena para reencontrar o centro da base."
-                : "Mapeie o local e marque o centro da base do tripé."
+                ? "Navegue pela cena para reencontrar a base e a direção da câmera."
+                : "Mapeie o local, marque o centro da base e indique a direção da câmera."
         case .moduleUnavailable:
             "Por enquanto, este recurso está disponível somente no Repeatable."
         case .temporarilyUnavailable:
@@ -189,15 +189,28 @@ struct SpatialGuidanceFlowView: View {
             case .mapping, .insufficientCoverage:
                 mappingPanel
             case .reviewingScene:
-                sceneReviewPanel
+                busyPanel(
+                    title: "Captura suficiente",
+                    detail: "Preparando a marcação do tripé."
+                )
             case .selectingTripodBase:
                 tripodBaseSelectionPanel(hasSelection: false)
             case .tripodBaseSelected:
                 tripodBaseSelectionPanel(hasSelection: true)
+            case .selectingTripodDirection:
+                tripodDirectionSelectionPanel(hasSelection: false)
+            case .tripodDirectionSelected:
+                tripodDirectionSelectionPanel(hasSelection: true)
             case .readyToMount:
-                busyPanel(title: "Preparando cena", detail: "Validando o centro do tripé.")
+                busyPanel(
+                    title: "Preparando cena",
+                    detail: "Validando a posição e a direção do tripé."
+                )
             case .saving:
-                busyPanel(title: "Salvando cena", detail: "Arquivando mapa, centro do tripé e imagens de referência.")
+                busyPanel(
+                    title: "Salvando cena",
+                    detail: "Arquivando mapa, posição, direção e imagens de referência."
+                )
             case .saved:
                 savedPanel
             case .relocalizing:
@@ -223,38 +236,14 @@ struct SpatialGuidanceFlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             SpatialProgressCardView(
                 status: model.mappingQuality.canSave ? "MAPA PRONTO" : "MAPEANDO",
-                title: model.mappingQuality.canSave ? "Agora monte o telefone" : "Circule o tripé",
+                title: model.mappingQuality.canDefineScene ? "Captura suficiente" : "Circule o tripé",
                 detail: missingRequirementsDescription,
                 progress: model.mappingQuality.progress,
-                tone: model.mappingQuality.canSave ? .success : .accent
+                tone: model.mappingQuality.canDefineScene ? .success : .accent
             )
-            Text("O botão de salvar só aparece quando tracking, cobertura, detalhes e imagens passam juntos.")
+            Text("Ao atingir o mínimo confiável, a captura termina automaticamente e você marca a posição do tripé.")
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
-            if model.mappingQuality.canDefineScene {
-                captureAction(title: "Parar e revisar", style: .primary) {
-                    model.freezeMappedScene()
-                }
-                Text("Você pode encerrar agora. Continuar caminhando melhora a chance de reconhecer o local na próxima visita.")
-                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption2))
-                    .foregroundStyle(CameraeColor.captureForegroundMuted)
-            }
-        }
-    }
-
-    private var sceneReviewPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SpatialStatusBadgeView(label: "CENA MAPEADA", tone: .success)
-            Text("Revise os polígonos")
-                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("As linhas laranja mostram somente as superfícies que o LiDAR já reconstruiu. Continue caminhando se faltarem objetos ou chão importantes.")
-                .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
-                .foregroundStyle(CameraeColor.captureForegroundMuted)
-            ProgressView(value: mappingQualityProgress)
-                .tint(.green)
-            captureAction(title: "Definir esta cena", style: .primary) {
-                model.freezeMappedScene()
-            }
         }
     }
 
@@ -276,8 +265,32 @@ struct SpatialGuidanceFlowView: View {
 
             if hasSelection {
                 captureAction(title: "Confirmar centro", style: .primary) {
+                    model.confirmTripodBase()
+                }
+            }
+        }
+    }
+
+    private func tripodDirectionSelectionPanel(hasSelection: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(
+                label: hasSelection ? "DIREÇÃO MARCADA" : "DEFINA A DIREÇÃO",
+                tone: hasSelection ? .success : .accent
+            )
+            Text(hasSelection ? "Confira a linha da câmera" : "Toque à frente do tripé")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            Text(
+                hasSelection
+                    ? "Arraste a ponta da linha para ajustar a direção em que a câmera ficará apontada."
+                    : "Toque no chão à frente da base, na direção da câmera. O ponto deve ficar a pelo menos 25 cm do centro."
+            )
+            .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+            .foregroundStyle(CameraeColor.captureForegroundMuted)
+
+            if hasSelection {
+                captureAction(title: "Confirmar direção", style: .primary) {
                     Task {
-                        model.confirmTripodBase()
+                        model.confirmTripodDirection()
                         do {
                             _ = try await model.saveReference(
                                 store: store,
@@ -297,9 +310,9 @@ struct SpatialGuidanceFlowView: View {
     private var savedPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             SpatialStatusBadgeView(label: "CENA SALVA", tone: .success)
-            Text("Centro memorizado")
+            Text("Posição memorizada")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("O mapa anterior foi preservado em “previous” quando existia.")
+            Text("O centro da base e a direção da câmera foram salvos. O mapa anterior foi preservado em “previous” quando existia.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Concluir", style: .primary, action: close)
@@ -324,7 +337,7 @@ struct SpatialGuidanceFlowView: View {
             SpatialStatusBadgeView(label: "CENA LOCALIZADA", tone: .success)
             Text("Encontre o ponto")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Posicione o centro da base do tripé sobre o pequeno ponto laranja.")
+            Text("Posicione o centro da base sobre o ponto laranja e oriente a câmera acompanhando a linha.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Concluir navegação", style: .primary) {
@@ -398,10 +411,6 @@ struct SpatialGuidanceFlowView: View {
         if missing.contains(.detail) { return "Aproxime-se de superfícies com textura e boa luz." }
         if missing.contains(.keyframes) { return "Continue por mais alguns segundos para registrar referências." }
         return "Cobertura suficiente para definir a cena."
-    }
-
-    private var mappingQualityProgress: Double {
-        max(0, min(model.mappingQuality.progress, 1))
     }
 
     private var currentOrientation: SpatialCaptureOrientation {

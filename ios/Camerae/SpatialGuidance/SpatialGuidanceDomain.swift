@@ -143,6 +143,8 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     case reviewingScene
     case selectingTripodBase
     case tripodBaseSelected
+    case selectingTripodDirection
+    case tripodDirectionSelected
     case readyToMount
     case saving
     case saved
@@ -163,6 +165,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
         switch self {
         case .mapping, .insufficientCoverage, .reviewingScene,
              .selectingTripodBase, .tripodBaseSelected, .readyToMount,
+             .selectingTripodDirection, .tripodDirectionSelected,
              .relocalizing, .positioning, .aligned:
             true
         default:
@@ -178,6 +181,8 @@ enum SpatialGuidanceEvent: Equatable, Sendable {
     case freezeScene
     case tripodBaseSelected
     case confirmTripodBase
+    case tripodDirectionSelected
+    case confirmTripodDirection
     case beginSaving
     case referenceSaved
     case startRelocalization
@@ -211,7 +216,10 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
         case (.reviewingScene, .freezeScene): .selectingTripodBase
         case (.selectingTripodBase, .tripodBaseSelected),
              (.tripodBaseSelected, .tripodBaseSelected): .tripodBaseSelected
-        case (.tripodBaseSelected, .confirmTripodBase): .readyToMount
+        case (.tripodBaseSelected, .confirmTripodBase): .selectingTripodDirection
+        case (.selectingTripodDirection, .tripodDirectionSelected),
+             (.tripodDirectionSelected, .tripodDirectionSelected): .tripodDirectionSelected
+        case (.tripodDirectionSelected, .confirmTripodDirection): .readyToMount
         case (.readyToMount, .beginSaving): .saving
         case (.readyToMount, .referenceSaved), (.saving, .referenceSaved): .saved
         case (.idle, .startRelocalization),
@@ -265,6 +273,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let cameraZoomFactor: Double
     let orientation: SpatialCaptureOrientation
     let tripodBaseCenter: SpatialVector3?
+    let tripodDirectionPoint: SpatialVector3?
     let targetPose: SpatialPoseSample?
     let worldMapFileName: String
     let keyframeFileNames: [String]
@@ -279,6 +288,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         cameraZoomFactor: Double,
         orientation: SpatialCaptureOrientation,
         tripodBaseCenter: SpatialVector3? = nil,
+        tripodDirectionPoint: SpatialVector3? = nil,
         targetPose: SpatialPoseSample? = nil,
         worldMapFileName: String,
         keyframeFileNames: [String]
@@ -292,6 +302,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.cameraZoomFactor = cameraZoomFactor
         self.orientation = orientation
         self.tripodBaseCenter = tripodBaseCenter
+        self.tripodDirectionPoint = tripodDirectionPoint
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames
@@ -307,6 +318,8 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
     case reviewingScene
     case selectingTripodBase
     case tripodBaseSelected
+    case selectingTripodDirection
+    case tripodDirectionSelected
     case readyToMount
     case relocalizing
     case positioning
@@ -329,6 +342,9 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case selectTripodBase
     case adjustTripodBase
     case confirmTripodBase
+    case selectTripodDirection
+    case adjustTripodDirection
+    case confirmTripodDirection
     case openCamera
     case completeNavigation
     case cancel
@@ -351,6 +367,10 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
             [.selectTripodBase, .cancel]
         case .tripodBaseSelected:
             [.adjustTripodBase, .confirmTripodBase, .cancel]
+        case .selectingTripodDirection:
+            [.selectTripodDirection, .cancel]
+        case .tripodDirectionSelected:
+            [.adjustTripodDirection, .confirmTripodDirection, .cancel]
         case .readyToMount:
             [.saveReference, .cancel]
         case .relocalizing:

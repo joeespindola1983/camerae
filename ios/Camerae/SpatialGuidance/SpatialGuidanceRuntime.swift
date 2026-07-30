@@ -5,8 +5,10 @@ import SwiftUI
 import UIKit
 
 private let spatialGuidanceBaseAnchorName = "camerae.spatial.tripod-base-anchor"
+private let spatialGuidanceDirectionAnchorName = "camerae.spatial.tripod-direction-anchor"
 private let spatialGuidanceMeshNodeName = "camerae.spatial.mesh"
 private let spatialGuidanceBaseNodeName = "camerae.spatial.tripod-base"
+private let spatialGuidanceDirectionNodeName = "camerae.spatial.tripod-direction"
 
 enum SpatialGuidanceSystemCapabilityProvider {
     static var capabilities: SpatialGuidanceDeviceCapabilities {
@@ -64,6 +66,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var errorMessage: String?
     @Published private(set) var isBusy = false
     @Published private(set) var tripodBaseCenter: SpatialVector3?
+    @Published private(set) var tripodDirectionPoint: SpatialVector3?
 
     let sceneView: ARSCNView
 
@@ -123,7 +126,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     ) async throws -> SpatialReferenceManifest {
         guard mappingQuality.canDefineScene,
               sceneMeshIsFrozen,
-              let tripodBaseCenter else {
+              let tripodBaseCenter,
+              let tripodDirectionPoint else {
             throw SpatialGuidanceRuntimeError.mappingNotReady
         }
         isBusy = true
@@ -140,6 +144,19 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         )
         sceneView.session.add(
             anchor: ARAnchor(name: spatialGuidanceBaseAnchorName, transform: baseTransform)
+        )
+        var directionTransform = matrix_identity_float4x4
+        directionTransform.columns.3 = SIMD4<Float>(
+            Float(tripodDirectionPoint.x),
+            Float(tripodDirectionPoint.y),
+            Float(tripodDirectionPoint.z),
+            1
+        )
+        sceneView.session.add(
+            anchor: ARAnchor(
+                name: spatialGuidanceDirectionAnchorName,
+                transform: directionTransform
+            )
         )
         try await Task.sleep(for: .milliseconds(300))
         let worldMap = try await currentWorldMap()
@@ -162,6 +179,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             cameraZoomFactor: configuration.cameraZoomFactor,
             orientation: orientation,
             tripodBaseCenter: tripodBaseCenter,
+            tripodDirectionPoint: tripodDirectionPoint,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: names
@@ -193,6 +211,10 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         phase == .selectingTripodBase || phase == .tripodBaseSelected
     }
 
+    var acceptsTripodDirectionSelection: Bool {
+        phase == .selectingTripodDirection || phase == .tripodDirectionSelected
+    }
+
     func freezeMappedScene() {
         guard mappingQuality.canDefineScene,
               phase == .mapping
@@ -209,6 +231,47 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         guard acceptsTripodBaseSelection else {
             return
         }
+        guard let result = horizontalRaycast(at: point) else { return }
+        let transform = result.worldTransform
+        tripodBaseCenter = SpatialVector3(
+            x: Double(transform.columns.3.x),
+            y: Double(transform.columns.3.y),
+            z: Double(transform.columns.3.z)
+        )
+        showTripodBaseMarker(at: transform)
+        try? machine.send(.tripodBaseSelected)
+        phase = machine.phase
+    }
+
+    func selectSpatialPoint(at point: CGPoint) {
+        if acceptsTripodBaseSelection {
+            selectTripodBase(at: point)
+        } else if acceptsTripodDirectionSelection {
+            selectTripodDirection(at: point)
+        }
+    }
+
+    func selectTripodDirection(at point: CGPoint) {
+        guard acceptsTripodDirectionSelection,
+              let base = tripodBaseCenter,
+              let result = horizontalRaycast(at: point) else {
+            return
+        }
+        let candidate = SpatialVector3(
+            x: Double(result.worldTransform.columns.3.x),
+            y: base.y,
+            z: Double(result.worldTransform.columns.3.z)
+        )
+        guard hypot(candidate.x - base.x, candidate.z - base.z) >= 0.25 else {
+            return
+        }
+        tripodDirectionPoint = candidate
+        showTripodDirection(base: base, direction: candidate)
+        try? machine.send(.tripodDirectionSelected)
+        phase = machine.phase
+    }
+
+    private func horizontalRaycast(at point: CGPoint) -> ARRaycastResult? {
         let existingQuery = sceneView.raycastQuery(
             from: point,
             allowing: .existingPlaneGeometry,
@@ -221,21 +284,18 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         )
         let result = existingQuery.flatMap { sceneView.session.raycast($0).first }
             ?? estimatedQuery.flatMap { sceneView.session.raycast($0).first }
-        guard let result else { return }
-        let transform = result.worldTransform
-        tripodBaseCenter = SpatialVector3(
-            x: Double(transform.columns.3.x),
-            y: Double(transform.columns.3.y),
-            z: Double(transform.columns.3.z)
-        )
-        showTripodBaseMarker(at: transform)
-        try? machine.send(.tripodBaseSelected)
-        phase = machine.phase
+        return result
     }
 
     func confirmTripodBase() {
         guard tripodBaseCenter != nil, phase == .tripodBaseSelected else { return }
         try? machine.send(.confirmTripodBase)
+        phase = machine.phase
+    }
+
+    func confirmTripodDirection() {
+        guard tripodDirectionPoint != nil, phase == .tripodDirectionSelected else { return }
+        try? machine.send(.confirmTripodDirection)
         phase = machine.phase
     }
 
@@ -270,6 +330,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         targetAnchorRestored = false
         sceneMeshIsFrozen = false
         tripodBaseCenter = nil
+        tripodDirectionPoint = nil
         sceneView.delegate = self
         sceneView.session.delegate = self
     }
@@ -300,6 +361,9 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         try? machine.send(.mappingEvaluated(mappingQuality.level))
         phase = machine.phase
         captureKeyframeIfNeeded(frame: frame)
+        if mappingQuality.canDefineScene {
+            freezeMappedScene()
+        }
     }
 
     private func captureKeyframeIfNeeded(frame: ARFrame) {
@@ -399,6 +463,34 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         return marker
     }
 
+    private func showTripodDirection(base: SpatialVector3, direction: SpatialVector3) {
+        sceneView.scene.rootNode.childNode(
+            withName: spatialGuidanceDirectionNodeName,
+            recursively: true
+        )?.removeFromParentNode()
+        let vertices = [
+            SCNVector3(base.x, base.y + 0.012, base.z),
+            SCNVector3(direction.x, direction.y + 0.012, direction.z)
+        ]
+        let source = SCNGeometrySource(vertices: vertices)
+        let element = SCNGeometryElement(
+            indices: [UInt16(0), UInt16(1)],
+            primitiveType: .line
+        )
+        let geometry = SCNGeometry(sources: [source], elements: [element])
+        let material = SCNMaterial()
+        material.diffuse.contents = UIColor.systemOrange
+        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.35)
+        geometry.materials = [material]
+        let line = SCNNode(geometry: geometry)
+        line.name = spatialGuidanceDirectionNodeName
+        let endpoint = SCNNode(geometry: SCNSphere(radius: 0.012))
+        endpoint.geometry?.materials = [material]
+        endpoint.position = vertices[1]
+        line.addChildNode(endpoint)
+        sceneView.scene.rootNode.addChildNode(line)
+    }
+
     private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {
         guard !sceneMeshIsFrozen else { return }
         node.name = spatialGuidanceMeshNodeName
@@ -451,6 +543,12 @@ extension SpatialGuidanceSessionModel: ARSCNViewDelegate {
                 targetAnchorRestored = true
                 return
             }
+            if anchor.name == spatialGuidanceDirectionAnchorName,
+               let base = reference?.manifest.tripodBaseCenter,
+               let direction = reference?.manifest.tripodDirectionPoint {
+                showTripodDirection(base: base, direction: direction)
+                return
+            }
             return
         }
     }
@@ -501,12 +599,12 @@ struct SpatialGuidanceARView: UIViewRepresentable {
         }
 
         @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
-            model.selectTripodBase(at: recognizer.location(in: model.sceneView))
+            model.selectSpatialPoint(at: recognizer.location(in: model.sceneView))
         }
 
         @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
             guard recognizer.state == .began || recognizer.state == .changed else { return }
-            model.selectTripodBase(at: recognizer.location(in: model.sceneView))
+            model.selectSpatialPoint(at: recognizer.location(in: model.sceneView))
         }
     }
 }

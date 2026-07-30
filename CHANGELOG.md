@@ -26,6 +26,7 @@ test distributions do not require an entry here.
 - Allows people to stop and review a spatial scan after a minimum trustworthy core is captured, without requiring suggested coverage of the entire scene.
 - Starts Spatial Guidance immediately from its project action and presents an explicit camera-and-LiDAR loading state until the first AR frame arrives.
 - Separates spatial scene navigation from camera alignment: saved projects expose **Navigate scene**, relocalization displays only a compact tripod-center point, and normal camera opening no longer enters spatial guidance automatically.
+- Automatically ends spatial capture when the minimum trustworthy map is ready, then requires the tripod-base center and a second point in front of it to save a reusable camera-direction line.
 
 ### Changed
 

@@ -17,9 +17,11 @@
 
 ## Outcome
 
-Help a person return the tripod base to a previously recorded physical point.
-The first visit saves an ARKit world map and a compact center anchor. A later
-visit relocalizes into that map and displays only that point on the ground.
+Help a person return the tripod base to a previously recorded physical point
+and recover its intended horizontal orientation. The first visit saves an
+ARKit world map, a compact center anchor, and a second point in front of the
+tripod. A later visit relocalizes into that map and displays the center plus a
+direction line on the ground.
 
 Spatial Guidance is scene navigation, not camera alignment. Lens framing,
 rotation, height, and post-capture registration remain responsibilities of the
@@ -32,19 +34,23 @@ The first release provides:
 1. Runtime eligibility on supported iPhones.
 2. A project-level Spatial Guidance card in Repeatable configuration.
 3. A guided first-visit scan around a stationary tripod and static surroundings.
-4. Explicit mapping-quality feedback before a map can be saved.
-5. A final step in which the tripod-base center is selected and confirmed.
-6. Atomic local persistence of the world map, anchors, manifest, and guide
+4. Explicit mapping-quality feedback followed by automatic capture completion
+   as soon as the minimum trustworthy contract is met.
+5. A positioning step in which the tripod-base center is selected and
+   confirmed.
+6. A direction step in which a second horizontal point, at least 25 cm in front
+   of the base, is selected and confirmed before saving.
+7. Atomic local persistence of the world map, anchors, manifest, and guide
    images.
-7. Later relocalization into the saved map.
-8. A compact center marker at the saved tripod-base anchor.
-11. A safe path to continue capture without Spatial Guidance.
-12. A safe remap operation that retains the previous usable guide until the
+8. Later relocalization into the saved map.
+9. A compact center marker and direction line at the saved tripod-base anchor.
+10. A safe path to continue capture without Spatial Guidance.
+11. A safe remap operation that retains the previous usable guide until the
     replacement is validated.
-13. A live, translucent polygonal preview of the surfaces already reconstructed
+12. A live, translucent polygonal preview of the surfaces already reconstructed
     by LiDAR.
-14. An explicit scene-review checkpoint followed by tap-and-drag selection of
-    the tripod-base center on a horizontal surface.
+13. Tap-and-drag selection of the tripod-base center and camera direction on a
+    horizontal surface.
 
 ## First-visit flow
 
@@ -65,17 +71,18 @@ The first release provides:
    - detected floor;
    - minimum mapped volume;
    - acceptable thermal state.
-6. The app does not enable completion until the quality contract is satisfied.
-   It exposes **Stop and review** after a smaller safety threshold is reached;
-   full suggested coverage improves relocalization but is never required to map
-   an arbitrarily large scene.
-7. The person reviews the visible reconstructed mesh and freezes the scene.
-8. The person taps the center between the tripod legs and may drag the marker
+6. As soon as the minimum trustworthy quality contract is satisfied, the app
+   freezes the reconstructed scene and advances automatically. Suggested
+   coverage is not required, preventing an arbitrarily large scene from
+   blocking the flow.
+7. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-9. The person mounts the phone in the intended capture orientation.
-10. The app records the tripod-base anchor, camera target transform, device,
-   lens, zoom, orientation,
-   anchors, and mapping diagnostics.
+8. The person taps a second point on the floor in front of the tripod and may
+   drag it to define the intended camera direction. The direction point must be
+   at least 25 cm from the center.
+9. Only after center and direction are confirmed does the app enable saving.
+10. The app records the tripod-base anchor, direction anchor, device, lens,
+   zoom, orientation, and guide images.
 11. The store writes a candidate bundle, validates it, and publishes it
    atomically.
 
@@ -84,15 +91,16 @@ The first release provides:
 1. The project shows **Usar guia espacial**.
 2. The saved world map becomes the session's initial world map.
 3. Saved guide images help the person revisit previously observed viewpoints.
-4. The tripod-center point stays hidden while tracking is initializing or
+4. The tripod-center point and direction line stay hidden while tracking is initializing or
    relocalizing.
-5. The point appears only after:
+5. The navigation guide appears only after:
    - tracking returns to normal;
    - the saved target anchor is restored;
    - the base anchor is restored.
 6. The person positions and mounts the tripod.
-7. The person positions the center of the tripod base over the point and
-   concludes navigation when satisfied.
+7. The person positions the center of the tripod base over the point, rotates
+   the camera to follow the direction line, and concludes navigation when
+   satisfied.
 
 ## Eligibility
 
@@ -168,7 +176,8 @@ The version-one manifest records:
 - lens identifier and zoom;
 - capture orientation;
 - tripod-base center in world-map coordinates;
-- 4 × 4 target camera transform;
+- tripod-direction point in world-map coordinates;
+- optional legacy camera transform for forward decoding of existing references;
 - anchor identifiers;
 - world-map filename;
 - guide-image filenames;
