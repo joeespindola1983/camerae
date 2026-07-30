@@ -320,36 +320,71 @@ enum SpatialTripodHeightEstimator {
     }
 }
 
-enum SpatialTripodShapeEstimator {
-    static let minimumLegRadiusMeters = 0.20
-    static let maximumLegRadiusMeters = 0.58
-    static let minimumSampleCount = 12
+enum SpatialTripodFootEstimator {
+    private static let sectorCount = 24
+    private static let minimumPointsPerFoot = 4
+    private static let minimumRadiusMeters = 0.10
+    private static let maximumRadiusMeters = 0.55
+    private static let minimumHeightMeters = 0.025
+    private static let maximumHeightMeters = 0.16
 
-    static func estimateLegRadius(
+    static func estimate(
         base: SpatialVector3,
-        tripodHeight: Double,
         points: [SpatialVector3]
-    ) -> Double? {
-        let radialSamples = points.compactMap { point -> Double? in
+    ) -> [SpatialVector3]? {
+        let candidates = points.compactMap { point -> (point: SpatialVector3, sector: Int)? in
             let height = point.y - base.y
-            let radius = hypot(point.x - base.x, point.z - base.z)
-            guard height >= 0.04,
-                  height <= tripodHeight * 0.78,
-                  radius >= 0.08,
-                  radius <= maximumLegRadiusMeters + 0.12 else {
+            let dx = point.x - base.x
+            let dz = point.z - base.z
+            let radius = hypot(dx, dz)
+            guard height >= minimumHeightMeters,
+                  height <= maximumHeightMeters,
+                  radius >= minimumRadiusMeters,
+                  radius <= maximumRadiusMeters else {
                 return nil
             }
-            return radius
-        }.sorted()
-        guard radialSamples.count >= minimumSampleCount else { return nil }
-        let percentileIndex = min(
-            radialSamples.count - 1,
-            Int((Double(radialSamples.count - 1) * 0.90).rounded())
-        )
-        return min(
-            max(radialSamples[percentileIndex], minimumLegRadiusMeters),
-            maximumLegRadiusMeters
-        )
+            let normalizedAngle = (atan2(dz, dx) + 2 * .pi)
+                .truncatingRemainder(dividingBy: 2 * .pi)
+            let sector = min(
+                sectorCount - 1,
+                Int((normalizedAngle / (2 * .pi)) * Double(sectorCount))
+            )
+            return (point, sector)
+        }
+        guard candidates.count >= minimumPointsPerFoot * 3 else { return nil }
+
+        var counts = Array(repeating: 0, count: sectorCount)
+        candidates.forEach { counts[$0.sector] += 1 }
+        let rankedSectors = counts.indices.sorted { counts[$0] > counts[$1] }
+        var selected: [Int] = []
+        for sector in rankedSectors where counts[sector] >= minimumPointsPerFoot {
+            guard selected.allSatisfy({
+                circularSectorDistance($0, sector) >= 4
+            }) else {
+                continue
+            }
+            selected.append(sector)
+            if selected.count == 3 { break }
+        }
+        guard selected.count == 3 else { return nil }
+
+        let feet = selected.compactMap { sector -> SpatialVector3? in
+            let cluster = candidates.filter {
+                circularSectorDistance($0.sector, sector) <= 1
+            }.map(\.point)
+            guard cluster.count >= minimumPointsPerFoot else { return nil }
+            return SpatialVector3(
+                x: cluster.map(\.x).reduce(0, +) / Double(cluster.count),
+                y: base.y,
+                z: cluster.map(\.z).reduce(0, +) / Double(cluster.count)
+            )
+        }
+        return feet.count == 3 ? feet : nil
+    }
+
+    private static func circularSectorDistance(_ lhs: Int, _ rhs: Int) -> Int {
+        let direct = abs(lhs - rhs)
+        return min(direct, sectorCount - direct)
     }
 }
 
@@ -382,6 +417,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let tripodDirectionPoint: SpatialVector3?
     let tripodHeightMeters: Double?
     let tripodLegRadiusMeters: Double?
+    let tripodFootPoints: [SpatialVector3]?
     let targetPose: SpatialPoseSample?
     let worldMapFileName: String
     let keyframeFileNames: [String]
@@ -399,6 +435,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         tripodDirectionPoint: SpatialVector3? = nil,
         tripodHeightMeters: Double? = nil,
         tripodLegRadiusMeters: Double? = nil,
+        tripodFootPoints: [SpatialVector3]? = nil,
         targetPose: SpatialPoseSample? = nil,
         worldMapFileName: String,
         keyframeFileNames: [String]
@@ -415,6 +452,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.tripodDirectionPoint = tripodDirectionPoint
         self.tripodHeightMeters = tripodHeightMeters
         self.tripodLegRadiusMeters = tripodLegRadiusMeters
+        self.tripodFootPoints = tripodFootPoints
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames

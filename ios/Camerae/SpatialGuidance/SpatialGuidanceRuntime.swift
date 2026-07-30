@@ -70,6 +70,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var tripodDirectionPoint: SpatialVector3?
     @Published private(set) var tripodHeightMeters = SpatialStandardTripod.heightMeters
     @Published private(set) var tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
+    @Published private(set) var tripodFootPoints: [SpatialVector3]?
 
     let sceneView: ARSCNView
 
@@ -117,6 +118,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         tripodDirectionPoint = nil
         tripodHeightMeters = SpatialStandardTripod.heightMeters
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
+        tripodFootPoints = nil
         sceneMeshIsFrozen = false
         sceneView.scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         mappingStartedAt = .now
@@ -211,6 +213,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             tripodDirectionPoint: tripodDirectionPoint,
             tripodHeightMeters: tripodHeightMeters,
             tripodLegRadiusMeters: tripodLegRadiusMeters,
+            tripodFootPoints: tripodFootPoints,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: names
@@ -354,11 +357,16 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             base: base,
             points: meshPoints
         ) ?? SpatialStandardTripod.heightMeters
-        tripodLegRadiusMeters = SpatialTripodShapeEstimator.estimateLegRadius(
+        tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
+        tripodFootPoints = SpatialTripodFootEstimator.estimate(
             base: base,
-            tripodHeight: tripodHeightMeters,
             points: meshPoints
-        ) ?? SpatialStandardTripod.legRadiusMeters
+        )
+        if let tripodFootPoints {
+            tripodLegRadiusMeters = tripodFootPoints
+                .map { hypot($0.x - base.x, $0.z - base.z) }
+                .reduce(0, +) / Double(tripodFootPoints.count)
+        }
         try? machine.send(.confirmTripodBase)
         phase = machine.phase
         if let cameraTransform = sceneView.session.currentFrame?.camera.transform {
@@ -421,6 +429,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         tripodDirectionPoint = nil
         tripodHeightMeters = SpatialStandardTripod.heightMeters
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
+        tripodFootPoints = nil
         meshAnchors = [:]
         sceneView.delegate = self
         sceneView.session.delegate = self
@@ -627,7 +636,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             base: base,
             direction: direction,
             height: reference?.manifest.tripodHeightMeters ?? tripodHeightMeters,
-            legRadius: reference?.manifest.tripodLegRadiusMeters ?? tripodLegRadiusMeters
+            legRadius: reference?.manifest.tripodLegRadiusMeters ?? tripodLegRadiusMeters,
+            detectedFeet: reference?.manifest.tripodFootPoints ?? tripodFootPoints
         )
     }
 
@@ -635,13 +645,14 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         base: SpatialVector3,
         direction: SpatialVector3,
         height: Double,
-        legRadius: Double
+        legRadius: Double,
+        detectedFeet: [SpatialVector3]?
     ) {
         sceneView.scene.rootNode.childNode(
             withName: spatialGuidanceStandardTripodNodeName,
             recursively: true
         )?.removeFromParentNode()
-        guard let feet = SpatialStandardTripod.footPoints(
+        guard let feet = detectedFeet ?? SpatialStandardTripod.footPoints(
             base: base,
             direction: direction,
             legRadius: legRadius

@@ -275,38 +275,42 @@ struct SpatialGuidanceTests {
         #expect(SpatialTripodHeightEstimator.estimate(base: base, points: distantWall) == nil)
     }
 
-    @Test("tripod opening estimates a plausible radial envelope above the floor")
-    func reconstructedTripodOpening() throws {
+    @Test("three low solid clusters become independent tripod feet")
+    func reconstructedTripodFeet() throws {
         let base = SpatialVector3(x: 0, y: 0, z: 0)
-        let legSamples = (0..<30).map { index in
-            let progress = Double(index) / 29
-            return SpatialVector3(
-                x: 0.12 + progress * 0.30,
-                y: 0.62 - progress * 0.55,
-                z: 0.02
-            )
+        let expectedFeet = [
+            SpatialVector3(x: 0, y: 0, z: -0.34),
+            SpatialVector3(x: 0.29, y: 0, z: 0.17),
+            SpatialVector3(x: -0.29, y: 0, z: 0.17),
+        ]
+        let footSamples = expectedFeet.flatMap { foot in
+            (0..<10).map { index in
+                SpatialVector3(
+                    x: foot.x + Double(index % 3 - 1) * 0.008,
+                    y: 0.04 + Double(index % 2) * 0.015,
+                    z: foot.z + Double(index % 4 - 2) * 0.006
+                )
+            }
         }
-        let floorNoise = (0..<30).map { index in
-            SpatialVector3(x: Double(index) * 0.02, y: 0.005, z: 0.3)
+        let unrelatedMass = (0..<20).map { index in
+            SpatialVector3(x: 0.8, y: 0.06, z: Double(index) * 0.01)
         }
 
-        let radius = try #require(
-            SpatialTripodShapeEstimator.estimateLegRadius(
+        let feet = try #require(
+            SpatialTripodFootEstimator.estimate(
                 base: base,
-                tripodHeight: 1.1,
-                points: legSamples + floorNoise
+                points: footSamples + unrelatedMass
             )
         )
 
-        #expect(radius > 0.35)
-        #expect(radius < 0.5)
-        #expect(
-            SpatialTripodShapeEstimator.estimateLegRadius(
-                base: base,
-                tripodHeight: 1.1,
-                points: floorNoise
-            ) == nil
-        )
+        #expect(feet.count == 3)
+        for expected in expectedFeet {
+            #expect(
+                feet.contains {
+                    hypot($0.x - expected.x, $0.z - expected.z) < 0.05
+                }
+            )
+        }
     }
 
     @Test("saving a replacement archives the complete previous reference")
@@ -364,11 +368,13 @@ struct SpatialGuidanceTests {
         legacyManifest.removeValue(forKey: "tripodDirectionPoint")
         legacyManifest.removeValue(forKey: "tripodHeightMeters")
         legacyManifest.removeValue(forKey: "tripodLegRadiusMeters")
+        legacyManifest.removeValue(forKey: "tripodFootPoints")
         try JSONSerialization.data(withJSONObject: legacyManifest)
             .write(to: manifestURL, options: .atomic)
         #expect(try store.load()?.manifest.tripodDirectionPoint == nil)
         #expect(try store.load()?.manifest.tripodHeightMeters == nil)
         #expect(try store.load()?.manifest.tripodLegRadiusMeters == nil)
+        #expect(try store.load()?.manifest.tripodFootPoints == nil)
 
         let future = """
         {"schemaVersion":99,"id":"00000000-0000-0000-0000-000000000000"}
@@ -412,6 +418,11 @@ struct SpatialGuidanceTests {
             tripodDirectionPoint: .init(x: 0.4, y: 0, z: -2.2),
             tripodHeightMeters: 1.18,
             tripodLegRadiusMeters: 0.41,
+            tripodFootPoints: [
+                .init(x: 0.4, y: 0, z: -1.6),
+                .init(x: 0.72, y: 0, z: -1.0),
+                .init(x: 0.08, y: 0, z: -1.0),
+            ],
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]

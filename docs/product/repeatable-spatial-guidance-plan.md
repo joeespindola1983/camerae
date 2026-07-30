@@ -86,10 +86,11 @@ The first release provides:
    blocking the flow.
 8. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-9. The app estimates tripod height and leg opening from reconstructed vertices
-   close to the confirmed base. It excludes near-floor and center-tube samples,
-   uses bounded robust percentiles, and falls back to a one-meter standard mesh
-   with standard opening when the thin tripod volume is insufficient.
+9. The app estimates tripod height from reconstructed vertices close to the
+   confirmed base, then searches a narrow band above the floor for three
+   independent solid angular clusters. Those clusters become individual feet
+   connected to the central hub. If three feet are not supported, it falls back
+   to a one-meter standard mesh with conservative opening.
 10. The app proposes an initial direction from the tripod toward the operator.
    The person may touch or drag across any reconstructed surface to rotate its
    fixed 45-centimeter handle. An arrow from the center provides explicit
@@ -194,6 +195,7 @@ The version-one manifest records:
 - tripod-direction point in world-map coordinates;
 - optional estimated tripod height;
 - optional estimated tripod leg radius;
+- optional detected tripod foot points;
 - optional legacy camera transform for forward decoding of existing references;
 - anchor identifiers;
 - world-map filename;
