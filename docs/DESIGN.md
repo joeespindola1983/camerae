@@ -114,6 +114,11 @@ Existing domain contracts include:
 
 ### Repeatable project organization
 
+- Reusable component: `Project Card` (`723:132`) on
+  `02 · Components`.
+- Project-card variants: Repeatable or Astro workflow, each with Hero and Row
+  roles. Both roles preserve the production 160-point thumbnail followed by
+  information content, with a 244-point minimum card height.
 - Reusable component: `Project Group Card` (`647:82`) on
   `02 · Components`.
 - Mosaic variants: Empty, 1, 2, 3, 4, and More.
@@ -124,6 +129,17 @@ Existing domain contracts include:
   dark, create/rename, move, action menu, safe deletion, and empty state.
 - Deleting an organization is visually and functionally specified to preserve
   every project and media file.
+- Reusable component: `Catalog Empty State` (`725:112`) on
+  `02 · Components`.
+- Empty-state variants: Repeatable or Astro workflow and Projects or Groups
+  scope. The typed capability policy decides whether the recovery action is
+  reachable; archived-group states intentionally expose no creation action.
+- Canonical navigation uses `Navigation Header` (`709:35`), including
+  `Catalog Toolbar` and `Catalog Detail Toolbar` (`727:92`) variants.
+- First migrated catalog Screens:
+  - root catalog `10A` (`650:767`);
+  - group detail `10C` (`650:4040`);
+  - empty catalog `10Q` (`653:4488`).
 
 ## Tokens and styles
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-- Phase: `P6 · First SwiftUI contract integration`
+- Phase: `P7 · Final validation`
 - Branch: `codex/figma-swiftui-canonical-sync`
 - Target: `9.4.0`
 - Figma file: `c8gsnSu31erYFG3u3QMQgN`
@@ -348,6 +348,36 @@ Validation on 2026-07-30:
 
 - `CameraeNextSessionCatalogTests`: 30 tests passed;
 - generic iOS `build-for-testing`: succeeded.
+
+## Catalog canonicalization
+
+The project catalog now has these canonical components:
+
+- `Project Card` (`723:132`), documented by `728:1428`;
+- `Project Group Card` (`647:82`);
+- `Catalog Empty State` (`725:112`), documented by `728:1441`;
+- `Navigation Header` (`709:35`), extended with
+  `Catalog Detail Toolbar` (`727:92`).
+
+The former 148-point `Project Card` was retained as `Project Card / Legacy`
+(`26:18`). The replacement matches `ProjectListHeroCard` and `ProjectListRow`
+with explicit Workflow and Role variants, a 160-point thumbnail, and a
+244-point minimum height.
+
+The first catalog Screen slice now consumes canonical instances:
+
+- root catalog `10A` (`650:767`);
+- group detail `10C` (`650:4040`);
+- group empty state `10Q` (`653:4488`).
+
+SwiftUI now exposes `CameraeNextProjectCatalogCapabilityPolicy` and
+`CameraeNextCatalogEmptyStatePresentation`. Tests prove that filter, sort,
+group creation, and project creation remain reachable for the applicable
+workflow, and that archived groups do not expose an invalid create action.
+
+Validation:
+
+- `CameraeNextProjectCatalogTests`: 13 tests passed.
 
 ## Acceptance criteria
 
