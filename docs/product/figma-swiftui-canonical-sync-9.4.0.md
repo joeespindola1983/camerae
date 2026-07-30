@@ -2,12 +2,11 @@
 
 ## Status
 
-- Phase: `P0 · Discovery`
+- Phase: `P1 · Foundations`
 - Branch: `codex/figma-swiftui-canonical-sync`
 - Target: `9.4.0`
 - Figma file: `c8gsnSu31erYFG3u3QMQgN`
-- No Figma or SwiftUI mutation is authorized by this document until the Phase 0
-  scope is approved.
+- Phase 0 approved on 2026-07-30.
 
 ## Objective
 
@@ -57,10 +56,10 @@ All local variables have explicit scopes. All variables in `Primitives`,
 `Color`, and `Dimensions` have code syntax. Three of the 17 variables in
 `Project List Theme` do not.
 
-The `Color` collection exposes one `Default` mode even though App Screens
-include explicit Light and Dark examples. `Project List Theme` models workflow
-as modes (`Repeatable`, `Astro`), while SwiftUI models workflow separately from
-light/dark appearance.
+At discovery time, the `Color` collection exposed one `Default` mode even
+though App Screens included explicit Light and Dark examples. The collection
+then named `Project List Theme` modeled only `Repeatable` and `Astro`, while
+SwiftUI also supported Editor.
 
 The existing global component catalog contains:
 
@@ -193,6 +192,36 @@ full Astro processing, alignment, Settings, and capture HUD screen migrations
 are outside the first 9.4.0 slice unless a shared-component change requires
 them.
 
+## Phase 1 foundation result
+
+The approved foundation normalization was applied directly to the canonical
+Figma file:
+
+- renamed `Project List Theme` to `Workflow Theme` without replacing the
+  collection or changing its stable ID;
+- added an `Editor` mode using aliases to existing primitive and semantic
+  variables;
+- retained the existing Repeatable and Astro mode IDs and values;
+- completed missing Web and iOS code syntax for capture success, danger, and
+  grid-line variables;
+- completed missing Web syntax for planet, nebula, and galaxy colors;
+- aligned theme-variable iOS syntax with `CameraeNextTheme`.
+
+Validation after the change confirms:
+
+- 4 collections and 105 variables;
+- no `ALL_SCOPES` variables;
+- no missing Web or iOS syntax;
+- no missing values in any collection mode;
+- `Workflow Theme` modes are `Repeatable`, `Astro`, and `Editor`.
+
+`Color` intentionally remains a single-mode semantic collection. The current
+production contract does not offer a global appearance switch: Repeatable uses
+its approved light palette, Astro uses its approved dark palette, and Editor
+uses its own dark palette. Light and Dark remain explicit component or Screen
+properties where both visual examples are required. Adding global color modes
+before production supports them would create a false handoff contract.
+
 ## Planned delivery sequence after approval
 
 1. `P1` — normalize only the required token and style foundations.
@@ -205,6 +234,29 @@ them.
 6. `P6` — refactor SwiftUI to consume the approved presentation contracts.
 7. `P7` — run capability tests, integration tests, build validation, and Figma
    audits.
+
+## Canonical component registry
+
+### Project Tabs
+
+- Figma component set: `Project Tabs` (`706:60`)
+- Documentation: `Project Tabs / Documentation` (`707:2`)
+- Owning page: `02 · Components` (`15:5`)
+- SwiftUI mapping:
+  - `CameraeNextProjectTabs`
+  - `CameraeNextProjectTabPresentation`
+- Variant contract:
+  - `Layout`: Standard or Spatial
+  - `Guide`: Unavailable, Missing, or Saved
+  - `Selection`: Configuration, Tripod, or Captures
+- Editable text:
+  - Configuration label
+  - Tripod label
+  - Captures label, including the current count
+
+The eight valid variants intentionally omit impossible combinations. A
+Standard workspace cannot select Tripod, and Spatial variants distinguish a
+missing guide from a saved guide.
 
 ## Acceptance criteria
 
