@@ -193,15 +193,11 @@ struct CameraeNextWorkflowConfigurationView: View {
     @State private var referenceErrorMessage: String?
     @State private var configurationErrorMessage: String?
     @State private var projectCaptureProfile: ProjectCaptureProfile?
-    @State private var spatialGuidanceMode: SpatialGuidanceFlowMode?
-    @State private var spatialReference: SpatialReferenceBundle?
-    @State private var pendingSpatialCaptureConfiguration: CameraeNextCaptureConfiguration?
 
     private let availableLenses: [RepeatableCameraLens]
     private let preferredLens: RepeatableCameraLens
     private let referenceStore: TimelapseSessionStore
     private let captureConfigurationStore: ProjectCaptureConfigurationStore
-    private let spatialReferenceStore: SpatialReferenceStore
 
     init(
         project: CameraProject,
@@ -217,9 +213,6 @@ struct CameraeNextWorkflowConfigurationView: View {
         self.referenceRefreshID = referenceRefreshID
         let referenceStore = TimelapseSessionStore(project: project)
         let captureConfigurationStore = ProjectCaptureConfigurationStore(
-            projectDirectory: project.directoryURL
-        )
-        let spatialReferenceStore = SpatialReferenceStore(
             projectDirectory: project.directoryURL
         )
         let sessionSummaries = referenceStore.sessionSummaries()
@@ -251,14 +244,12 @@ struct CameraeNextWorkflowConfigurationView: View {
         self.preferredLens = preferredLens
         self.referenceStore = referenceStore
         self.captureConfigurationStore = captureConfigurationStore
-        self.spatialReferenceStore = spatialReferenceStore
         _projectCaptureProfile = State(initialValue: savedProfile)
         _configuration = State(initialValue: initialConfiguration)
         _usesCustomDuration = State(
             initialValue: CameraeNextDurationSelection(configuration: initialConfiguration).selectedValue == 0
         )
         _referenceURL = State(initialValue: project.referenceFrameURL)
-        _spatialReference = State(initialValue: try? spatialReferenceStore.load())
         _planning = StateObject(wrappedValue: CapturePlanningViewModel(
             projectDirectoryURL: project.directoryURL
         ))
@@ -313,7 +304,6 @@ struct CameraeNextWorkflowConfigurationView: View {
             ScrollView {
                 VStack(spacing: 8) {
                     referenceCard
-                    if !isAstro { spatialGuidanceCard }
                     modePicker
                     captureCard
                     cameraCard
@@ -408,26 +398,6 @@ struct CameraeNextWorkflowConfigurationView: View {
             }
             .ignoresSafeArea()
         }
-        .fullScreenCover(item: $spatialGuidanceMode) { mode in
-            SpatialGuidanceFlowView(
-                mode: mode,
-                project: project,
-                configuration: pendingSpatialCaptureConfiguration ?? configuration,
-                onReferenceSaved: {
-                    spatialReference = try? spatialReferenceStore.load()
-                },
-                onContinueWithoutReference: {
-                    finishSpatialGuidanceAndOpenCameraIfNeeded()
-                },
-                onAlignedCapture: {
-                    finishSpatialGuidanceAndOpenCameraIfNeeded()
-                },
-                onDismiss: {
-                    pendingSpatialCaptureConfiguration = nil
-                    spatialGuidanceMode = nil
-                }
-            )
-        }
         .alert(
             CameraeL10n.referenceImage,
             isPresented: Binding(
@@ -477,37 +447,6 @@ struct CameraeNextWorkflowConfigurationView: View {
             onStart(persisted)
         } catch {
             configurationErrorMessage = error.localizedDescription
-        }
-    }
-
-    private var spatialGuidanceAvailability: SpatialGuidanceAvailability {
-        SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
-    }
-
-    private var spatialGuidanceCard: some View {
-        SpatialGuidanceConfigurationCard(
-            availability: spatialGuidanceAvailability,
-            hasReference: spatialReference != nil
-        ) {
-            pendingSpatialCaptureConfiguration = nil
-            if let spatialReference {
-                spatialGuidanceMode = .relocalize(spatialReference)
-            } else {
-                spatialGuidanceMode = .createReference
-            }
-        } remapAction: {
-            pendingSpatialCaptureConfiguration = nil
-            spatialGuidanceMode = .createReference
-        }
-    }
-
-    private func finishSpatialGuidanceAndOpenCameraIfNeeded() {
-        let pending = pendingSpatialCaptureConfiguration
-        pendingSpatialCaptureConfiguration = nil
-        spatialGuidanceMode = nil
-        guard let pending else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            onStart(pending)
         }
     }
 

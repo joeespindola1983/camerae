@@ -3,13 +3,23 @@ import SwiftUI
 
 enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
     case configuration
+    case tripod
     case captures
 
     var title: String {
         switch self {
         case .configuration: CameraeL10n.configure
+        case .tripod: "Tripé"
         case .captures: CameraeL10n.captures
         }
+    }
+
+    static func visibleSections(
+        spatialGuidanceAvailability: SpatialGuidanceAvailability
+    ) -> [Self] {
+        spatialGuidanceAvailability == .available
+            ? [.configuration, .tripod, .captures]
+            : [.configuration, .captures]
     }
 }
 
@@ -177,10 +187,11 @@ enum CameraeNextSessionAlignmentReference {
 struct CameraeNextProjectTabs: View {
     @Binding var selection: CameraeNextProjectSection
     let theme: CameraeNextTheme
+    let sections: [CameraeNextProjectSection]
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(CameraeNextProjectSection.allCases, id: \.self) { section in
+            ForEach(sections, id: \.self) { section in
                 Button {
                     selection = section
                 } label: {

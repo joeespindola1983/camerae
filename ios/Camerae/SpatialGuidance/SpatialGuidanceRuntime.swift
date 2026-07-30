@@ -488,6 +488,27 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         endpoint.geometry?.materials = [material]
         endpoint.position = vertices[1]
         line.addChildNode(endpoint)
+        let delta = SIMD3<Float>(
+            Float(direction.x - base.x),
+            0,
+            Float(direction.z - base.z)
+        )
+        if simd_length(delta) > 0 {
+            let arrow = SCNNode(
+                geometry: SCNCone(topRadius: 0, bottomRadius: 0.025, height: 0.07)
+            )
+            arrow.geometry?.materials = [material]
+            arrow.simdPosition = SIMD3<Float>(
+                Float(direction.x),
+                Float(direction.y + 0.012),
+                Float(direction.z)
+            )
+            arrow.simdOrientation = simd_quatf(
+                from: SIMD3<Float>(0, 1, 0),
+                to: simd_normalize(delta)
+            )
+            line.addChildNode(arrow)
+        }
         sceneView.scene.rootNode.addChildNode(line)
     }
 
@@ -569,18 +590,14 @@ struct SpatialGuidanceARView: UIViewRepresentable {
     let model: SpatialGuidanceSessionModel
 
     func makeUIView(context: Context) -> ARSCNView {
-        let tap = UITapGestureRecognizer(
+        let pointDrag = UILongPressGestureRecognizer(
             target: context.coordinator,
-            action: #selector(Coordinator.handleTap(_:))
+            action: #selector(Coordinator.handlePointDrag(_:))
         )
-        let pan = UIPanGestureRecognizer(
-            target: context.coordinator,
-            action: #selector(Coordinator.handlePan(_:))
-        )
-        pan.minimumNumberOfTouches = 1
-        pan.maximumNumberOfTouches = 1
-        model.sceneView.addGestureRecognizer(tap)
-        model.sceneView.addGestureRecognizer(pan)
+        pointDrag.minimumPressDuration = 0
+        pointDrag.allowableMovement = .greatestFiniteMagnitude
+        pointDrag.numberOfTouchesRequired = 1
+        model.sceneView.addGestureRecognizer(pointDrag)
         return model.sceneView
     }
 
@@ -598,11 +615,7 @@ struct SpatialGuidanceARView: UIViewRepresentable {
             self.model = model
         }
 
-        @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
-            model.selectSpatialPoint(at: recognizer.location(in: model.sceneView))
-        }
-
-        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+        @objc func handlePointDrag(_ recognizer: UILongPressGestureRecognizer) {
             guard recognizer.state == .began || recognizer.state == .changed else { return }
             model.selectSpatialPoint(at: recognizer.location(in: model.sceneView))
         }

@@ -7,7 +7,14 @@ struct CameraeNextSessionCatalogTests {
         let state = CameraeNextRepeatableProjectWorkspaceState()
 
         #expect(state.section == .configuration)
-        #expect(CameraeNextProjectSection.allCases.map(\.title) == ["Configurar", "Capturas"])
+        #expect(
+            CameraeNextProjectSection.visibleSections(spatialGuidanceAvailability: .available)
+                .map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            CameraeNextProjectSection.visibleSections(spatialGuidanceAvailability: .hardwareUnavailable)
+                .map(\.title) == ["Configurar", "Capturas"]
+        )
     }
 
     @Test func completedRepeatableCaptureReturnsToCatalogWhileFinalizingInline() {

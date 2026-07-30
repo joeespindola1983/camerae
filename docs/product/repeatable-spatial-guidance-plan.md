@@ -32,7 +32,8 @@ existing alignment system.
 The first release provides:
 
 1. Runtime eligibility on supported iPhones.
-2. A project-level Spatial Guidance card in Repeatable configuration.
+2. A project-level **Tripod** tab that exists only when Spatial Guidance is
+   available on the current device.
 3. A guided first-visit scan around a stationary tripod and static surroundings.
 4. Explicit mapping-quality feedback followed by automatic capture completion
    as soon as the minimum trustworthy contract is met.
@@ -43,14 +44,16 @@ The first release provides:
 7. Atomic local persistence of the world map, anchors, manifest, and guide
    images.
 8. Later relocalization into the saved map.
-9. A compact center marker and direction line at the saved tripod-base anchor.
+9. A compact center marker and arrowed direction line at the saved tripod-base
+   anchor.
 10. A safe path to continue capture without Spatial Guidance.
 11. A safe remap operation that retains the previous usable guide until the
     replacement is validated.
 12. A live, translucent polygonal preview of the surfaces already reconstructed
     by LiDAR.
-13. Tap-and-drag selection of the tripod-base center and camera direction on a
-    horizontal surface.
+13. Immediate touch-and-drag selection of the tripod-base center and camera
+    direction on a horizontal surface.
+14. A final JPEG scene screenshot displayed in the Tripod tab after saving.
 
 ## First-visit flow
 
@@ -78,13 +81,15 @@ The first release provides:
 7. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
 8. The person taps a second point on the floor in front of the tripod and may
-   drag it to define the intended camera direction. The direction point must be
-   at least 25 cm from the center.
+   drag it immediately, without lifting the finger, to define the intended
+   camera direction. The direction point must be at least 25 cm from the center,
+   and an arrow from the center provides explicit orientation.
 9. Only after center and direction are confirmed does the app enable saving.
 10. The app records the tripod-base anchor, direction anchor, device, lens,
    zoom, orientation, and guide images.
 11. The store writes a candidate bundle, validates it, and publishes it
-   atomically.
+   atomically. Its final guide screenshot becomes the visual reference in the
+   Tripod tab.
 
 ## Return flow
 

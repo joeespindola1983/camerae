@@ -238,6 +238,10 @@ struct CameraeNextProjectRuntimeView: View {
     @State private var repeatableWorkspace = CameraeNextRepeatableProjectWorkspaceState()
     @State private var referenceRefreshID = 0
 
+    private var spatialGuidanceAvailability: SpatialGuidanceAvailability {
+        SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
+    }
+
     var body: some View {
         Group {
             if project.module == .edit {
@@ -246,12 +250,18 @@ struct CameraeNextProjectRuntimeView: View {
                 VStack(spacing: 0) {
                     CameraeNextProjectTabs(
                         selection: $repeatableWorkspace.section,
-                        theme: .init(workflow: .repeatable)
+                        theme: .init(workflow: .repeatable),
+                        sections: CameraeNextProjectSection.visibleSections(
+                            spatialGuidanceAvailability: spatialGuidanceAvailability
+                        )
                     )
 
-                    if repeatableWorkspace.section == .configuration {
+                    switch repeatableWorkspace.section {
+                    case .configuration:
                         workflowConfiguration(isEmbeddedInProjectWorkspace: true)
-                    } else {
+                    case .tripod:
+                        SpatialGuidanceProjectTab(project: project)
+                    case .captures:
                         CameraeNextSessionCatalogView(
                             project: project,
                             onStartNew: { repeatableWorkspace.startNewCapture() },

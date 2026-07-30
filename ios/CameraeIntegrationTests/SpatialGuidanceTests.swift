@@ -179,6 +179,22 @@ struct SpatialGuidanceTests {
         )
     }
 
+    @Test("direction cannot be confirmed before its draggable point is selected")
+    func directionSelectionGate() throws {
+        var machine = SpatialGuidanceStateMachine()
+        try machine.send(.startMapping)
+        try machine.send(.mappingSessionReady)
+        try machine.send(.mappingEvaluated(.ready))
+        try machine.send(.freezeScene)
+        try machine.send(.tripodBaseSelected)
+        try machine.send(.confirmTripodBase)
+
+        #expect(machine.phase == .selectingTripodDirection)
+        #expect(throws: SpatialGuidanceTransitionError.self) {
+            try machine.send(.confirmTripodDirection)
+        }
+    }
+
     @Test("saving a replacement archives the complete previous reference")
     func atomicStoreAndPreviousReference() throws {
         let directory = FileManager.default.temporaryDirectory

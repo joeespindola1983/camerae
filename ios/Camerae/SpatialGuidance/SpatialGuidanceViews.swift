@@ -88,6 +88,93 @@ struct SpatialGuidanceConfigurationCard: View {
     }
 }
 
+struct SpatialGuidanceProjectTab: View {
+    let project: CameraProject
+
+    @State private var reference: SpatialReferenceBundle?
+    @State private var mode: SpatialGuidanceFlowMode?
+
+    private let store: SpatialReferenceStore
+    private let configuration: CameraeNextCaptureConfiguration
+    private let theme = CameraeNextTheme(workflow: .repeatable)
+
+    init(project: CameraProject) {
+        self.project = project
+        let store = SpatialReferenceStore(projectDirectory: project.directoryURL)
+        let summaries = TimelapseSessionStore(project: project).sessionSummaries()
+        let profile = try? ProjectCaptureConfigurationStore(
+            projectDirectory: project.directoryURL
+        ).loadProfileOrMigrate(module: project.module, summaries: summaries)
+        self.store = store
+        configuration = profile?.selectedConfiguration ?? .repeatableDefault
+        _reference = State(initialValue: try? store.load())
+    }
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 12) {
+                if let image = referencePreviewImage {
+                    Image(uiImage: image)
+                        .resizable()
+                        .scaledToFill()
+                        .frame(maxWidth: .infinity)
+                        .aspectRatio(16 / 10, contentMode: .fit)
+                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                                .stroke(theme.border, lineWidth: 1)
+                        }
+                        .accessibilityLabel("Imagem de referência da posição do tripé")
+                }
+
+                SpatialGuidanceConfigurationCard(
+                    availability: .available,
+                    hasReference: reference != nil,
+                    action: openGuide,
+                    remapAction: { mode = .createReference }
+                )
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+        .scrollIndicators(.hidden)
+        .background(theme.background.ignoresSafeArea())
+        .navigationTitle(project.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .fullScreenCover(item: $mode) { activeMode in
+            SpatialGuidanceFlowView(
+                mode: activeMode,
+                project: project,
+                configuration: configuration,
+                onReferenceSaved: {
+                    reference = try? store.load()
+                },
+                onContinueWithoutReference: {
+                    mode = nil
+                },
+                onAlignedCapture: {
+                    mode = nil
+                },
+                onDismiss: {
+                    mode = nil
+                }
+            )
+        }
+    }
+
+    private var referencePreviewImage: UIImage? {
+        reference?.keyframes.last.flatMap(UIImage.init(data:))
+    }
+
+    private func openGuide() {
+        if let reference {
+            mode = .relocalize(reference)
+        } else {
+            mode = .createReference
+        }
+    }
+}
+
 struct SpatialGuidanceFlowView: View {
     let mode: SpatialGuidanceFlowMode
     let project: CameraProject
