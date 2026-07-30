@@ -4,7 +4,6 @@ import SceneKit
 import SwiftUI
 import UIKit
 
-private let spatialGuidanceTargetAnchorName = "camerae.spatial.target"
 private let spatialGuidanceBaseAnchorName = "camerae.spatial.tripod-base-anchor"
 private let spatialGuidanceMeshNodeName = "camerae.spatial.mesh"
 private let spatialGuidanceBaseNodeName = "camerae.spatial.tripod-base"
@@ -62,7 +61,6 @@ enum SpatialGuidanceFlowMode: Identifiable {
 final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var phase: SpatialGuidancePhase = .idle
     @Published private(set) var mappingQuality = SpatialMappingQuality.insufficient
-    @Published private(set) var poseEvaluation: SpatialPoseEvaluation?
     @Published private(set) var errorMessage: String?
     @Published private(set) var isBusy = false
     @Published private(set) var tripodBaseCenter: SpatialVector3?
@@ -76,7 +74,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     private var lastKeyframeAt: Date?
     private var reference: SpatialReferenceBundle?
     private var targetAnchorRestored = false
-    private var ghostNode: SCNNode?
     private var sceneMeshIsFrozen = false
 
     override init() {
@@ -126,8 +123,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     ) async throws -> SpatialReferenceManifest {
         guard mappingQuality.canDefineScene,
               sceneMeshIsFrozen,
-              let tripodBaseCenter,
-              let frame = sceneView.session.currentFrame else {
+              let tripodBaseCenter else {
             throw SpatialGuidanceRuntimeError.mappingNotReady
         }
         isBusy = true
@@ -135,7 +131,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         try machine.send(.beginSaving)
         phase = machine.phase
 
-        let targetTransform = frame.camera.transform
         var baseTransform = matrix_identity_float4x4
         baseTransform.columns.3 = SIMD4<Float>(
             Float(tripodBaseCenter.x),
@@ -145,9 +140,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         )
         sceneView.session.add(
             anchor: ARAnchor(name: spatialGuidanceBaseAnchorName, transform: baseTransform)
-        )
-        sceneView.session.add(
-            anchor: ARAnchor(name: spatialGuidanceTargetAnchorName, transform: targetTransform)
         )
         try await Task.sleep(for: .milliseconds(300))
         let worldMap = try await currentWorldMap()
@@ -170,7 +162,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             cameraZoomFactor: configuration.cameraZoomFactor,
             orientation: orientation,
             tripodBaseCenter: tripodBaseCenter,
-            targetPose: Self.poseSample(from: targetTransform),
+            targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: names
         )
@@ -269,7 +261,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         machine = SpatialGuidanceStateMachine()
         phase = .idle
         mappingQuality = .insufficient
-        poseEvaluation = nil
         errorMessage = nil
         mappingStartedAt = nil
         observedCameraPositions = []
@@ -277,7 +268,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         lastKeyframeAt = nil
         reference = nil
         targetAnchorRestored = false
-        ghostNode = nil
         sceneMeshIsFrozen = false
         tripodBaseCenter = nil
         sceneView.delegate = self
@@ -328,16 +318,13 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             return
         }
         guard targetAnchorRestored,
-              frame.camera.trackingState.isNormal,
-              let target = reference?.manifest.targetPose else {
+              frame.camera.trackingState.isNormal else {
             return
         }
-        let current = Self.poseSample(from: frame.camera.transform)
-        let evaluation = SpatialPoseGuidance.evaluate(current: current, target: target)
-        poseEvaluation = evaluation
-        try? machine.send(.poseEvaluated(isAligned: evaluation.isAligned))
-        phase = machine.phase
-        updateGhostColor(isAligned: evaluation.isAligned)
+        if phase == .relocalizing {
+            try? machine.send(.anchorRestored)
+            phase = machine.phase
+        }
     }
 
     private func fail(_ failure: SpatialGuidanceFailure, message: String) {
@@ -375,72 +362,12 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         return map
     }
 
-    private static func poseSample(from transform: simd_float4x4) -> SpatialPoseSample {
-        let orientation = simd_quatf(transform)
-        let euler = orientation.eulerAngles
-        return SpatialPoseSample(
-            translationMeters: SpatialVector3(
-                x: Double(transform.columns.3.x),
-                y: Double(transform.columns.3.y),
-                z: Double(transform.columns.3.z)
-            ),
-            eulerDegrees: SpatialVector3(
-                x: Double(euler.x.radiansToDegrees),
-                y: Double(euler.y.radiansToDegrees),
-                z: Double(euler.z.radiansToDegrees)
-            )
-        )
-    }
-
     private static var deviceModelIdentifier: String {
         var systemInfo = utsname()
         uname(&systemInfo)
         return withUnsafePointer(to: &systemInfo.machine) {
             $0.withMemoryRebound(to: CChar.self, capacity: 1) {
                 String(cString: $0)
-            }
-        }
-    }
-
-    private func makeGhostRigNode() -> SCNNode {
-        let root = SCNNode()
-        root.name = "Ghost Rig"
-
-        let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemYellow.withAlphaComponent(0.62)
-        material.emission.contents = UIColor.systemYellow.withAlphaComponent(0.18)
-        material.isDoubleSided = true
-
-        let phone = SCNBox(width: 0.075, height: 0.15, length: 0.012, chamferRadius: 0.012)
-        phone.materials = [material]
-        let phoneNode = SCNNode(geometry: phone)
-        phoneNode.position = SCNVector3(0, 0, -0.08)
-        root.addChildNode(phoneNode)
-
-        let hub = SCNCylinder(radius: 0.018, height: 0.045)
-        hub.materials = [material]
-        let hubNode = SCNNode(geometry: hub)
-        hubNode.position = SCNVector3(0, -0.115, -0.08)
-        root.addChildNode(hubNode)
-
-        for angle in [-0.7, 0, 0.7] as [Float] {
-            let leg = SCNCylinder(radius: 0.006, height: 0.32)
-            leg.materials = [material]
-            let legNode = SCNNode(geometry: leg)
-            legNode.position = SCNVector3(sin(angle) * 0.09, -0.27, -0.08)
-            legNode.eulerAngles.z = angle
-            root.addChildNode(legNode)
-        }
-        root.opacity = 0.72
-        return root
-    }
-
-    private func updateGhostColor(isAligned: Bool) {
-        let color = isAligned ? UIColor.systemGreen : UIColor.systemYellow
-        ghostNode?.enumerateChildNodes { node, _ in
-            node.geometry?.materials.forEach {
-                $0.diffuse.contents = color.withAlphaComponent(0.62)
-                $0.emission.contents = color.withAlphaComponent(0.18)
             }
         }
     }
@@ -463,9 +390,9 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.62)
         material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.2)
         material.isDoubleSided = true
-        let marker = SCNNode(geometry: SCNCylinder(radius: 0.11, height: 0.008))
+        let marker = SCNNode(geometry: SCNCylinder(radius: 0.035, height: 0.006))
         marker.geometry?.materials = [material]
-        let center = SCNNode(geometry: SCNSphere(radius: 0.018))
+        let center = SCNNode(geometry: SCNSphere(radius: 0.01))
         center.geometry?.materials = [material]
         center.position.y = 0.018
         marker.addChildNode(center)
@@ -521,16 +448,10 @@ extension SpatialGuidanceSessionModel: ARSCNViewDelegate {
                 let marker = makeTripodBaseMarkerNode()
                 marker.name = spatialGuidanceBaseNodeName
                 node.addChildNode(marker)
+                targetAnchorRestored = true
                 return
             }
-            guard anchor.name == spatialGuidanceTargetAnchorName else { return }
-            targetAnchorRestored = true
-            ghostNode = makeGhostRigNode()
-            if let ghostNode {
-                node.addChildNode(ghostNode)
-            }
-            try? machine.send(.anchorRestored)
-            phase = machine.phase
+            return
         }
     }
 
@@ -601,20 +522,6 @@ private extension ARCamera.TrackingState {
         if case .normal = self { return true }
         return false
     }
-}
-
-private extension simd_quatf {
-    var eulerAngles: SIMD3<Float> {
-        let matrix = simd_float3x3(self)
-        let pitch = asin(-matrix[2][1])
-        let yaw = atan2(matrix[2][0], matrix[2][2])
-        let roll = atan2(matrix[0][1], matrix[1][1])
-        return SIMD3<Float>(pitch, yaw, roll)
-    }
-}
-
-private extension Float {
-    var radiansToDegrees: Float { self * 180 / .pi }
 }
 
 private extension UIImage {

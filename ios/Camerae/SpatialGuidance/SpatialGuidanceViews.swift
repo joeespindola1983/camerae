@@ -4,6 +4,7 @@ struct SpatialGuidanceConfigurationCard: View {
     let availability: SpatialGuidanceAvailability
     let hasReference: Bool
     let action: () -> Void
+    let remapAction: () -> Void
 
     private let theme = CameraeNextTheme(workflow: .repeatable)
 
@@ -37,6 +38,16 @@ struct SpatialGuidanceConfigurationCard: View {
                     isDisabled: availability != .available,
                     action: action
                 )
+                if hasReference {
+                    CameraeNextActionButton(
+                        title: "Mapear novamente",
+                        systemImage: nil,
+                        theme: theme,
+                        style: .secondary,
+                        isDisabled: availability != .available,
+                        action: remapAction
+                    )
+                }
             }
         }
         .accessibilityElement(children: .contain)
@@ -45,20 +56,20 @@ struct SpatialGuidanceConfigurationCard: View {
 
     private var status: String {
         if availability != .available { return "INDISPONÍVEL" }
-        return hasReference ? "GUIA SALVO" : "NÃO CONFIGURADO"
+        return hasReference ? "CENA SALVA" : "NÃO CONFIGURADO"
     }
 
     private var title: String {
         if availability != .available { return "Orientação espacial indisponível" }
-        return hasReference ? "Posição memorizada" : "Memória da posição"
+        return hasReference ? "Centro do tripé salvo" : "Mapeamento espacial"
     }
 
     private var detail: String {
         switch availability {
         case .available:
             hasReference
-                ? "Cena e pose da câmera prontas para a próxima visita."
-                : "Mapeie o local para reencontrar a posição exata do tripé."
+                ? "Navegue pela cena para reencontrar o centro da base."
+                : "Mapeie o local e marque o centro da base do tripé."
         case .moduleUnavailable:
             "Por enquanto, este recurso está disponível somente no Repeatable."
         case .temporarilyUnavailable:
@@ -69,7 +80,7 @@ struct SpatialGuidanceConfigurationCard: View {
     }
 
     private var actionTitle: String {
-        hasReference ? "Refazer guia" : "Criar guia espacial"
+        hasReference ? "Navegar cena" : "Criar mapa espacial"
     }
 
     private var statusColor: Color {
@@ -184,17 +195,17 @@ struct SpatialGuidanceFlowView: View {
             case .tripodBaseSelected:
                 tripodBaseSelectionPanel(hasSelection: true)
             case .readyToMount:
-                readyToMountPanel
+                busyPanel(title: "Preparando cena", detail: "Validando o centro do tripé.")
             case .saving:
-                busyPanel(title: "Salvando posição", detail: "Arquivando mapa, pose e imagens de referência.")
+                busyPanel(title: "Salvando cena", detail: "Arquivando mapa, centro do tripé e imagens de referência.")
             case .saved:
                 savedPanel
             case .relocalizing:
                 relocalizationPanel
             case .positioning:
-                positioningPanel(isAligned: false)
+                navigationPanel
             case .aligned:
-                positioningPanel(isAligned: true)
+                navigationPanel
             case .failed(let failure):
                 failurePanel(failure)
             }
@@ -227,32 +238,6 @@ struct SpatialGuidanceFlowView: View {
                 Text("Você pode encerrar agora. Continuar caminhando melhora a chance de reconhecer o local na próxima visita.")
                     .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption2))
                     .foregroundStyle(CameraeColor.captureForegroundMuted)
-            }
-        }
-    }
-
-    private var readyToMountPanel: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SpatialProgressCardView(
-                status: "MAPA PRONTO",
-                title: "Monte o telefone",
-                detail: "Fixe o iPhone no tripé sem mover as pernas. Depois salve a pose exata da câmera.",
-                progress: 1,
-                tone: .success
-            )
-            captureAction(title: "Salvar posição", style: .primary) {
-                Task {
-                    do {
-                        _ = try await model.saveReference(
-                            store: store,
-                            configuration: configuration,
-                            orientation: currentOrientation
-                        )
-                        onReferenceSaved()
-                    } catch {
-                        model.reportPersistenceFailure(error)
-                    }
-                }
             }
         }
     }
@@ -291,7 +276,19 @@ struct SpatialGuidanceFlowView: View {
 
             if hasSelection {
                 captureAction(title: "Confirmar centro", style: .primary) {
-                    model.confirmTripodBase()
+                    Task {
+                        model.confirmTripodBase()
+                        do {
+                            _ = try await model.saveReference(
+                                store: store,
+                                configuration: configuration,
+                                orientation: currentOrientation
+                            )
+                            onReferenceSaved()
+                        } catch {
+                            model.reportPersistenceFailure(error)
+                        }
+                    }
                 }
             }
         }
@@ -299,8 +296,8 @@ struct SpatialGuidanceFlowView: View {
 
     private var savedPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SpatialStatusBadgeView(label: "GUIA SALVO", tone: .success)
-            Text("Posição memorizada")
+            SpatialStatusBadgeView(label: "CENA SALVA", tone: .success)
+            Text("Centro memorizado")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
             Text("O mapa anterior foi preservado em “previous” quando existia.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
@@ -314,7 +311,7 @@ struct SpatialGuidanceFlowView: View {
             SpatialStatusBadgeView(label: "RELOCALIZANDO", tone: .accent)
             Text("Reconhecendo a cena")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Repita o movimento da primeira visita. O tripé fantasma só aparece quando a âncora for restaurada com tracking normal.")
+            Text("Repita o movimento da primeira visita. O ponto do tripé aparece quando a cena for reconhecida.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             ProgressView()
@@ -322,41 +319,17 @@ struct SpatialGuidanceFlowView: View {
         }
     }
 
-    private func positioningPanel(isAligned: Bool) -> some View {
+    private var navigationPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
-            SpatialStatusBadgeView(
-                label: isAligned ? "ALINHADO" : "ATENÇÃO",
-                tone: isAligned ? .success : .attention
-            )
-            Text(isAligned ? "Posição confirmada" : "Ajuste o tripé")
+            SpatialStatusBadgeView(label: "CENA LOCALIZADA", tone: .success)
+            Text("Encontre o ponto")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-
-            if let evaluation = model.poseEvaluation {
-                SpatialPoseDeltaView(
-                    label: "POSIÇÃO",
-                    value: isAligned ? "Alinhado" : horizontalDescription(evaluation),
-                    systemImage: isAligned ? "checkmark" : "arrow.left.and.right",
-                    isAligned: isAligned
-                )
-                SpatialPoseDeltaView(
-                    label: "ALTURA",
-                    value: isAligned ? "Alinhado" : verticalDescription(evaluation),
-                    systemImage: isAligned ? "checkmark" : "arrow.up.and.down",
-                    isAligned: isAligned
-                )
-                SpatialPoseDeltaView(
-                    label: "ROTAÇÃO",
-                    value: isAligned ? "Alinhado" : rotationDescription(evaluation),
-                    systemImage: isAligned ? "checkmark" : "rotate.right",
-                    isAligned: isAligned
-                )
-            }
-
-            if isAligned {
-                captureAction(title: "Abrir câmera", style: .primary) {
-                    model.stop()
-                    onAlignedCapture()
-                }
+            Text("Posicione o centro da base do tripé sobre o pequeno ponto laranja.")
+                .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+                .foregroundStyle(CameraeColor.captureForegroundMuted)
+            captureAction(title: "Concluir navegação", style: .primary) {
+                model.stop()
+                onAlignedCapture()
             }
         }
     }
@@ -424,7 +397,7 @@ struct SpatialGuidanceFlowView: View {
         if missing.contains(.coverage) { return "Inclua mais chão e objetos fixos ao redor do tripé." }
         if missing.contains(.detail) { return "Aproxime-se de superfícies com textura e boa luz." }
         if missing.contains(.keyframes) { return "Continue por mais alguns segundos para registrar referências." }
-        return "Cobertura suficiente para salvar a pose."
+        return "Cobertura suficiente para definir a cena."
     }
 
     private var mappingQualityProgress: Double {
@@ -438,22 +411,6 @@ struct SpatialGuidanceFlowView: View {
         case .landscapeRight: .landscapeRight
         default: .portrait
         }
-    }
-
-    private func horizontalDescription(_ evaluation: SpatialPoseEvaluation) -> String {
-        let centimeters = Int((evaluation.horizontalDistanceMeters * 100).rounded())
-        return "\(centimeters) cm"
-    }
-
-    private func verticalDescription(_ evaluation: SpatialPoseEvaluation) -> String {
-        let centimeters = Int((evaluation.verticalDistanceMeters * 100).rounded())
-        return "\(centimeters) cm"
-    }
-
-    private func rotationDescription(_ evaluation: SpatialPoseEvaluation) -> String {
-        evaluation.maximumRotationDegrees.formatted(
-            .number.precision(.fractionLength(1))
-        ) + "°"
     }
 
     private func close() {
@@ -520,38 +477,4 @@ private struct SpatialProgressCardView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
-}
-
-private struct SpatialPoseDeltaView: View {
-    let label: String
-    let value: String
-    let systemImage: String
-    let isAligned: Bool
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: systemImage)
-                .font(.title3)
-                .foregroundStyle(tone)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(label)
-                    .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-                    .foregroundStyle(.secondary)
-                Text(value)
-                    .font(.custom("Outfit-SemiBold", size: 14, relativeTo: .body))
-            }
-            Spacer(minLength: 0)
-        }
-        .foregroundStyle(CameraeColor.repeatableLightText)
-        .padding(.horizontal, 12)
-        .frame(minHeight: 56)
-        .background(CameraeColor.repeatableLightCard, in: RoundedRectangle(cornerRadius: 14))
-        .overlay {
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(tone, lineWidth: 1)
-        }
-    }
-
-    private var tone: Color { isAligned ? .green : .yellow }
 }

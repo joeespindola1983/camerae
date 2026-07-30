@@ -152,7 +152,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     case failed(SpatialGuidanceFailure)
 
     var showsGhost: Bool {
-        self == .positioning || self == .aligned
+        false
     }
 
     var canOpenCamera: Bool {
@@ -246,57 +246,6 @@ struct SpatialPoseSample: Codable, Equatable, Hashable, Sendable {
     static let zero = Self(translationMeters: .zero, eulerDegrees: .zero)
 }
 
-struct SpatialPoseEvaluation: Equatable, Sendable {
-    let translationDeltaMeters: SpatialVector3
-    let rotationDeltaDegrees: SpatialVector3
-    let horizontalDistanceMeters: Double
-    let verticalDistanceMeters: Double
-    let maximumRotationDegrees: Double
-    let isAligned: Bool
-}
-
-enum SpatialPoseGuidance {
-    static let maximumHorizontalDistanceMeters = 0.02
-    static let maximumVerticalDistanceMeters = 0.02
-    static let maximumRotationDegrees = 1.0
-
-    static func evaluate(
-        current: SpatialPoseSample,
-        target: SpatialPoseSample
-    ) -> SpatialPoseEvaluation {
-        let translation = SpatialVector3(
-            x: target.translationMeters.x - current.translationMeters.x,
-            y: target.translationMeters.y - current.translationMeters.y,
-            z: target.translationMeters.z - current.translationMeters.z
-        )
-        let rotation = SpatialVector3(
-            x: shortestAngle(target.eulerDegrees.x - current.eulerDegrees.x),
-            y: shortestAngle(target.eulerDegrees.y - current.eulerDegrees.y),
-            z: shortestAngle(target.eulerDegrees.z - current.eulerDegrees.z)
-        )
-        let horizontal = hypot(translation.x, translation.z)
-        let vertical = abs(translation.y)
-        let maximumRotation = max(abs(rotation.x), abs(rotation.y), abs(rotation.z))
-        return SpatialPoseEvaluation(
-            translationDeltaMeters: translation,
-            rotationDeltaDegrees: rotation,
-            horizontalDistanceMeters: horizontal,
-            verticalDistanceMeters: vertical,
-            maximumRotationDegrees: maximumRotation,
-            isAligned: horizontal < maximumHorizontalDistanceMeters
-                && vertical < maximumVerticalDistanceMeters
-                && maximumRotation < maximumRotationDegrees
-        )
-    }
-
-    private static func shortestAngle(_ degrees: Double) -> Double {
-        var result = degrees.truncatingRemainder(dividingBy: 360)
-        if result > 180 { result -= 360 }
-        if result < -180 { result += 360 }
-        return result
-    }
-}
-
 enum SpatialCaptureOrientation: String, Codable, Equatable, Sendable {
     case portrait
     case portraitUpsideDown
@@ -316,7 +265,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let cameraZoomFactor: Double
     let orientation: SpatialCaptureOrientation
     let tripodBaseCenter: SpatialVector3?
-    let targetPose: SpatialPoseSample
+    let targetPose: SpatialPoseSample?
     let worldMapFileName: String
     let keyframeFileNames: [String]
 
@@ -330,7 +279,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         cameraZoomFactor: Double,
         orientation: SpatialCaptureOrientation,
         tripodBaseCenter: SpatialVector3? = nil,
-        targetPose: SpatialPoseSample,
+        targetPose: SpatialPoseSample? = nil,
         worldMapFileName: String,
         keyframeFileNames: [String]
     ) {
@@ -369,6 +318,7 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
 
 enum SpatialGuidanceAction: Equatable, Sendable {
     case createReference
+    case navigateScene
     case reviewReference
     case remapReference
     case continueWithoutReference
@@ -380,6 +330,7 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case adjustTripodBase
     case confirmTripodBase
     case openCamera
+    case completeNavigation
     case cancel
 }
 
@@ -389,7 +340,7 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
         case .noReference:
             [.createReference, .continueWithoutReference]
         case .referenceSaved:
-            [.reviewReference, .remapReference, .continueWithoutReference]
+            [.navigateScene, .reviewReference, .remapReference]
         case .unsupported:
             [.continueWithoutReference]
         case .mapping, .insufficientCoverage:
@@ -405,9 +356,9 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
         case .relocalizing:
             [.cancel]
         case .positioning:
-            [.cancel]
+            [.completeNavigation, .cancel]
         case .aligned:
-            [.openCamera, .cancel]
+            [.completeNavigation, .cancel]
         case .relocalizationFailed:
             [.retryRelocalization, .remapReference, .cancel]
         case .incompatibleReference:

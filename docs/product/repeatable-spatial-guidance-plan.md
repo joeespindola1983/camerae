@@ -17,13 +17,13 @@
 
 ## Outcome
 
-Help a person return the phone camera to a previously recorded physical pose.
-The first visit saves an ARKit world map and a camera-pose anchor. A later
-visit relocalizes into that map, displays a generic ghost tripod and camera
-target, and reports the remaining translation and rotation before capture.
+Help a person return the tripod base to a previously recorded physical point.
+The first visit saves an ARKit world map and a compact center anchor. A later
+visit relocalizes into that map and displays only that point on the ground.
 
-The target is the phone and its camera pose, not a photorealistic reconstruction
-of the tripod. Tripod geometry is a visual aid.
+Spatial Guidance is scene navigation, not camera alignment. Lens framing,
+rotation, height, and post-capture registration remain responsibilities of the
+existing alignment system.
 
 ## MVP scope
 
@@ -33,13 +33,11 @@ The first release provides:
 2. A project-level Spatial Guidance card in Repeatable configuration.
 3. A guided first-visit scan around a stationary tripod and static surroundings.
 4. Explicit mapping-quality feedback before a map can be saved.
-5. A final step in which the phone is mounted and its target pose is recorded.
+5. A final step in which the tripod-base center is selected and confirmed.
 6. Atomic local persistence of the world map, anchors, manifest, and guide
    images.
 7. Later relocalization into the saved map.
-8. A generic translucent ghost tripod and phone target.
-9. Directional translation and rotation guidance.
-10. Explicit `aligned`, `near`, `out of position`, and `low confidence` states.
+8. A compact center marker at the saved tripod-base anchor.
 11. A safe path to continue capture without Spatial Guidance.
 12. A safe remap operation that retains the previous usable guide until the
     replacement is validated.
@@ -86,16 +84,15 @@ The first release provides:
 1. The project shows **Usar guia espacial**.
 2. The saved world map becomes the session's initial world map.
 3. Saved guide images help the person revisit previously observed viewpoints.
-4. The ghost rig stays hidden while tracking is initializing or relocalizing.
-5. The ghost appears only after:
+4. The tripod-center point stays hidden while tracking is initializing or
+   relocalizing.
+5. The point appears only after:
    - tracking returns to normal;
    - the saved target anchor is restored;
-   - pose stability remains acceptable for a defined interval.
+   - the base anchor is restored.
 6. The person positions and mounts the tripod.
-7. The UI reports horizontal, vertical, and depth displacement plus pitch, roll,
-   and yaw guidance.
-8. The person can continue when satisfied; the product does not claim
-   millimeter precision.
+7. The person positions the center of the tripod base over the point and
+   concludes navigation when satisfied.
 
 ## Eligibility
 
@@ -127,7 +124,7 @@ The feature must not live inside `RepeatableCameraView`.
 - feature availability;
 - mapping and relocalization phases;
 - quality observations and decisions;
-- pose delta and confidence;
+- restored base-anchor confidence;
 - persisted manifest model;
 - module policy.
 
@@ -141,7 +138,7 @@ It does not import ARKit or SwiftUI.
 - mapping status;
 - scene observations;
 - restored anchors;
-- current camera pose;
+- restored tripod-base anchor;
 - final world-map data;
 - cancellation and failure.
 
@@ -187,8 +184,7 @@ Reusable presentation is divided into:
 
 - `SpatialGuideCard` for project configuration;
 - `SpatialGuideFlowView` for mapping and relocalization;
-- `GhostRigRenderer` for tripod and phone targets;
-- `SpatialPoseGuidance` for deltas and confidence.
+- a compact spatial center renderer.
 
 Theme and module availability are injected. Domain and storage types must not
 contain `Repeatable` in their names.
@@ -199,11 +195,10 @@ The dedicated `05 · Spatial Guidance` page (`662:2`) owns:
 
 - mapping introduction;
 - mapping progress and missing-coverage states;
-- mounting and target-pose capture;
+- tripod-base center selection;
 - saved-guide state;
 - relocalization;
-- ghost rig;
-- pose correction;
+- tripod-center navigation;
 - success, timeout, incompatibility, remap, and recovery.
 
 Reusable project-entry components may live in `Workflow Components` after they
@@ -241,10 +236,9 @@ node IDs are approved.
 - Recovery screens: `675:102`, `675:117`, and `675:132`.
 - Landscape positioning screen: `677:121`.
 
-The canonical positioning contract is `674:62`: the ghost remains hidden
-until relocalization is trustworthy, position, height, and rotation remain
-independent signals, and the camera action is enabled only in the aligned
-state.
+The existing positioning nodes predate the local navigation-only iteration.
+They are not a release contract until reconciled with the compact center-point
+experience.
 
 ## TDD plan
 
@@ -275,8 +269,7 @@ empty
 ready
 → relocalizing
 → localized
-→ positioning
-→ aligned
+→ navigating
 ```
 
 Cover cancellation, excessive motion, insufficient features, tracking loss,
@@ -285,7 +278,7 @@ timeout, retry, invalid anchors, and safe fallback to the previous guide.
 ### Quality evaluator
 
 Use pure inputs to test tracking, world-mapping status, elapsed time, angular
-coverage, floor evidence, mapped volume, pose stability, and thermal state.
+coverage, floor evidence, mapped volume, and thermal state.
 Unit tests must not require a physical AR session.
 
 ### Store and schema
@@ -322,8 +315,8 @@ tests remain independent from layout and orientation.
 
 ### ARKit integration
 
-Fakes simulate map completion, anchor restoration, known pose deltas,
-instability, timeout, and failure. The real adapter is validated by compilation
+Fakes simulate map completion, base-anchor restoration, timeout, and failure.
+The real adapter is validated by compilation
 and a physical-device test matrix.
 
 ## Delivery slices
@@ -331,7 +324,7 @@ and a physical-device test matrix.
 1. Domain policies, state machine, codec, and store.
 2. Configuration entry and complete flow driven by a fake session.
 3. ARKit capability provider and first-visit map persistence.
-4. Relocalization, restored anchor, ghost rig, and pose guidance.
+4. Relocalization, restored base anchor, and compact point navigation.
 5. Diagnostics, accessibility, localization, recovery, and device validation.
 
 Each slice starts with failing tests and leaves the Draft PR buildable.
@@ -340,12 +333,12 @@ Each slice starts with failing tests and leaves the Draft PR buildable.
 
 The evaluation branch contains:
 
-- neutral availability, mapping-quality, state-machine, pose, manifest, and
+- neutral availability, mapping-quality, state-machine, manifest, and
   interface-capability policies;
 - a versioned project-local store with staging, validation, atomic publication,
   and retention of the previous complete reference;
 - an ARKit adapter using world tracking, classified mesh reconstruction, scene
-  depth, guide JPEGs, a saved world map, and a named camera-pose anchor;
+  depth, guide JPEGs, a saved world map, and a named tripod-base anchor;
 - reusable SwiftUI configuration and full-screen guidance flows;
 - Repeatable configuration and capture handoff without adding module-specific
   names to the domain or persistence layers.
@@ -383,8 +376,7 @@ The first internal build exposes temporary diagnostics for:
 - angular and volume coverage;
 - thermal state;
 - restored-anchor state;
-- translation and rotation delta;
-- confidence;
+- restored-base confidence;
 - saved-map size.
 
 The manual matrix includes:
@@ -406,8 +398,7 @@ The MVP is ready for product evaluation when:
 - only eligible Repeatable projects expose the active feature;
 - a crash or cancellation cannot destroy the last usable guide;
 - an app relaunch can restore the saved anchor on a supported device;
-- the ghost appears only after trustworthy relocalization;
-- translation, rotation, and confidence are explicit;
+- the center point appears only after trustworthy relocalization;
 - capture without the guide still works;
 - automated contracts pass;
 - the branch builds and runs from Xcode on a supported iPhone.

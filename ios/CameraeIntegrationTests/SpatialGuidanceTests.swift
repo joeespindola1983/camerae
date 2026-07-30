@@ -103,7 +103,7 @@ struct SpatialGuidanceTests {
         #expect(!reviewable.canSave)
     }
 
-    @Test("the flow hides the ghost until relocalization and gates capture on pose tolerance")
+    @Test("scene capture and later navigation are separate from camera alignment")
     func stateMachine() throws {
         var machine = SpatialGuidanceStateMachine()
 
@@ -134,10 +134,8 @@ struct SpatialGuidanceTests {
         #expect(!machine.phase.showsGhost)
         try machine.send(.anchorRestored)
         #expect(machine.phase == .positioning)
-        #expect(machine.phase.showsGhost)
-        try machine.send(.poseEvaluated(isAligned: true))
-        #expect(machine.phase == .aligned)
-        #expect(machine.phase.canOpenCamera)
+        #expect(!machine.phase.showsGhost)
+        #expect(!machine.phase.canOpenCamera)
     }
 
     @Test("mapping never presents the live-scanning state before the AR session is ready")
@@ -167,33 +165,6 @@ struct SpatialGuidanceTests {
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .tripodBaseSelected) ==
                 [.adjustTripodBase, .confirmTripodBase, .cancel]
         )
-    }
-
-    @Test("pose guidance reports translation and rotation separately")
-    func poseGuidance() {
-        let target = SpatialPoseSample(
-            translationMeters: .init(x: 1, y: 1.2, z: -0.5),
-            eulerDegrees: .init(x: 0, y: 90, z: 0)
-        )
-        let close = SpatialPoseSample(
-            translationMeters: .init(x: 0.992, y: 1.207, z: -0.489),
-            eulerDegrees: .init(x: 0.4, y: 89.4, z: -0.2)
-        )
-        let far = SpatialPoseSample(
-            translationMeters: .init(x: 0.94, y: 1.25, z: -0.41),
-            eulerDegrees: .init(x: 2.4, y: 86.5, z: 1.2)
-        )
-
-        let aligned = SpatialPoseGuidance.evaluate(current: close, target: target)
-        let adjusting = SpatialPoseGuidance.evaluate(current: far, target: target)
-
-        #expect(aligned.isAligned)
-        #expect(aligned.horizontalDistanceMeters < 0.02)
-        #expect(aligned.verticalDistanceMeters < 0.02)
-        #expect(aligned.maximumRotationDegrees < 1)
-        #expect(!adjusting.isAligned)
-        #expect(adjusting.horizontalDistanceMeters > 0.02)
-        #expect(adjusting.maximumRotationDegrees > 1)
     }
 
     @Test("saving a replacement archives the complete previous reference")
@@ -269,7 +240,7 @@ struct SpatialGuidanceTests {
         )
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .aligned) ==
-                [.openCamera, .cancel]
+                [.completeNavigation, .cancel]
         )
     }
 
@@ -283,7 +254,7 @@ struct SpatialGuidanceTests {
             cameraZoomFactor: 1,
             orientation: .portrait,
             tripodBaseCenter: .init(x: 0.4, y: 0, z: -1.2),
-            targetPose: .zero,
+            targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]
         )

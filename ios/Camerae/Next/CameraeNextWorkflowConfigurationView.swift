@@ -474,15 +474,7 @@ struct CameraeNextWorkflowConfigurationView: View {
             let persisted = try captureConfigurationStore.saveDefaults(resolved)
             configuration = persisted
             projectCaptureProfile = try captureConfigurationStore.loadProfile()
-            if !isAstro,
-               spatialGuidanceAvailability == .available,
-               let reference = try spatialReferenceStore.load() {
-                spatialReference = reference
-                pendingSpatialCaptureConfiguration = persisted
-                spatialGuidanceMode = .relocalize(reference)
-            } else {
-                onStart(persisted)
-            }
+            onStart(persisted)
         } catch {
             configurationErrorMessage = error.localizedDescription
         }
@@ -497,6 +489,13 @@ struct CameraeNextWorkflowConfigurationView: View {
             availability: spatialGuidanceAvailability,
             hasReference: spatialReference != nil
         ) {
+            pendingSpatialCaptureConfiguration = nil
+            if let spatialReference {
+                spatialGuidanceMode = .relocalize(spatialReference)
+            } else {
+                spatialGuidanceMode = .createReference
+            }
+        } remapAction: {
             pendingSpatialCaptureConfiguration = nil
             spatialGuidanceMode = .createReference
         }

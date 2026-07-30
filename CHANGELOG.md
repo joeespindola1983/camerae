@@ -13,6 +13,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added a live polygonal wireframe of reconstructed LiDAR surfaces, an explicit scene-review checkpoint, and an adjustable tripod-base center that is persisted with the camera pose.
 - Allows people to stop and review a spatial scan after a minimum trustworthy core is captured, without requiring suggested coverage of the entire scene.
 - Starts Spatial Guidance immediately from its project action and presents an explicit camera-and-LiDAR loading state until the first AR frame arrives.
+- Separates spatial scene navigation from camera alignment: saved projects expose **Navigate scene**, relocalization displays only a compact tripod-center point, and normal camera opening no longer enters spatial guidance automatically.
 
 ### Changed
 
