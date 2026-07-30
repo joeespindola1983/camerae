@@ -1,6 +1,8 @@
+import CameraeCore
 import SwiftUI
 
 enum ProjectCatalogAction: Hashable, Sendable {
+    case move
     case archive
     case unarchive
     case delete
@@ -8,7 +10,21 @@ enum ProjectCatalogAction: Hashable, Sendable {
 
 enum ProjectCatalogActionPolicy {
     static func actions(for project: CameraProject) -> [ProjectCatalogAction] {
-        [project.isArchived ? .unarchive : .archive, .delete]
+        let organizationActions: [ProjectCatalogAction] = project.module == .repeatable ? [.move] : []
+        return organizationActions + [project.isArchived ? .unarchive : .archive, .delete]
+    }
+}
+
+enum ProjectOrganizationAction: Hashable, Sendable {
+    case rename
+    case archive
+    case unarchive
+    case deletePreservingProjects
+}
+
+enum ProjectOrganizationActionPolicy {
+    static func actions(for node: ProjectOrganizationNode) -> [ProjectOrganizationAction] {
+        [.rename, node.isArchived ? .unarchive : .archive, .deletePreservingProjects]
     }
 }
 
@@ -98,6 +114,116 @@ struct CameraeNextProjectCatalogModel: Equatable {
     var remainingProjects: [CameraProject] { Array(visibleProjects.dropFirst()) }
 }
 
+struct CameraeNextProjectOrganizationModel: Equatable {
+    let projects: [CameraProject]
+    let module: CameraModule
+    let organization: ProjectOrganizationSnapshot
+    let filter: CameraeNextProjectCatalogFilter
+    var sort: CameraeNextProjectCatalogSort = .lastActivity
+
+    private var moduleProjects: [CameraProject] {
+        projects
+            .filter { $0.module == module }
+            .sorted(by: projectSort)
+    }
+
+    private var visibleProjects: [CameraProject] {
+        moduleProjects
+            .filter { project in
+                switch filter {
+                case .recent:
+                    !project.isArchived
+                case .withCaptures:
+                    !project.isArchived && (project.summary?.mediaCount ?? 0) > 0
+                case .archived:
+                    project.isArchived
+                }
+            }
+    }
+
+    private var visibleNodes: [ProjectOrganizationNode] {
+        organization.nodes
+            .filter { $0.module == module.coreValue }
+            .filter {
+                filter == .archived
+                    ? isEffectivelyArchived($0)
+                    : !isEffectivelyArchived($0)
+            }
+            .sorted(by: nodeSort)
+    }
+
+    var rootNodes: [ProjectOrganizationNode] {
+        visibleNodes.filter { $0.parentID == nil }
+    }
+
+    var ungroupedProjects: [CameraProject] {
+        visibleProjects.filter { organization.nodeID(for: $0.id) == nil }
+    }
+
+    func childNodes(of parentID: UUID) -> [ProjectOrganizationNode] {
+        visibleNodes.filter { $0.parentID == parentID }
+    }
+
+    func directProjects(in nodeID: UUID) -> [CameraProject] {
+        let assigned = moduleProjects.filter { organization.nodeID(for: $0.id) == nodeID }
+        guard filter == .archived,
+              let node = organization.nodes.first(where: { $0.id == nodeID }),
+              isEffectivelyArchived(node) else {
+            return assigned.filter { project in
+                switch filter {
+                case .recent:
+                    !project.isArchived
+                case .withCaptures:
+                    !project.isArchived && (project.summary?.mediaCount ?? 0) > 0
+                case .archived:
+                    project.isArchived
+                }
+            }
+        }
+        return assigned
+    }
+
+    func descendantProjects(in nodeID: UUID) -> [CameraProject] {
+        directProjects(in: nodeID) + childNodes(of: nodeID).flatMap { directProjects(in: $0.id) }
+    }
+
+    func mosaicProjects(in nodeID: UUID) -> [CameraProject] {
+        Array(descendantProjects(in: nodeID).prefix(4))
+    }
+
+    func overflowCount(in nodeID: UUID) -> Int {
+        max(0, descendantProjects(in: nodeID).count - 4)
+    }
+
+    private func projectSort(_ lhs: CameraProject, _ rhs: CameraProject) -> Bool {
+        let lhsDate: Date
+        let rhsDate: Date
+        switch sort {
+        case .lastActivity:
+            lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
+            rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
+        case .createdNewest:
+            lhsDate = lhs.createdAt
+            rhsDate = rhs.createdAt
+        }
+        return lhsDate == rhsDate ? lhs.name < rhs.name : lhsDate > rhsDate
+    }
+
+    private func nodeSort(_ lhs: ProjectOrganizationNode, _ rhs: ProjectOrganizationNode) -> Bool {
+        let lhsDate = sort == .createdNewest ? lhs.createdAt : lhs.updatedAt
+        let rhsDate = sort == .createdNewest ? rhs.createdAt : rhs.updatedAt
+        return lhsDate == rhsDate ? lhs.name < rhs.name : lhsDate > rhsDate
+    }
+
+    private func isEffectivelyArchived(_ node: ProjectOrganizationNode) -> Bool {
+        guard let parentID = node.parentID,
+              let parent = organization.nodes.first(where: { $0.id == parentID }) else {
+            return node.isArchived
+        }
+        return node.isArchived || parent.isArchived
+    }
+}
+
 enum CameraeNextTemporaryProjectPolicy {
     static func shouldAutomaticallyDiscard(hasDurableContent: Bool) -> Bool {
         !hasDurableContent
@@ -129,15 +255,34 @@ struct CameraeNextProjectCatalogView: View {
     @State private var sort = CameraeNextProjectCatalogSort.lastActivity
     @State private var isCreatingProject = false
     @State private var projectName = ""
+    @State private var isCreatingGroup = false
+    @State private var groupName = ""
     @State private var errorMessage: String?
     @State private var pendingTemporaryProject: CameraeNextPendingTemporaryProject?
     @State private var projectForStorageManagement: CameraProject?
+    @State private var projectToMove: CameraProject?
     @State private var projectToDelete: CameraProject?
+    @State private var groupToRename: ProjectOrganizationNode?
+    @State private var groupToDelete: ProjectOrganizationNode?
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
+    private var organizationModel: CameraeNextProjectOrganizationModel {
+        .init(
+            projects: projectStore.projects,
+            module: module,
+            organization: projectStore.organization,
+            filter: filter,
+            sort: sort
+        )
+    }
     private var catalog: CameraeNextProjectCatalogModel {
-        .init(projects: projectStore.projects, module: module, filter: filter, sort: sort)
+        .init(
+            projects: module == .repeatable ? organizationModel.ungroupedProjects : projectStore.projects,
+            module: module,
+            filter: filter,
+            sort: sort
+        )
     }
 
     var body: some View {
@@ -159,6 +304,12 @@ struct CameraeNextProjectCatalogView: View {
 
             ScrollView {
                 LazyVStack(spacing: 0) {
+                    if module == .repeatable {
+                        organizationSection
+                            .padding(.top, 12)
+                            .padding(.bottom, 18)
+                    }
+
                     if let featured = catalog.featuredProject {
                         ZStack(alignment: .topTrailing) {
                             NavigationLink(value: featured) {
@@ -279,12 +430,23 @@ struct CameraeNextProjectCatalogView: View {
                 }
                 .accessibilityLabel(CameraeL10n.sortProjects)
 
-                Button(action: beginCreatingProject) {
-                    Image(systemName: "plus")
+                if module == .repeatable {
+                    Menu {
+                        Button(CameraeL10n.organizationNewGroup, systemImage: "folder.badge.plus", action: beginCreatingGroup)
+                        Button(CameraeL10n.newProject, systemImage: "plus.rectangle", action: beginCreatingProject)
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel(CameraeL10n.organizationCreateGroupOrProject)
+                } else {
+                    Button(action: beginCreatingProject) {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .accessibilityLabel(CameraeL10n.newProject(theme.title))
+                    .accessibilityIdentifier(CameraeAccessibility.newProject(module))
                 }
-                .buttonStyle(.borderedProminent)
-                .accessibilityLabel(CameraeL10n.newProject(theme.title))
-                .accessibilityIdentifier(CameraeAccessibility.newProject(module))
             }
         }
         .tint(theme.accent)
@@ -296,6 +458,23 @@ struct CameraeNextProjectCatalogView: View {
                 defaultName: projectStore.defaultProjectName(for: module),
                 createAction: createProject
             )
+        }
+        .sheet(isPresented: $isCreatingGroup) {
+            CameraeNextOrganizationEditorSheet(
+                title: CameraeL10n.organizationNewGroup,
+                kind: CameraeL10n.organizationGroup,
+                name: $groupName,
+                saveTitle: CameraeL10n.create,
+                save: createGroup
+            )
+        }
+        .sheet(item: $groupToRename) { selected in
+            CameraeNextOrganizationRenameHost(node: selected, rename: renameGroup)
+        }
+        .sheet(item: $projectToMove) { project in
+            CameraeNextProjectMoveSheet(project: project, organization: projectStore.organization) { destination in
+                move(project, to: destination)
+            }
         }
         .sheet(item: $projectForStorageManagement) { project in
             CameraeNextProjectStorageView(project: project) {
@@ -317,6 +496,15 @@ struct CameraeNextProjectCatalogView: View {
         } message: {
             Text("A referência, os frames, fotos, vídeos e arquivos exportados serão removidos permanentemente.")
         }
+        .alert("Excluir “\(groupToDelete?.name ?? "")”?", isPresented: Binding(
+            get: { groupToDelete != nil },
+            set: { if !$0 { groupToDelete = nil } }
+        )) {
+            Button(CameraeL10n.organizationDelete, role: .destructive, action: deletePendingGroup)
+            Button(CameraeL10n.cancel, role: .cancel) { groupToDelete = nil }
+        } message: {
+            Text(CameraeL10n.organizationDeletePreservingMessage)
+        }
         .alert(CameraeL10n.error, isPresented: Binding(
             get: { errorMessage != nil },
             set: { if !$0 { errorMessage = nil } }
@@ -329,6 +517,107 @@ struct CameraeNextProjectCatalogView: View {
             AppOrientationLock.shared.restorePortrait()
             projectStore.reload()
             evaluatePendingTemporaryProject()
+        }
+    }
+
+    private var organizationSection: some View {
+        VStack(spacing: 10) {
+            HStack {
+                Text(
+                    filter == .archived
+                        ? CameraeL10n.organizationArchivedGroups
+                        : CameraeL10n.organizationGroups
+                )
+                    .tracking(1.6)
+                Spacer()
+                Text("\(organizationModel.rootNodes.count)")
+                    .foregroundStyle(theme.accent)
+            }
+            .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
+            .foregroundStyle(theme.muted)
+            .frame(height: 28)
+
+            if organizationModel.rootNodes.isEmpty {
+                Button(action: beginCreatingGroup) {
+                    HStack(spacing: 12) {
+                        Image(systemName: "square.grid.2x2")
+                            .font(.title2)
+                            .foregroundStyle(theme.accent)
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(
+                                filter == .archived
+                                    ? CameraeL10n.organizationNoArchivedGroups
+                                    : CameraeL10n.organizationOrganizeLocations
+                            )
+                                .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
+                                .foregroundStyle(theme.text)
+                            Text(CameraeL10n.organizationHelper)
+                                .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                                .foregroundStyle(theme.muted)
+                        }
+                        Spacer()
+                        if filter != .archived {
+                            Image(systemName: "plus.circle.fill")
+                                .foregroundStyle(theme.accent)
+                        }
+                    }
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .stroke(theme.border, lineWidth: 1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .disabled(filter == .archived)
+                .accessibilityIdentifier("organization.create.first")
+            } else {
+                ForEach(organizationModel.rootNodes) { node in
+                    ZStack(alignment: .topTrailing) {
+                        NavigationLink(value: ProjectOrganizationRoute(nodeID: node.id)) {
+                            CameraeNextProjectGroupCard(
+                                node: node,
+                                projects: organizationModel.mosaicProjects(in: node.id),
+                                childCount: organizationModel.childNodes(of: node.id).count,
+                                overflowCount: organizationModel.overflowCount(in: node.id),
+                                theme: theme
+                            )
+                        }
+                        .buttonStyle(.plain)
+
+                        Menu {
+                            organizationMenuButtons(node)
+                        } label: {
+                            Image(systemName: "ellipsis")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 32, height: 32)
+                                .background(.black.opacity(0.58), in: Circle())
+                        }
+                        .padding(12)
+                        .accessibilityLabel("Ações do grupo \(node.name)")
+                    }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func organizationMenuButtons(_ node: ProjectOrganizationNode) -> some View {
+        ForEach(ProjectOrganizationActionPolicy.actions(for: node), id: \.self) { action in
+            switch action {
+            case .rename:
+                Button(CameraeL10n.organizationRename, systemImage: "pencil") { groupToRename = node }
+            case .archive:
+                Button(CameraeL10n.archive, systemImage: "archivebox") { setGroupArchived(node, true) }
+            case .unarchive:
+                Button(CameraeL10n.unarchive, systemImage: "archivebox.fill") { setGroupArchived(node, false) }
+            case .deletePreservingProjects:
+                Button(CameraeL10n.organizationDelete, systemImage: "trash", role: .destructive) {
+                    groupToDelete = node
+                }
+            }
         }
     }
 
@@ -360,6 +649,11 @@ struct CameraeNextProjectCatalogView: View {
 
     private func projectActionsMenu(_ project: CameraProject) -> some View {
         Menu {
+            if project.module == .repeatable {
+                Button(CameraeL10n.organizationMoveToGroup, systemImage: "folder") {
+                    projectToMove = project
+                }
+            }
             Button("Gerenciar armazenamento", systemImage: "externaldrive") {
                 projectForStorageManagement = project
             }
@@ -387,6 +681,70 @@ struct CameraeNextProjectCatalogView: View {
     private func beginCreatingProject() {
         projectName = ""
         isCreatingProject = true
+    }
+
+    private func beginCreatingGroup() {
+        groupName = ""
+        isCreatingGroup = true
+    }
+
+    private func createGroup() {
+        Task {
+            do {
+                _ = try await projectStore.createOrganizationNode(
+                    module: module,
+                    parentID: nil,
+                    name: groupName
+                )
+                isCreatingGroup = false
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func renameGroup(_ node: ProjectOrganizationNode, to name: String) {
+        Task {
+            do {
+                try await projectStore.renameOrganizationNode(node, name: name)
+                groupToRename = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func setGroupArchived(_ node: ProjectOrganizationNode, _ isArchived: Bool) {
+        Task {
+            do {
+                try await projectStore.setOrganizationNodeArchived(node, isArchived: isArchived)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func move(_ project: CameraProject, to nodeID: UUID?) {
+        Task {
+            do {
+                try await projectStore.moveProject(project, toOrganizationNode: nodeID)
+                projectToMove = nil
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deletePendingGroup() {
+        guard let node = groupToDelete else { return }
+        groupToDelete = nil
+        Task {
+            do {
+                try await projectStore.deleteOrganizationNode(node)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
     }
 
     private func createProject() {

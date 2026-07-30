@@ -34,6 +34,15 @@ test distributions do not require an entry here.
 - Added atomic remapping that preserves the last usable guide, keeps saved
   guides discoverable on incompatible devices, and offers safe recovery or
   continuation without Spatial Guidance.
+- Added two-level Repeatable project organization with groups, subgroups,
+  project moves, archive controls, safe organization deletion, and
+  zero-to-four-thumbnail mosaics.
+- Added a versioned organization document that keeps existing projects
+  ungrouped by default and never rewrites project manifests or media.
+- Added paired light and dark Figma Screens for iPhone and iPad plus creation,
+  movement, action-menu, safe-delete, and empty states.
+- Added complete project-organization localization for Portuguese, Spanish,
+  English, French, German, and Russian.
 
 ### Changed
 
@@ -41,6 +50,8 @@ test distributions do not require an entry here.
 - Reconciled the canonical Spatial Guidance page with the validated
   center-and-direction flow and retained the earlier numeric pose-delta concept
   as legacy design evidence.
+- Shows Repeatable groups before ungrouped projects and subgroups before projects directly assigned to a group.
+- Extends the typed interface-capability contract so Repeatable project cards always retain Move, Archive or Unarchive, and Delete actions.
 
 ## [9.2.1] - 2026-07-29
 

@@ -348,11 +348,16 @@ struct ProjectCatalogActionsMenu: View {
     let theme: ProjectListTheme
     let setArchived: (Bool) -> Void
     let requestDelete: () -> Void
+    var requestMove: () -> Void = {}
 
     var body: some View {
         Menu {
             ForEach(ProjectCatalogActionPolicy.actions(for: project), id: \.self) { action in
                 switch action {
+                case .move:
+                    Button(action: requestMove) {
+                        Label("Mover para grupo", systemImage: "folder")
+                    }
                 case .archive:
                     Button {
                         setArchived(true)

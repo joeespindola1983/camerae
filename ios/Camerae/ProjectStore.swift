@@ -103,15 +103,18 @@ struct CameraProject: Identifiable, Equatable, Hashable {
 @MainActor
 final class ProjectStore: ObservableObject {
     @Published private(set) var projects: [CameraProject] = []
+    @Published private(set) var organization: ProjectOrganizationSnapshot = .empty
     @Published private(set) var isLoading = false
     @Published private(set) var loadError: Error?
 
     private let catalog: ProjectCatalog
+    private let organizationCatalog: ProjectOrganizationCatalog
     private var reloadTask: Task<Void, Never>?
 
     init(rootDirectory: URL? = nil) {
         let root = rootDirectory ?? FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         catalog = ProjectCatalog(rootDirectory: root)
+        organizationCatalog = ProjectOrganizationCatalog(rootDirectory: root)
         reload()
     }
 
@@ -131,8 +134,10 @@ final class ProjectStore: ObservableObject {
         defer { isLoading = false }
         do {
             let snapshot = try await catalog.load()
+            let organization = try await organizationCatalog.load(projects: snapshot.projects)
             guard !Task.isCancelled else { return }
             apply(snapshot)
+            self.organization = organization
             loadError = nil
             await enrichLegacySummaries(in: snapshot)
         } catch {
@@ -167,6 +172,43 @@ final class ProjectStore: ObservableObject {
         return CameraProject(record: record, summary: snapshot.summary(for: record.id))
     }
 
+    func createOrganizationNode(
+        module: CameraModule,
+        parentID: UUID?,
+        name: String
+    ) async throws -> ProjectOrganizationNode {
+        let node = try await organizationCatalog.createNode(
+            module: module.coreValue,
+            parentID: parentID,
+            name: name
+        )
+        try await reloadOrganization()
+        return node
+    }
+
+    func renameOrganizationNode(_ node: ProjectOrganizationNode, name: String) async throws {
+        _ = try await organizationCatalog.renameNode(node.id, name: name)
+        try await reloadOrganization()
+    }
+
+    func setOrganizationNodeArchived(
+        _ node: ProjectOrganizationNode,
+        isArchived: Bool
+    ) async throws {
+        _ = try await organizationCatalog.setArchived(node.id, isArchived: isArchived)
+        try await reloadOrganization()
+    }
+
+    func moveProject(_ project: CameraProject, toOrganizationNode nodeID: UUID?) async throws {
+        try await organizationCatalog.moveProject(project.coreRecord, to: nodeID)
+        try await reloadOrganization()
+    }
+
+    func deleteOrganizationNode(_ node: ProjectOrganizationNode) async throws {
+        try await organizationCatalog.deleteNode(node.id)
+        try await reloadOrganization()
+    }
+
     func markOpened(_ project: CameraProject) async {
         do {
             _ = try await catalog.markOpened(project.id)
@@ -183,13 +225,19 @@ final class ProjectStore: ObservableObject {
 
     func deleteProject(_ project: CameraProject) async throws {
         _ = try await catalog.deleteProject(project.id)
-        apply(try await catalog.load())
+        let snapshot = try await catalog.load()
+        apply(snapshot)
+        organization = try await organizationCatalog.load(projects: snapshot.projects)
     }
 
     private func apply(_ snapshot: ProjectCatalogSnapshot) {
         projects = snapshot.projects.map { record in
             CameraProject(record: record, summary: snapshot.summary(for: record.id))
         }
+    }
+
+    private func reloadOrganization() async throws {
+        organization = try await organizationCatalog.load(projects: projects.map(\.coreRecord))
     }
 
     private func enrichLegacySummaries(in snapshot: ProjectCatalogSnapshot) async {
