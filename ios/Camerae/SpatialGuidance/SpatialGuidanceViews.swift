@@ -1,5 +1,27 @@
 import SwiftUI
 
+private enum SpatialGuidanceAppearanceTarget: CaseIterable {
+    case mesh
+    case tripod
+    case camera
+
+    var title: String {
+        switch self {
+        case .mesh: "Malha"
+        case .tripod: "Tripé"
+        case .camera: "Câmera"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .mesh: "square.grid.3x3"
+        case .tripod: "lines.measurement.vertical"
+        case .camera: "camera.fill"
+        }
+    }
+}
+
 struct SpatialGuidanceConfigurationCard: View {
     let availability: SpatialGuidanceAvailability
     let hasReference: Bool
@@ -90,6 +112,7 @@ struct SpatialGuidanceConfigurationCard: View {
 
 struct SpatialGuidanceProjectTab: View {
     let project: CameraProject
+    let onReferenceChanged: (Bool) -> Void
 
     @State private var reference: SpatialReferenceBundle?
     @State private var mode: SpatialGuidanceFlowMode?
@@ -98,8 +121,12 @@ struct SpatialGuidanceProjectTab: View {
     private let configuration: CameraeNextCaptureConfiguration
     private let theme = CameraeNextTheme(workflow: .repeatable)
 
-    init(project: CameraProject) {
+    init(
+        project: CameraProject,
+        onReferenceChanged: @escaping (Bool) -> Void = { _ in }
+    ) {
         self.project = project
+        self.onReferenceChanged = onReferenceChanged
         let store = SpatialReferenceStore(projectDirectory: project.directoryURL)
         let summaries = TimelapseSessionStore(project: project).sessionSummaries()
         let profile = try? ProjectCaptureConfigurationStore(
@@ -149,6 +176,9 @@ struct SpatialGuidanceProjectTab: View {
         .background(theme.background.ignoresSafeArea())
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            onReferenceChanged(reference != nil)
+        }
         .fullScreenCover(item: $mode) { activeMode in
             SpatialGuidanceFlowView(
                 mode: activeMode,
@@ -156,6 +186,7 @@ struct SpatialGuidanceProjectTab: View {
                 configuration: configuration,
                 onReferenceSaved: {
                     reference = try? store.load()
+                    onReferenceChanged(reference != nil)
                 },
                 onContinueWithoutReference: {
                     mode = nil
@@ -223,6 +254,7 @@ struct SpatialGuidanceFlowView: View {
     let onDismiss: () -> Void
 
     @StateObject private var model: SpatialGuidanceSessionModel
+    @State private var appearanceTarget: SpatialGuidanceAppearanceTarget?
     private let store: SpatialReferenceStore
     private let lightTheme = CameraeNextTheme(workflow: .repeatable)
 
@@ -262,6 +294,10 @@ struct SpatialGuidanceFlowView: View {
 
             VStack(spacing: 12) {
                 topBar
+                appearanceToolbar
+                if let appearanceTarget {
+                    appearanceEditor(for: appearanceTarget)
+                }
                 Spacer(minLength: 0)
                 guidancePanel
             }
@@ -299,6 +335,96 @@ struct SpatialGuidanceFlowView: View {
             .buttonBorderShape(.circle)
             .tint(CameraeColor.captureForeground)
             .accessibilityLabel("Fechar guia espacial")
+        }
+    }
+
+    private var appearanceToolbar: some View {
+        HStack(spacing: 10) {
+            ForEach(SpatialGuidanceAppearanceTarget.allCases, id: \.self) { target in
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) {
+                        appearanceTarget = appearanceTarget == target ? nil : target
+                    }
+                } label: {
+                    Image(systemName: target.systemImage)
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(width: 38, height: 38)
+                        .background(
+                            appearanceTarget == target
+                                ? CameraeColor.captureForeground.opacity(0.24)
+                                : Color.black.opacity(0.42),
+                            in: Circle()
+                        )
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(CameraeColor.captureForeground)
+                .accessibilityLabel("Cor de \(target.title.lowercased())")
+            }
+            Spacer()
+        }
+    }
+
+    private func appearanceEditor(
+        for target: SpatialGuidanceAppearanceTarget
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(target.title.uppercased())
+                .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
+                .tracking(1.2)
+            appearanceSlider("R", target: target, component: \.red, tint: .red)
+            appearanceSlider("G", target: target, component: \.green, tint: .green)
+            appearanceSlider("B", target: target, component: \.blue, tint: .blue)
+            appearanceSlider(
+                "Transparência",
+                target: target,
+                component: \.opacity,
+                tint: CameraeColor.captureForeground
+            )
+        }
+        .foregroundStyle(CameraeColor.captureForeground)
+        .padding(12)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+        .frame(maxWidth: 340)
+    }
+
+    private func appearanceSlider(
+        _ label: String,
+        target: SpatialGuidanceAppearanceTarget,
+        component: WritableKeyPath<SpatialRGBAColor, Double>,
+        tint: Color
+    ) -> some View {
+        HStack(spacing: 10) {
+            Text(label)
+                .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
+                .frame(width: label.count > 2 ? 82 : 18, alignment: .leading)
+            Slider(
+                value: Binding(
+                    get: { appearanceColor(for: target)[keyPath: component] },
+                    set: { value in
+                        var appearance = model.appearance
+                        var color = appearanceColor(for: target)
+                        color[keyPath: component] = value
+                        switch target {
+                        case .mesh: appearance.mesh = color
+                        case .tripod: appearance.tripod = color
+                        case .camera: appearance.camera = color
+                        }
+                        model.updateAppearance(appearance)
+                    }
+                ),
+                in: 0...1
+            )
+            .tint(tint)
+        }
+    }
+
+    private func appearanceColor(
+        for target: SpatialGuidanceAppearanceTarget
+    ) -> SpatialRGBAColor {
+        switch target {
+        case .mesh: model.appearance.mesh
+        case .tripod: model.appearance.tripod
+        case .camera: model.appearance.camera
         }
     }
 

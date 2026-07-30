@@ -250,6 +250,34 @@ struct SpatialVector3: Codable, Equatable, Hashable, Sendable {
     static let zero = Self(x: 0, y: 0, z: 0)
 }
 
+struct SpatialRGBAColor: Codable, Equatable, Hashable, Sendable {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var opacity: Double
+
+    func clamped() -> Self {
+        .init(
+            red: min(max(red, 0), 1),
+            green: min(max(green, 0), 1),
+            blue: min(max(blue, 0), 1),
+            opacity: min(max(opacity, 0.05), 1)
+        )
+    }
+}
+
+struct SpatialGuidanceAppearance: Codable, Equatable, Hashable, Sendable {
+    var mesh: SpatialRGBAColor
+    var tripod: SpatialRGBAColor
+    var camera: SpatialRGBAColor
+
+    static let `default` = Self(
+        mesh: .init(red: 1, green: 0.50, blue: 0, opacity: 0.72),
+        tripod: .init(red: 1, green: 0.50, blue: 0, opacity: 0.64),
+        camera: .init(red: 0.20, green: 0.78, blue: 1, opacity: 0.90)
+    )
+}
+
 enum SpatialTripodDirection {
     static let handleDistanceMeters = 0.45
 
@@ -418,6 +446,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let tripodHeightMeters: Double?
     let tripodLegRadiusMeters: Double?
     let tripodFootPoints: [SpatialVector3]?
+    let appearance: SpatialGuidanceAppearance?
     let targetPose: SpatialPoseSample?
     let worldMapFileName: String
     let keyframeFileNames: [String]
@@ -436,6 +465,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         tripodHeightMeters: Double? = nil,
         tripodLegRadiusMeters: Double? = nil,
         tripodFootPoints: [SpatialVector3]? = nil,
+        appearance: SpatialGuidanceAppearance? = nil,
         targetPose: SpatialPoseSample? = nil,
         worldMapFileName: String,
         keyframeFileNames: [String]
@@ -453,6 +483,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.tripodHeightMeters = tripodHeightMeters
         self.tripodLegRadiusMeters = tripodLegRadiusMeters
         self.tripodFootPoints = tripodFootPoints
+        self.appearance = appearance
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames

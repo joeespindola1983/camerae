@@ -71,6 +71,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var tripodHeightMeters = SpatialStandardTripod.heightMeters
     @Published private(set) var tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
     @Published private(set) var tripodFootPoints: [SpatialVector3]?
+    @Published private(set) var appearance = SpatialGuidanceAppearance.default
 
     let sceneView: ARSCNView
 
@@ -83,6 +84,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     private var targetAnchorRestored = false
     private var sceneMeshIsFrozen = false
     private var meshAnchors: [UUID: ARMeshAnchor] = [:]
+    private var meshNodes: [UUID: SCNNode] = [:]
 
     override init() {
         sceneView = ARSCNView(frame: .zero)
@@ -114,6 +116,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         lastKeyframeAt = nil
         mappingQuality = .insufficient
         meshAnchors = [:]
+        meshNodes = [:]
         tripodBaseCenter = nil
         tripodDirectionPoint = nil
         tripodHeightMeters = SpatialStandardTripod.heightMeters
@@ -137,6 +140,14 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     func startRelocalization(reference: SpatialReferenceBundle) {
         resetRuntime()
         self.reference = reference
+        appearance = reference.manifest.appearance ?? .default
+        tripodBaseCenter = reference.manifest.tripodBaseCenter
+        tripodDirectionPoint = reference.manifest.tripodDirectionPoint
+        tripodHeightMeters = reference.manifest.tripodHeightMeters
+            ?? SpatialStandardTripod.heightMeters
+        tripodLegRadiusMeters = reference.manifest.tripodLegRadiusMeters
+            ?? SpatialStandardTripod.legRadiusMeters
+        tripodFootPoints = reference.manifest.tripodFootPoints
         do {
             try machine.send(.startRelocalization)
             phase = machine.phase
@@ -214,6 +225,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             tripodHeightMeters: tripodHeightMeters,
             tripodLegRadiusMeters: tripodLegRadiusMeters,
             tripodFootPoints: tripodFootPoints,
+            appearance: appearance,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: names
@@ -239,6 +251,30 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             .persistenceFailed,
             message: "Não foi possível salvar o guia espacial: \(error.localizedDescription)"
         )
+    }
+
+    func updateAppearance(_ appearance: SpatialGuidanceAppearance) {
+        self.appearance = SpatialGuidanceAppearance(
+            mesh: appearance.mesh.clamped(),
+            tripod: appearance.tripod.clamped(),
+            camera: appearance.camera.clamped()
+        )
+        for (id, meshAnchor) in meshAnchors {
+            meshNodes[id]?.geometry = SCNGeometry.spatialWireframe(
+                from: meshAnchor.geometry,
+                color: self.appearance.mesh
+            )
+        }
+        if let base = tripodBaseCenter {
+            var transform = matrix_identity_float4x4
+            transform.columns.3 = SIMD4<Float>(
+                Float(base.x), Float(base.y), Float(base.z), 1
+            )
+            showTripodBaseMarker(at: transform)
+        }
+        if let base = tripodBaseCenter, let direction = tripodDirectionPoint {
+            showTripodDirection(base: base, direction: direction)
+        }
     }
 
     var acceptsTripodBaseSelection: Bool {
@@ -430,7 +466,9 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         tripodHeightMeters = SpatialStandardTripod.heightMeters
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
         tripodFootPoints = nil
+        appearance = .default
         meshAnchors = [:]
+        meshNodes = [:]
         sceneView.delegate = self
         sceneView.session.delegate = self
     }
@@ -561,9 +599,10 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     }
 
     private func makeTripodBaseMarkerNode() -> SCNNode {
+        let tripodColor = UIColor(appearance.tripod)
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.78)
-        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.28)
+        material.diffuse.contents = tripodColor
+        material.emission.contents = tripodColor.withAlphaComponent(appearance.tripod.opacity * 0.42)
         material.isDoubleSided = true
         let marker = SCNNode(geometry: SCNCylinder(radius: 0.035, height: 0.006))
         marker.geometry?.materials = [material]
@@ -573,8 +612,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         marker.addChildNode(center)
 
         let laserMaterial = SCNMaterial()
-        laserMaterial.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.42)
-        laserMaterial.emission.contents = UIColor.systemOrange.withAlphaComponent(0.32)
+        laserMaterial.diffuse.contents = tripodColor.withAlphaComponent(appearance.tripod.opacity * 0.58)
+        laserMaterial.emission.contents = tripodColor.withAlphaComponent(appearance.tripod.opacity * 0.46)
         laserMaterial.writesToDepthBuffer = false
         let laserHeight: CGFloat = 1.8
         let laser = SCNNode(
@@ -585,7 +624,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         marker.addChildNode(laser)
 
         let haloMaterial = SCNMaterial()
-        let haloTexture = Self.makeBaseGuidanceTexture()
+        let haloTexture = Self.makeBaseGuidanceTexture(color: appearance.tripod)
         haloMaterial.diffuse.contents = haloTexture
         haloMaterial.emission.contents = haloTexture
         haloMaterial.isDoubleSided = true
@@ -598,13 +637,14 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         return marker
     }
 
-    private static func makeBaseGuidanceTexture() -> UIImage {
+    private static func makeBaseGuidanceTexture(color: SpatialRGBAColor) -> UIImage {
+        let uiColor = UIColor(color)
         let size = CGSize(width: 128, height: 128)
         return UIGraphicsImageRenderer(size: size).image { context in
             let colors = [
-                UIColor.systemOrange.withAlphaComponent(0.48).cgColor,
-                UIColor.systemOrange.withAlphaComponent(0.16).cgColor,
-                UIColor.systemOrange.withAlphaComponent(0).cgColor,
+                uiColor.withAlphaComponent(color.opacity * 0.72).cgColor,
+                uiColor.withAlphaComponent(color.opacity * 0.24).cgColor,
+                uiColor.withAlphaComponent(0).cgColor,
             ] as CFArray
             guard let gradient = CGGradient(
                 colorsSpace: CGColorSpaceCreateDeviceRGB(),
@@ -629,9 +669,10 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             withName: spatialGuidanceDirectionNodeName,
             recursively: true
         )?.removeFromParentNode()
+        let cameraColor = UIColor(appearance.camera)
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemOrange
-        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.35)
+        material.diffuse.contents = cameraColor
+        material.emission.contents = cameraColor.withAlphaComponent(appearance.camera.opacity * 0.4)
         let root = SCNNode()
         root.name = spatialGuidanceDirectionNodeName
         let start = SIMD3<Float>(
@@ -711,8 +752,9 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         }
 
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.64)
-        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.18)
+        let tripodColor = UIColor(appearance.tripod)
+        material.diffuse.contents = tripodColor
+        material.emission.contents = tripodColor.withAlphaComponent(appearance.tripod.opacity * 0.28)
         material.isDoubleSided = true
         material.readsFromDepthBuffer = true
         material.writesToDepthBuffer = false
@@ -753,7 +795,12 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             Float(direction.z - base.z)
         )
         let head = SCNNode(geometry: SCNBox(width: 0.12, height: 0.06, length: 0.08, chamferRadius: 0.012))
-        head.geometry?.materials = [material]
+        let cameraMaterial = SCNMaterial()
+        let cameraColor = UIColor(appearance.camera)
+        cameraMaterial.diffuse.contents = cameraColor
+        cameraMaterial.emission.contents = cameraColor.withAlphaComponent(appearance.camera.opacity * 0.32)
+        cameraMaterial.writesToDepthBuffer = false
+        head.geometry?.materials = [cameraMaterial]
         head.simdPosition = top + SIMD3<Float>(0, 0.03, 0)
         if simd_length(heading) > 0 {
             head.simdOrientation = simd_quatf(
@@ -787,9 +834,13 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
 
     private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {
         meshAnchors[anchor.identifier] = anchor
+        meshNodes[anchor.identifier] = node
         guard !sceneMeshIsFrozen else { return }
         node.name = spatialGuidanceMeshNodeName
-        node.geometry = SCNGeometry.spatialWireframe(from: anchor.geometry)
+        node.geometry = SCNGeometry.spatialWireframe(
+            from: anchor.geometry,
+            color: appearance.mesh
+        )
     }
 
     private func reconstructedMeshPoints() -> [SpatialVector3] {
@@ -933,6 +984,17 @@ private extension UIImage {
     }
 }
 
+private extension UIColor {
+    convenience init(_ color: SpatialRGBAColor) {
+        self.init(
+            red: color.red,
+            green: color.green,
+            blue: color.blue,
+            alpha: color.opacity
+        )
+    }
+}
+
 private extension ARMeshAnchor {
     func spatialWorldVertices() -> [SIMD3<Float>] {
         let source = geometry.vertices
@@ -948,7 +1010,10 @@ private extension ARMeshAnchor {
 }
 
 private extension SCNGeometry {
-    static func spatialWireframe(from mesh: ARMeshGeometry) -> SCNGeometry {
+    static func spatialWireframe(
+        from mesh: ARMeshGeometry,
+        color: SpatialRGBAColor
+    ) -> SCNGeometry {
         let vertices = SCNGeometrySource(
             buffer: mesh.vertices.buffer,
             vertexFormat: mesh.vertices.format,
@@ -977,8 +1042,9 @@ private extension SCNGeometry {
         )
         let geometry = SCNGeometry(sources: [vertices, normals], elements: [faces])
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.72)
-        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.12)
+        let uiColor = UIColor(color)
+        material.diffuse.contents = uiColor
+        material.emission.contents = uiColor.withAlphaComponent(color.opacity * 0.18)
         material.fillMode = .lines
         material.isDoubleSided = true
         material.readsFromDepthBuffer = true

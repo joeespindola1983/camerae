@@ -237,6 +237,8 @@ struct CameraeNextProjectRuntimeView: View {
     @State private var completedCapture: CameraeNextCompletedCapture?
     @State private var repeatableWorkspace = CameraeNextRepeatableProjectWorkspaceState()
     @State private var referenceRefreshID = 0
+    @State private var hasSpatialReference = false
+    @State private var projectCaptureCount = 0
 
     private var spatialGuidanceAvailability: SpatialGuidanceAvailability {
         SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
@@ -253,14 +255,18 @@ struct CameraeNextProjectRuntimeView: View {
                         theme: .init(workflow: .repeatable),
                         sections: CameraeNextProjectSection.visibleSections(
                             spatialGuidanceAvailability: spatialGuidanceAvailability
-                        )
+                        ),
+                        hasTripodReference: hasSpatialReference,
+                        captureCount: projectCaptureCount
                     )
 
                     switch repeatableWorkspace.section {
                     case .configuration:
                         workflowConfiguration(isEmbeddedInProjectWorkspace: true)
                     case .tripod:
-                        SpatialGuidanceProjectTab(project: project)
+                        SpatialGuidanceProjectTab(project: project) { hasReference in
+                            hasSpatialReference = hasReference
+                        }
                     case .captures:
                         CameraeNextSessionCatalogView(
                             project: project,
@@ -272,6 +278,9 @@ struct CameraeNextProjectRuntimeView: View {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                                     repeatableWorkspace.catalogDidReload()
                                 }
+                            },
+                            onCatalogCountChanged: { count in
+                                projectCaptureCount = count
                             }
                         )
                     }
@@ -281,6 +290,9 @@ struct CameraeNextProjectRuntimeView: View {
                 workflowConfiguration(isEmbeddedInProjectWorkspace: false)
             }
         }
+        .navigationTitle(project.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear(perform: refreshProjectTabIndicators)
         .task { await projectStore.markOpened(project) }
         .fullScreenCover(isPresented: $isPresentingCapture, onDismiss: {
             CameraeCaptureDiagnostics.event("R72 captureCover.dismissed")
@@ -389,6 +401,16 @@ struct CameraeNextProjectRuntimeView: View {
             isEmbeddedInProjectWorkspace: isEmbeddedInProjectWorkspace,
             referenceRefreshID: referenceRefreshID
         )
+    }
+
+    private func refreshProjectTabIndicators() {
+        hasSpatialReference = (try? SpatialReferenceStore(
+            projectDirectory: project.directoryURL
+        ).load()) != nil
+        projectCaptureCount = TimelapseSessionStore(project: project)
+            .sessionSummaries()
+            .filter { $0.frameCount > 0 }
+            .count
     }
 
     private func presentCompletion(module: CameraModule, session: TimelapseSession?) {

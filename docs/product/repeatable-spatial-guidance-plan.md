@@ -59,6 +59,8 @@ The first release provides:
     evenly spaced legs, and a small direction-oriented head.
 16. A subtle vertical plumb laser and radial ground halo centered on the saved
     base, visible during placement and later navigation.
+17. Independent live RGB and opacity controls for reconstructed mesh, tripod,
+    and camera/direction geometry, persisted with the spatial reference.
 
 ## First-visit flow
 
@@ -198,6 +200,7 @@ The version-one manifest records:
 - optional estimated tripod height;
 - optional estimated tripod leg radius;
 - optional detected tripod foot points;
+- optional mesh, tripod, and camera RGBA appearance;
 - optional legacy camera transform for forward decoding of existing references;
 - anchor identifiers;
 - world-map filename;

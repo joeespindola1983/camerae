@@ -17,6 +17,30 @@ struct CameraeNextSessionCatalogTests {
         )
     }
 
+    @Test func projectTabLabelsExposeTripodStatusAndCaptureCount() {
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .tripod,
+                hasTripodReference: true,
+                captureCount: 4
+            ).systemImage == "checkmark.circle.fill"
+        )
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .tripod,
+                hasTripodReference: false,
+                captureCount: 4
+            ).systemImage == "circle.dashed"
+        )
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .captures,
+                hasTripodReference: true,
+                captureCount: 4
+            ).title == "Capturas (4)"
+        )
+    }
+
     @Test func completedRepeatableCaptureReturnsToCatalogWhileFinalizingInline() {
         var state = CameraeNextRepeatableProjectWorkspaceState()
 

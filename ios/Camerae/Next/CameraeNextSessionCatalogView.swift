@@ -188,19 +188,32 @@ struct CameraeNextProjectTabs: View {
     @Binding var selection: CameraeNextProjectSection
     let theme: CameraeNextTheme
     let sections: [CameraeNextProjectSection]
+    let hasTripodReference: Bool
+    let captureCount: Int
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(sections, id: \.self) { section in
+                let presentation = CameraeNextProjectTabPresentation(
+                    section: section,
+                    hasTripodReference: hasTripodReference,
+                    captureCount: captureCount
+                )
                 Button {
                     selection = section
                 } label: {
-                    Text(section.title)
-                        .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
-                        .foregroundStyle(selection == section ? Color.white : theme.text)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(selection == section ? theme.accent : Color.clear, in: Capsule())
+                    HStack(spacing: 5) {
+                        if let systemImage = presentation.systemImage {
+                            Image(systemName: systemImage)
+                                .font(.caption)
+                        }
+                        Text(presentation.title)
+                            .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
+                    }
+                    .foregroundStyle(selection == section ? Color.white : theme.text)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(selection == section ? theme.accent : Color.clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(selection == section ? .isSelected : [])
@@ -211,6 +224,29 @@ struct CameraeNextProjectTabs: View {
         .background(theme.surface, in: Capsule())
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
+    }
+}
+
+struct CameraeNextProjectTabPresentation: Equatable, Sendable {
+    let title: String
+    let systemImage: String?
+
+    init(
+        section: CameraeNextProjectSection,
+        hasTripodReference: Bool,
+        captureCount: Int
+    ) {
+        switch section {
+        case .configuration:
+            title = section.title
+            systemImage = nil
+        case .tripod:
+            title = section.title
+            systemImage = hasTripodReference ? "checkmark.circle.fill" : "circle.dashed"
+        case .captures:
+            title = "\(section.title) (\(captureCount))"
+            systemImage = nil
+        }
     }
 }
 
@@ -276,6 +312,7 @@ struct CameraeNextSessionCatalogView: View {
     var isEmbedded = false
     var isFinalizingCapture = false
     var onCatalogLoaded: () -> Void = {}
+    var onCatalogCountChanged: (Int) -> Void = { _ in }
 
     @State private var summaries: [TimelapseSessionSummary] = []
     @State private var selectedAstroSession: TimelapseSessionSummary?
@@ -811,6 +848,7 @@ struct CameraeNextSessionCatalogView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+        onCatalogCountChanged(summaries.filter { $0.frameCount > 0 }.count)
         onCatalogLoaded()
     }
 

@@ -38,6 +38,7 @@ test distributions do not require an entry here.
 - Estimates the tripod leg opening from the nearby reconstructed radial envelope, producing more representative leg length and inclination while retaining a standard fallback.
 - Replaces broad radial leg sizing with three low-mesh foot clusters, connecting independently detected feet to the tripod hub and using conservative standard legs when evidence is incomplete.
 - Simplifies the pre-capture confirmation copy, increases ghost-tripod visibility, and adds a subtle vertical plumb laser with a radial ground halo at the selected base center.
+- Adds top camera controls for independent mesh, tripod, and camera RGB/opacity customization, persists those choices, restores the project title across tabs, and exposes Tripod status plus `Captures (n)` in the project tabs.
 
 ### Changed
 

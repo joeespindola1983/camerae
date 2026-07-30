@@ -48,6 +48,23 @@ struct SpatialGuidanceTests {
         )
     }
 
+    @Test("spatial appearance keeps independent mesh, tripod, and camera colors")
+    func appearanceDefaultsAndRoundTrip() throws {
+        var appearance = SpatialGuidanceAppearance.default
+        appearance.mesh = .init(red: 0.1, green: 0.8, blue: 0.3, opacity: 0.4)
+        appearance.tripod = .init(red: 0.9, green: 0.2, blue: 0.1, opacity: 0.7)
+        appearance.camera = .init(red: 0.2, green: 0.4, blue: 1, opacity: 0.9)
+
+        let decoded = try JSONDecoder().decode(
+            SpatialGuidanceAppearance.self,
+            from: JSONEncoder().encode(appearance)
+        )
+
+        #expect(decoded == appearance)
+        #expect(decoded.mesh != decoded.tripod)
+        #expect(decoded.tripod != decoded.camera)
+    }
+
     @Test("mapping cannot save until tracking, coverage, detail, and keyframes pass")
     func mappingQualityGate() {
         let insufficient = SpatialMappingQualityEvaluator.evaluate(
@@ -369,12 +386,14 @@ struct SpatialGuidanceTests {
         legacyManifest.removeValue(forKey: "tripodHeightMeters")
         legacyManifest.removeValue(forKey: "tripodLegRadiusMeters")
         legacyManifest.removeValue(forKey: "tripodFootPoints")
+        legacyManifest.removeValue(forKey: "appearance")
         try JSONSerialization.data(withJSONObject: legacyManifest)
             .write(to: manifestURL, options: .atomic)
         #expect(try store.load()?.manifest.tripodDirectionPoint == nil)
         #expect(try store.load()?.manifest.tripodHeightMeters == nil)
         #expect(try store.load()?.manifest.tripodLegRadiusMeters == nil)
         #expect(try store.load()?.manifest.tripodFootPoints == nil)
+        #expect(try store.load()?.manifest.appearance == nil)
 
         let future = """
         {"schemaVersion":99,"id":"00000000-0000-0000-0000-000000000000"}
@@ -423,6 +442,7 @@ struct SpatialGuidanceTests {
                 .init(x: 0.72, y: 0, z: -1.0),
                 .init(x: 0.08, y: 0, z: -1.0),
             ],
+            appearance: .default,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]
