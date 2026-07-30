@@ -9,6 +9,7 @@ private let spatialGuidanceDirectionAnchorName = "camerae.spatial.tripod-directi
 private let spatialGuidanceMeshNodeName = "camerae.spatial.mesh"
 private let spatialGuidanceBaseNodeName = "camerae.spatial.tripod-base"
 private let spatialGuidanceDirectionNodeName = "camerae.spatial.tripod-direction"
+private let spatialGuidanceStandardTripodNodeName = "camerae.spatial.standard-tripod"
 
 enum SpatialGuidanceSystemCapabilityProvider {
     static var capabilities: SpatialGuidanceDeviceCapabilities {
@@ -579,6 +580,90 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             root.addChildNode(arrow)
         }
         sceneView.scene.rootNode.addChildNode(root)
+        showStandardTripod(base: base, direction: direction)
+    }
+
+    private func showStandardTripod(base: SpatialVector3, direction: SpatialVector3) {
+        sceneView.scene.rootNode.childNode(
+            withName: spatialGuidanceStandardTripodNodeName,
+            recursively: true
+        )?.removeFromParentNode()
+        guard let feet = SpatialStandardTripod.footPoints(
+            base: base,
+            direction: direction
+        ) else {
+            return
+        }
+
+        let material = SCNMaterial()
+        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.38)
+        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.1)
+        material.isDoubleSided = true
+        material.readsFromDepthBuffer = true
+        material.writesToDepthBuffer = false
+
+        let root = SCNNode()
+        root.name = spatialGuidanceStandardTripodNodeName
+        let ground = SIMD3<Float>(Float(base.x), Float(base.y), Float(base.z))
+        let hub = ground + SIMD3<Float>(0, Float(SpatialStandardTripod.legHubHeightMeters), 0)
+        let top = ground + SIMD3<Float>(0, Float(SpatialStandardTripod.heightMeters), 0)
+
+        let column = makeTripodCylinder(
+            from: ground,
+            to: top,
+            radius: 0.018,
+            material: material
+        )
+        root.addChildNode(column)
+
+        for foot in feet {
+            let footPoint = SIMD3<Float>(Float(foot.x), Float(foot.y + 0.015), Float(foot.z))
+            root.addChildNode(
+                makeTripodCylinder(
+                    from: hub,
+                    to: footPoint,
+                    radius: 0.014,
+                    material: material
+                )
+            )
+        }
+
+        let heading = SIMD3<Float>(
+            Float(direction.x - base.x),
+            0,
+            Float(direction.z - base.z)
+        )
+        let head = SCNNode(geometry: SCNBox(width: 0.12, height: 0.06, length: 0.08, chamferRadius: 0.012))
+        head.geometry?.materials = [material]
+        head.simdPosition = top + SIMD3<Float>(0, 0.03, 0)
+        if simd_length(heading) > 0 {
+            head.simdOrientation = simd_quatf(
+                from: SIMD3<Float>(0, 0, -1),
+                to: simd_normalize(heading)
+            )
+        }
+        root.addChildNode(head)
+        sceneView.scene.rootNode.addChildNode(root)
+    }
+
+    private func makeTripodCylinder(
+        from start: SIMD3<Float>,
+        to end: SIMD3<Float>,
+        radius: CGFloat,
+        material: SCNMaterial
+    ) -> SCNNode {
+        let delta = end - start
+        let length = simd_length(delta)
+        let node = SCNNode(geometry: SCNCylinder(radius: radius, height: CGFloat(length)))
+        node.geometry?.materials = [material]
+        node.simdPosition = (start + end) / 2
+        if length > 0 {
+            node.simdOrientation = simd_quatf(
+                from: SIMD3<Float>(0, 1, 0),
+                to: simd_normalize(delta)
+            )
+        }
+        return node
     }
 
     private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {

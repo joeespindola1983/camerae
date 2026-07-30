@@ -222,6 +222,28 @@ struct SpatialGuidanceTests {
         #expect(far.y == base.y)
     }
 
+    @Test("standard tripod mesh keeps three evenly spaced legs around the saved center")
+    func standardTripodGeometry() throws {
+        let base = SpatialVector3(x: 1, y: 0.2, z: -2)
+        let direction = SpatialVector3(x: 1, y: 0.2, z: -3)
+        let feet = try #require(
+            SpatialStandardTripod.footPoints(base: base, direction: direction)
+        )
+
+        #expect(feet.count == 3)
+        for foot in feet {
+            #expect(
+                abs(
+                    hypot(foot.x - base.x, foot.z - base.z)
+                        - SpatialStandardTripod.legRadiusMeters
+                ) < 0.0001
+            )
+            #expect(foot.y == base.y)
+        }
+        #expect(feet[0].z < base.z)
+        #expect(SpatialStandardTripod.heightMeters > 1)
+    }
+
     @Test("saving a replacement archives the complete previous reference")
     func atomicStoreAndPreviousReference() throws {
         let directory = FileManager.default.temporaryDirectory

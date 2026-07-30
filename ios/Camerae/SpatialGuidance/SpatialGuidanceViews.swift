@@ -406,7 +406,7 @@ struct SpatialGuidanceFlowView: View {
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
             Text(
                 hasSelection
-                    ? "A direção inicial foi sugerida automaticamente. Arraste a ponta ou toque em qualquer parte mapeada para ajustar somente o ângulo."
+                    ? "O tripé padrão mostra tubo, pernas e orientação. Arraste a ponta ou toque em qualquer parte mapeada para ajustar o ângulo."
                     : "Calculando uma direção inicial a partir da sua posição."
             )
             .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
@@ -462,7 +462,7 @@ struct SpatialGuidanceFlowView: View {
             SpatialStatusBadgeView(label: "CENA LOCALIZADA", tone: .success)
             Text("Encontre o ponto")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Posicione o centro da base sobre o ponto laranja e oriente a câmera acompanhando a linha.")
+            Text("Sobreponha a base ao ponto e use o tripé fantasma e a seta para recuperar a orientação.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Concluir navegação", style: .primary) {

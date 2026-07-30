@@ -55,6 +55,8 @@ The first release provides:
 13. Immediate touch-and-drag selection of the tripod-base center and camera
     direction on a horizontal surface.
 14. A final JPEG scene screenshot displayed in the Tripod tab after saving.
+15. A translucent standard-tripod mesh composed from a center tube, three
+    evenly spaced legs, and a small direction-oriented head.
 
 ## First-visit flow
 
@@ -200,6 +202,7 @@ Reusable presentation is divided into:
 - `SpatialGuideCard` for project configuration;
 - `SpatialGuideFlowView` for mapping and relocalization;
 - a compact spatial center renderer.
+- a parametric standard-tripod renderer driven only by center and direction.
 
 Theme and module availability are injected. Domain and storage types must not
 contain `Repeatable` in their names.

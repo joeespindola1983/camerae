@@ -266,6 +266,30 @@ enum SpatialTripodDirection {
     }
 }
 
+enum SpatialStandardTripod {
+    static let heightMeters = 1.35
+    static let legRadiusMeters = 0.38
+    static let legHubHeightMeters = 0.72
+
+    static func footPoints(
+        base: SpatialVector3,
+        direction: SpatialVector3
+    ) -> [SpatialVector3]? {
+        let dx = direction.x - base.x
+        let dz = direction.z - base.z
+        guard hypot(dx, dz) > 0.001 else { return nil }
+        let heading = atan2(dz, dx)
+        return (0..<3).map { index in
+            let angle = heading + Double(index) * (2 * .pi / 3)
+            return SpatialVector3(
+                x: base.x + cos(angle) * legRadiusMeters,
+                y: base.y,
+                z: base.z + sin(angle) * legRadiusMeters
+            )
+        }
+    }
+}
+
 struct SpatialPoseSample: Codable, Equatable, Hashable, Sendable {
     var translationMeters: SpatialVector3
     var eulerDegrees: SpatialVector3
