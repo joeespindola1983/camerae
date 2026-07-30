@@ -361,10 +361,9 @@ struct SpatialGuidanceFlowView: View {
 
     private var mappingStartPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SpatialStatusBadgeView(label: "ARKIT PRONTO", tone: .success)
-            Text("Posicione-se para começar")
+            Text("Pronto para começar")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Confira se o tripé, o chão e os elementos fixos importantes estão visíveis. A captura só começa após sua confirmação.")
+            Text("Confira se o tripé, o chão e os elementos fixos ao redor estão visíveis.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Iniciar captura", style: .primary) {

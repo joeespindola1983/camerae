@@ -57,6 +57,8 @@ The first release provides:
 14. A final JPEG scene screenshot displayed in the Tripod tab after saving.
 15. A translucent standard-tripod mesh composed from a center tube, three
     evenly spaced legs, and a small direction-oriented head.
+16. A subtle vertical plumb laser and radial ground halo centered on the saved
+    base, visible during placement and later navigation.
 
 ## First-visit flow
 

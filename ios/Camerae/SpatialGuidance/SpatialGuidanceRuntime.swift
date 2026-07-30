@@ -562,8 +562,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
 
     private func makeTripodBaseMarkerNode() -> SCNNode {
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.62)
-        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.2)
+        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.78)
+        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.28)
         material.isDoubleSided = true
         let marker = SCNNode(geometry: SCNCylinder(radius: 0.035, height: 0.006))
         marker.geometry?.materials = [material]
@@ -571,7 +571,57 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         center.geometry?.materials = [material]
         center.position.y = 0.018
         marker.addChildNode(center)
+
+        let laserMaterial = SCNMaterial()
+        laserMaterial.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.42)
+        laserMaterial.emission.contents = UIColor.systemOrange.withAlphaComponent(0.32)
+        laserMaterial.writesToDepthBuffer = false
+        let laserHeight: CGFloat = 1.8
+        let laser = SCNNode(
+            geometry: SCNCylinder(radius: 0.0025, height: laserHeight)
+        )
+        laser.geometry?.materials = [laserMaterial]
+        laser.position.y = Float(laserHeight / 2) - 0.20
+        marker.addChildNode(laser)
+
+        let haloMaterial = SCNMaterial()
+        let haloTexture = Self.makeBaseGuidanceTexture()
+        haloMaterial.diffuse.contents = haloTexture
+        haloMaterial.emission.contents = haloTexture
+        haloMaterial.isDoubleSided = true
+        haloMaterial.writesToDepthBuffer = false
+        let halo = SCNNode(geometry: SCNPlane(width: 0.24, height: 0.24))
+        halo.geometry?.materials = [haloMaterial]
+        halo.eulerAngles.x = -.pi / 2
+        halo.position.y = 0.004
+        marker.addChildNode(halo)
         return marker
+    }
+
+    private static func makeBaseGuidanceTexture() -> UIImage {
+        let size = CGSize(width: 128, height: 128)
+        return UIGraphicsImageRenderer(size: size).image { context in
+            let colors = [
+                UIColor.systemOrange.withAlphaComponent(0.48).cgColor,
+                UIColor.systemOrange.withAlphaComponent(0.16).cgColor,
+                UIColor.systemOrange.withAlphaComponent(0).cgColor,
+            ] as CFArray
+            guard let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: colors,
+                locations: [0, 0.48, 1]
+            ) else {
+                return
+            }
+            context.cgContext.drawRadialGradient(
+                gradient,
+                startCenter: CGPoint(x: 64, y: 64),
+                startRadius: 2,
+                endCenter: CGPoint(x: 64, y: 64),
+                endRadius: 64,
+                options: []
+            )
+        }
     }
 
     private func showTripodDirection(base: SpatialVector3, direction: SpatialVector3) {
@@ -661,8 +711,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         }
 
         let material = SCNMaterial()
-        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.38)
-        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.1)
+        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.64)
+        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.18)
         material.isDoubleSided = true
         material.readsFromDepthBuffer = true
         material.writesToDepthBuffer = false

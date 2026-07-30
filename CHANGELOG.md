@@ -37,6 +37,7 @@ test distributions do not require an entry here.
 - Requires explicit confirmation after ARKit becomes ready, provides a full location reset, and scales the standard tripod from nearby reconstructed height evidence with a safe one-meter fallback.
 - Estimates the tripod leg opening from the nearby reconstructed radial envelope, producing more representative leg length and inclination while retaining a standard fallback.
 - Replaces broad radial leg sizing with three low-mesh foot clusters, connecting independently detected feet to the tripod hub and using conservative standard legs when evidence is incomplete.
+- Simplifies the pre-capture confirmation copy, increases ghost-tripod visibility, and adds a subtle vertical plumb laser with a radial ground halo at the selected base center.
 
 ### Changed
 
