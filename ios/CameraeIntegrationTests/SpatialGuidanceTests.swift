@@ -86,6 +86,12 @@ struct SpatialGuidanceTests {
         try machine.send(.mappingEvaluated(.insufficient))
         #expect(machine.phase == .insufficientCoverage)
         try machine.send(.mappingEvaluated(.ready))
+        #expect(machine.phase == .reviewingScene)
+        try machine.send(.freezeScene)
+        #expect(machine.phase == .selectingTripodBase)
+        try machine.send(.tripodBaseSelected)
+        #expect(machine.phase == .tripodBaseSelected)
+        try machine.send(.confirmTripodBase)
         #expect(machine.phase == .readyToMount)
         try machine.send(.referenceSaved)
         #expect(machine.phase == .saved)
@@ -99,6 +105,22 @@ struct SpatialGuidanceTests {
         try machine.send(.poseEvaluated(isAligned: true))
         #expect(machine.phase == .aligned)
         #expect(machine.phase.canOpenCamera)
+    }
+
+    @Test("scene review and tripod-base selection keep their required actions reachable")
+    func sceneDefinitionCapabilityContract() {
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .reviewingScene) ==
+                [.defineScene, .continueMapping, .cancel]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .selectingTripodBase) ==
+                [.selectTripodBase, .cancel]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .tripodBaseSelected) ==
+                [.adjustTripodBase, .confirmTripodBase, .cancel]
+        )
     }
 
     @Test("pose guidance reports translation and rotation separately")
@@ -214,6 +236,7 @@ struct SpatialGuidanceTests {
             cameraLens: .wide,
             cameraZoomFactor: 1,
             orientation: .portrait,
+            tripodBaseCenter: .init(x: 0.4, y: 0, z: -1.2),
             targetPose: .zero,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]

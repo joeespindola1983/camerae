@@ -127,6 +127,9 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     case idle
     case mapping
     case insufficientCoverage
+    case reviewingScene
+    case selectingTripodBase
+    case tripodBaseSelected
     case readyToMount
     case saving
     case saved
@@ -147,6 +150,9 @@ enum SpatialGuidancePhase: Equatable, Sendable {
 enum SpatialGuidanceEvent: Equatable, Sendable {
     case startMapping
     case mappingEvaluated(SpatialMappingQualityLevel)
+    case freezeScene
+    case tripodBaseSelected
+    case confirmTripodBase
     case beginSaving
     case referenceSaved
     case startRelocalization
@@ -170,9 +176,13 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
         case (.mapping, .mappingEvaluated(.insufficient)),
              (.insufficientCoverage, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.mapping, .mappingEvaluated(.ready)),
-             (.insufficientCoverage, .mappingEvaluated(.ready)): .readyToMount
-        case (.readyToMount, .mappingEvaluated(.insufficient)): .insufficientCoverage
-        case (.readyToMount, .mappingEvaluated(.ready)): .readyToMount
+             (.insufficientCoverage, .mappingEvaluated(.ready)): .reviewingScene
+        case (.reviewingScene, .mappingEvaluated(.insufficient)): .insufficientCoverage
+        case (.reviewingScene, .mappingEvaluated(.ready)): .reviewingScene
+        case (.reviewingScene, .freezeScene): .selectingTripodBase
+        case (.selectingTripodBase, .tripodBaseSelected),
+             (.tripodBaseSelected, .tripodBaseSelected): .tripodBaseSelected
+        case (.tripodBaseSelected, .confirmTripodBase): .readyToMount
         case (.readyToMount, .beginSaving): .saving
         case (.readyToMount, .referenceSaved), (.saving, .referenceSaved): .saved
         case (.idle, .startRelocalization),
@@ -276,6 +286,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let cameraLens: RepeatableCameraLens
     let cameraZoomFactor: Double
     let orientation: SpatialCaptureOrientation
+    let tripodBaseCenter: SpatialVector3?
     let targetPose: SpatialPoseSample
     let worldMapFileName: String
     let keyframeFileNames: [String]
@@ -289,6 +300,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         cameraLens: RepeatableCameraLens,
         cameraZoomFactor: Double,
         orientation: SpatialCaptureOrientation,
+        tripodBaseCenter: SpatialVector3? = nil,
         targetPose: SpatialPoseSample,
         worldMapFileName: String,
         keyframeFileNames: [String]
@@ -301,6 +313,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.cameraLens = cameraLens
         self.cameraZoomFactor = cameraZoomFactor
         self.orientation = orientation
+        self.tripodBaseCenter = tripodBaseCenter
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames
@@ -313,6 +326,9 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
     case unsupported
     case mapping
     case insufficientCoverage
+    case reviewingScene
+    case selectingTripodBase
+    case tripodBaseSelected
     case readyToMount
     case relocalizing
     case positioning
@@ -329,6 +345,11 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case continueWithoutReference
     case retryRelocalization
     case saveReference
+    case defineScene
+    case continueMapping
+    case selectTripodBase
+    case adjustTripodBase
+    case confirmTripodBase
     case openCamera
     case cancel
 }
@@ -344,6 +365,12 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
             [.continueWithoutReference]
         case .mapping, .insufficientCoverage:
             [.cancel]
+        case .reviewingScene:
+            [.defineScene, .continueMapping, .cancel]
+        case .selectingTripodBase:
+            [.selectTripodBase, .cancel]
+        case .tripodBaseSelected:
+            [.adjustTripodBase, .confirmTripodBase, .cancel]
         case .readyToMount:
             [.saveReference, .cancel]
         case .relocalizing:

@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 - Added the first Repeatable Spatial Guidance implementation for eligible LiDAR iPhones, including guided scene mapping, local AR world-map persistence, relocalization, a ghost tripod target, and explicit translation and rotation guidance before capture.
 - Added atomic spatial-reference replacement that preserves the last usable guide, plus a safe path to continue capture without the guide.
+- Added a live polygonal wireframe of reconstructed LiDAR surfaces, an explicit scene-review checkpoint, and an adjustable tripod-base center that is persisted with the camera pose.
 
 ### Changed
 

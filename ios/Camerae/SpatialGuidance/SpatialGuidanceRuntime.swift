@@ -5,6 +5,9 @@ import SwiftUI
 import UIKit
 
 private let spatialGuidanceTargetAnchorName = "camerae.spatial.target"
+private let spatialGuidanceBaseAnchorName = "camerae.spatial.tripod-base-anchor"
+private let spatialGuidanceMeshNodeName = "camerae.spatial.mesh"
+private let spatialGuidanceBaseNodeName = "camerae.spatial.tripod-base"
 
 enum SpatialGuidanceSystemCapabilityProvider {
     static var capabilities: SpatialGuidanceDeviceCapabilities {
@@ -62,6 +65,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var poseEvaluation: SpatialPoseEvaluation?
     @Published private(set) var errorMessage: String?
     @Published private(set) var isBusy = false
+    @Published private(set) var tripodBaseCenter: SpatialVector3?
 
     let sceneView: ARSCNView
 
@@ -73,6 +77,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     private var reference: SpatialReferenceBundle?
     private var targetAnchorRestored = false
     private var ghostNode: SCNNode?
+    private var sceneMeshIsFrozen = false
 
     override init() {
         sceneView = ARSCNView(frame: .zero)
@@ -120,6 +125,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         orientation: SpatialCaptureOrientation
     ) async throws -> SpatialReferenceManifest {
         guard mappingQuality.canSave,
+              let tripodBaseCenter,
               let frame = sceneView.session.currentFrame else {
             throw SpatialGuidanceRuntimeError.mappingNotReady
         }
@@ -129,6 +135,16 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         phase = machine.phase
 
         let targetTransform = frame.camera.transform
+        var baseTransform = matrix_identity_float4x4
+        baseTransform.columns.3 = SIMD4<Float>(
+            Float(tripodBaseCenter.x),
+            Float(tripodBaseCenter.y),
+            Float(tripodBaseCenter.z),
+            1
+        )
+        sceneView.session.add(
+            anchor: ARAnchor(name: spatialGuidanceBaseAnchorName, transform: baseTransform)
+        )
         sceneView.session.add(
             anchor: ARAnchor(name: spatialGuidanceTargetAnchorName, transform: targetTransform)
         )
@@ -152,6 +168,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             cameraLens: configuration.cameraLens,
             cameraZoomFactor: configuration.cameraZoomFactor,
             orientation: orientation,
+            tripodBaseCenter: tripodBaseCenter,
             targetPose: Self.poseSample(from: targetTransform),
             worldMapFileName: "world_map.bin",
             keyframeFileNames: names
@@ -177,6 +194,51 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             .persistenceFailed,
             message: "Não foi possível salvar o guia espacial: \(error.localizedDescription)"
         )
+    }
+
+    var acceptsTripodBaseSelection: Bool {
+        phase == .selectingTripodBase || phase == .tripodBaseSelected
+    }
+
+    func freezeMappedScene() {
+        guard phase == .reviewingScene else { return }
+        sceneMeshIsFrozen = true
+        try? machine.send(.freezeScene)
+        phase = machine.phase
+    }
+
+    func selectTripodBase(at point: CGPoint) {
+        guard acceptsTripodBaseSelection else {
+            return
+        }
+        let existingQuery = sceneView.raycastQuery(
+            from: point,
+            allowing: .existingPlaneGeometry,
+            alignment: .horizontal
+        )
+        let estimatedQuery = sceneView.raycastQuery(
+            from: point,
+            allowing: .estimatedPlane,
+            alignment: .horizontal
+        )
+        let result = existingQuery.flatMap { sceneView.session.raycast($0).first }
+            ?? estimatedQuery.flatMap { sceneView.session.raycast($0).first }
+        guard let result else { return }
+        let transform = result.worldTransform
+        tripodBaseCenter = SpatialVector3(
+            x: Double(transform.columns.3.x),
+            y: Double(transform.columns.3.y),
+            z: Double(transform.columns.3.z)
+        )
+        showTripodBaseMarker(at: transform)
+        try? machine.send(.tripodBaseSelected)
+        phase = machine.phase
+    }
+
+    func confirmTripodBase() {
+        guard tripodBaseCenter != nil, phase == .tripodBaseSelected else { return }
+        try? machine.send(.confirmTripodBase)
+        phase = machine.phase
     }
 
     private func makeConfiguration() -> ARWorldTrackingConfiguration {
@@ -210,6 +272,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         reference = nil
         targetAnchorRestored = false
         ghostNode = nil
+        sceneMeshIsFrozen = false
+        tripodBaseCenter = nil
         sceneView.delegate = self
         sceneView.session.delegate = self
     }
@@ -374,6 +438,39 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             }
         }
     }
+
+    private func showTripodBaseMarker(at transform: simd_float4x4) {
+        sceneView.scene.rootNode.childNode(
+            withName: spatialGuidanceBaseNodeName,
+            recursively: true
+        )?.removeFromParentNode()
+
+        let marker = makeTripodBaseMarkerNode()
+        marker.name = spatialGuidanceBaseNodeName
+        marker.simdTransform = transform
+        marker.position.y += 0.006
+        sceneView.scene.rootNode.addChildNode(marker)
+    }
+
+    private func makeTripodBaseMarkerNode() -> SCNNode {
+        let material = SCNMaterial()
+        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.62)
+        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.2)
+        material.isDoubleSided = true
+        let marker = SCNNode(geometry: SCNCylinder(radius: 0.11, height: 0.008))
+        marker.geometry?.materials = [material]
+        let center = SCNNode(geometry: SCNSphere(radius: 0.018))
+        center.geometry?.materials = [material]
+        center.position.y = 0.018
+        marker.addChildNode(center)
+        return marker
+    }
+
+    private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {
+        guard !sceneMeshIsFrozen else { return }
+        node.name = spatialGuidanceMeshNodeName
+        node.geometry = SCNGeometry.spatialWireframe(from: anchor.geometry)
+    }
 }
 
 extension SpatialGuidanceSessionModel: ARSessionDelegate {
@@ -381,7 +478,7 @@ extension SpatialGuidanceSessionModel: ARSessionDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             switch phase {
-            case .mapping, .insufficientCoverage, .readyToMount:
+            case .mapping, .insufficientCoverage, .reviewingScene:
                 updateMapping(frame: frame)
             case .relocalizing, .positioning, .aligned:
                 updateRelocalization(frame: frame)
@@ -404,9 +501,19 @@ extension SpatialGuidanceSessionModel: ARSCNViewDelegate {
         didAdd node: SCNNode,
         for anchor: ARAnchor
     ) {
-        guard anchor.name == spatialGuidanceTargetAnchorName else { return }
         Task { @MainActor [weak self] in
             guard let self else { return }
+            if let mesh = anchor as? ARMeshAnchor {
+                updateSceneMesh(node: node, anchor: mesh)
+                return
+            }
+            if anchor.name == spatialGuidanceBaseAnchorName {
+                let marker = makeTripodBaseMarkerNode()
+                marker.name = spatialGuidanceBaseNodeName
+                node.addChildNode(marker)
+                return
+            }
+            guard anchor.name == spatialGuidanceTargetAnchorName else { return }
             targetAnchorRestored = true
             ghostNode = makeGhostRigNode()
             if let ghostNode {
@@ -416,16 +523,61 @@ extension SpatialGuidanceSessionModel: ARSCNViewDelegate {
             phase = machine.phase
         }
     }
+
+    nonisolated func renderer(
+        _ renderer: SCNSceneRenderer,
+        didUpdate node: SCNNode,
+        for anchor: ARAnchor
+    ) {
+        guard let mesh = anchor as? ARMeshAnchor else { return }
+        Task { @MainActor [weak self] in
+            self?.updateSceneMesh(node: node, anchor: mesh)
+        }
+    }
 }
 
 struct SpatialGuidanceARView: UIViewRepresentable {
     let model: SpatialGuidanceSessionModel
 
     func makeUIView(context: Context) -> ARSCNView {
-        model.sceneView
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        let pan = UIPanGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handlePan(_:))
+        )
+        pan.minimumNumberOfTouches = 1
+        pan.maximumNumberOfTouches = 1
+        model.sceneView.addGestureRecognizer(tap)
+        model.sceneView.addGestureRecognizer(pan)
+        return model.sceneView
     }
 
     func updateUIView(_ uiView: ARSCNView, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(model: model)
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        private let model: SpatialGuidanceSessionModel
+
+        init(model: SpatialGuidanceSessionModel) {
+            self.model = model
+        }
+
+        @objc func handleTap(_ recognizer: UITapGestureRecognizer) {
+            model.selectTripodBase(at: recognizer.location(in: model.sceneView))
+        }
+
+        @objc func handlePan(_ recognizer: UIPanGestureRecognizer) {
+            guard recognizer.state == .began || recognizer.state == .changed else { return }
+            model.selectTripodBase(at: recognizer.location(in: model.sceneView))
+        }
+    }
 }
 
 enum SpatialGuidanceRuntimeError: Error {
@@ -465,5 +617,46 @@ private extension UIImage {
         return renderer.image { _ in
             draw(in: CGRect(origin: .zero, size: target))
         }
+    }
+}
+
+private extension SCNGeometry {
+    static func spatialWireframe(from mesh: ARMeshGeometry) -> SCNGeometry {
+        let vertices = SCNGeometrySource(
+            buffer: mesh.vertices.buffer,
+            vertexFormat: mesh.vertices.format,
+            semantic: .vertex,
+            vertexCount: mesh.vertices.count,
+            dataOffset: mesh.vertices.offset,
+            dataStride: mesh.vertices.stride
+        )
+        let normals = SCNGeometrySource(
+            buffer: mesh.normals.buffer,
+            vertexFormat: mesh.normals.format,
+            semantic: .normal,
+            vertexCount: mesh.normals.count,
+            dataOffset: mesh.normals.offset,
+            dataStride: mesh.normals.stride
+        )
+        let byteCount = mesh.faces.count
+            * mesh.faces.indexCountPerPrimitive
+            * mesh.faces.bytesPerIndex
+        let faceData = Data(bytes: mesh.faces.buffer.contents(), count: byteCount)
+        let faces = SCNGeometryElement(
+            data: faceData,
+            primitiveType: .triangles,
+            primitiveCount: mesh.faces.count,
+            bytesPerIndex: mesh.faces.bytesPerIndex
+        )
+        let geometry = SCNGeometry(sources: [vertices, normals], elements: [faces])
+        let material = SCNMaterial()
+        material.diffuse.contents = UIColor.systemOrange.withAlphaComponent(0.72)
+        material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.12)
+        material.fillMode = .lines
+        material.isDoubleSided = true
+        material.readsFromDepthBuffer = true
+        material.writesToDepthBuffer = false
+        geometry.materials = [material]
+        return geometry
     }
 }

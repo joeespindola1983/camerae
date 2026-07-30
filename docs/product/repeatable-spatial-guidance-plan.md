@@ -43,6 +43,10 @@ The first release provides:
 11. A safe path to continue capture without Spatial Guidance.
 12. A safe remap operation that retains the previous usable guide until the
     replacement is validated.
+13. A live, translucent polygonal preview of the surfaces already reconstructed
+    by LiDAR.
+14. An explicit scene-review checkpoint followed by tap-and-drag selection of
+    the tripod-base center on a horizontal surface.
 
 ## First-visit flow
 
@@ -62,10 +66,14 @@ The first release provides:
    - minimum mapped volume;
    - acceptable thermal state.
 5. The app does not enable completion until the quality contract is satisfied.
-6. The person mounts the phone in the intended capture orientation.
-7. The app records the camera target transform, device, lens, zoom, orientation,
+6. The person reviews the visible reconstructed mesh and freezes the scene.
+7. The person taps the center between the tripod legs and may drag the marker
+   over the detected floor to correct it.
+8. The person mounts the phone in the intended capture orientation.
+9. The app records the tripod-base anchor, camera target transform, device,
+   lens, zoom, orientation,
    anchors, and mapping diagnostics.
-8. The store writes a candidate bundle, validates it, and publishes it
+10. The store writes a candidate bundle, validates it, and publishes it
    atomically.
 
 ## Return flow
@@ -157,6 +165,7 @@ The version-one manifest records:
 - device model;
 - lens identifier and zoom;
 - capture orientation;
+- tripod-base center in world-map coordinates;
 - 4 × 4 target camera transform;
 - anchor identifiers;
 - world-map filename;
@@ -338,6 +347,11 @@ The evaluation branch contains:
 
 This branch is intentionally handed off locally for physical-device testing.
 It does not imply QA approval, release selection, or Astro enablement.
+
+The live-code evaluation currently advances beyond the approved Figma nodes by
+adding mesh review and tripod-base selection. Figma remains intentionally
+unchanged during this faster physical-device iteration; these states must be
+reconciled before the feature can be proposed for QA or release.
 
 ## Git and verification
 

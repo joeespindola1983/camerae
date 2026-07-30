@@ -168,6 +168,12 @@ struct SpatialGuidanceFlowView: View {
                 creationIntroduction
             case .mapping, .insufficientCoverage:
                 mappingPanel
+            case .reviewingScene:
+                sceneReviewPanel
+            case .selectingTripodBase:
+                tripodBaseSelectionPanel(hasSelection: false)
+            case .tripodBaseSelected:
+                tripodBaseSelectionPanel(hasSelection: true)
             case .readyToMount:
                 readyToMountPanel
             case .saving:
@@ -245,6 +251,46 @@ struct SpatialGuidanceFlowView: View {
                     } catch {
                         model.reportPersistenceFailure(error)
                     }
+                }
+            }
+        }
+    }
+
+    private var sceneReviewPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(label: "CENA MAPEADA", tone: .success)
+            Text("Revise os polígonos")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            Text("As linhas laranja mostram somente as superfícies que o LiDAR já reconstruiu. Continue caminhando se faltarem objetos ou chão importantes.")
+                .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+                .foregroundStyle(CameraeColor.captureForegroundMuted)
+            ProgressView(value: mappingQualityProgress)
+                .tint(.green)
+            captureAction(title: "Definir esta cena", style: .primary) {
+                model.freezeMappedScene()
+            }
+        }
+    }
+
+    private func tripodBaseSelectionPanel(hasSelection: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(
+                label: hasSelection ? "CENTRO MARCADO" : "SELECIONE A BASE",
+                tone: hasSelection ? .success : .accent
+            )
+            Text(hasSelection ? "Confira o centro" : "Toque no centro do tripé")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            Text(
+                hasSelection
+                    ? "Arraste o marcador laranja sobre o chão para corrigir. Ele deve ficar no centro entre as pernas."
+                    : "Toque no chão, no centro entre as pernas do tripé. Depois você poderá arrastar para ajustar."
+            )
+            .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+            .foregroundStyle(CameraeColor.captureForegroundMuted)
+
+            if hasSelection {
+                captureAction(title: "Confirmar centro", style: .primary) {
+                    model.confirmTripodBase()
                 }
             }
         }
@@ -378,6 +424,10 @@ struct SpatialGuidanceFlowView: View {
         if missing.contains(.detail) { return "Aproxime-se de superfícies com textura e boa luz." }
         if missing.contains(.keyframes) { return "Continue por mais alguns segundos para registrar referências." }
         return "Cobertura suficiente para salvar a pose."
+    }
+
+    private var mappingQualityProgress: Double {
+        max(0, min(model.mappingQuality.progress, 1))
     }
 
     private var currentOrientation: SpatialCaptureOrientation {
