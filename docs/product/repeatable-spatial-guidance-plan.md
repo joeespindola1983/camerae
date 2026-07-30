@@ -51,13 +51,15 @@ The first release provides:
 ## First-visit flow
 
 1. The compatible Repeatable project shows **Mapear local**.
-2. An introduction asks the person to:
+2. Selecting the action immediately starts camera and LiDAR preparation; a
+   loading state remains visible until the first AR frame arrives.
+3. Initial guidance asks the person to:
    - keep the tripod stationary;
    - walk slowly around it;
    - include the ground and distinctive static surroundings;
    - avoid people, moving vehicles, and rapid camera motion.
-3. The app starts world tracking, scene depth, and scene reconstruction.
-4. A pure quality evaluator combines:
+4. The app starts world tracking, scene depth, and scene reconstruction.
+5. A pure quality evaluator combines:
    - normal camera tracking;
    - suitable world-mapping status;
    - minimum elapsed scan time;
@@ -65,18 +67,18 @@ The first release provides:
    - detected floor;
    - minimum mapped volume;
    - acceptable thermal state.
-5. The app does not enable completion until the quality contract is satisfied.
+6. The app does not enable completion until the quality contract is satisfied.
    It exposes **Stop and review** after a smaller safety threshold is reached;
    full suggested coverage improves relocalization but is never required to map
    an arbitrarily large scene.
-6. The person reviews the visible reconstructed mesh and freezes the scene.
-7. The person taps the center between the tripod legs and may drag the marker
+7. The person reviews the visible reconstructed mesh and freezes the scene.
+8. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-8. The person mounts the phone in the intended capture orientation.
-9. The app records the tripod-base anchor, camera target transform, device,
+9. The person mounts the phone in the intended capture orientation.
+10. The app records the tripod-base anchor, camera target transform, device,
    lens, zoom, orientation,
    anchors, and mapping diagnostics.
-10. The store writes a candidate bundle, validates it, and publishes it
+11. The store writes a candidate bundle, validates it, and publishes it
    atomically.
 
 ## Return flow

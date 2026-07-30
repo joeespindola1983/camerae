@@ -87,8 +87,6 @@ struct SpatialGuidanceFlowView: View {
     let onDismiss: () -> Void
 
     @StateObject private var model: SpatialGuidanceSessionModel
-    @State private var hasStartedCreation = false
-
     private let store: SpatialReferenceStore
     private let lightTheme = CameraeNextTheme(workflow: .repeatable)
 
@@ -117,6 +115,11 @@ struct SpatialGuidanceFlowView: View {
             SpatialGuidanceARView(model: model)
                 .ignoresSafeArea()
 
+            if !model.phase.showsLiveCamera {
+                CameraeColor.captureScrim
+                    .ignoresSafeArea()
+            }
+
             CameraeColor.captureScrim.opacity(0.18)
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
@@ -130,7 +133,10 @@ struct SpatialGuidanceFlowView: View {
         }
         .preferredColorScheme(.dark)
         .task {
-            if case .relocalize(let reference) = mode {
+            switch mode {
+            case .createReference:
+                model.startMapping()
+            case .relocalize(let reference):
                 model.startRelocalization(reference: reference)
             }
         }
@@ -164,8 +170,11 @@ struct SpatialGuidanceFlowView: View {
     private var guidancePanel: some View {
         VStack(spacing: 12) {
             switch model.phase {
-            case .idle:
-                creationIntroduction
+            case .idle, .initializingMapping:
+                busyPanel(
+                    title: "Preparando câmera",
+                    detail: "Iniciando o LiDAR e reconhecendo o chão ao redor do tripé."
+                )
             case .mapping, .insufficientCoverage:
                 mappingPanel
             case .reviewingScene:
@@ -197,22 +206,6 @@ struct SpatialGuidanceFlowView: View {
                 .stroke(CameraeColor.captureHairline, lineWidth: 1)
         }
         .frame(maxWidth: 390)
-    }
-
-    private var creationIntroduction: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            SpatialStatusBadgeView(label: "PRIMEIRA VISITA", tone: .accent)
-            Text("Circule o tripé")
-                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Ande devagar como se filmasse um 360°. Mantenha o tripé parado e inclua bastante chão e objetos fixos.")
-                .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
-                .foregroundStyle(CameraeColor.captureForegroundMuted)
-            captureAction(title: "Começar mapeamento", style: .primary) {
-                hasStartedCreation = true
-                model.startMapping()
-            }
-            captureAction(title: "Agora não", style: .secondary, action: close)
-        }
     }
 
     private var mappingPanel: some View {
@@ -420,7 +413,7 @@ struct SpatialGuidanceFlowView: View {
 
     private var navigationTitle: String {
         switch mode {
-        case .createReference: hasStartedCreation ? "Mapeie a cena" : "Guia espacial"
+        case .createReference: "Mapeie a cena"
         case .relocalize: "Volte ao mesmo lugar"
         }
     }

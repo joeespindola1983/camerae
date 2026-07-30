@@ -108,6 +108,8 @@ struct SpatialGuidanceTests {
         var machine = SpatialGuidanceStateMachine()
 
         try machine.send(.startMapping)
+        #expect(machine.phase == .initializingMapping)
+        try machine.send(.mappingSessionReady)
         #expect(machine.phase == .mapping)
         try machine.send(.mappingEvaluated(.insufficient))
         #expect(machine.phase == .insufficientCoverage)
@@ -115,6 +117,7 @@ struct SpatialGuidanceTests {
         #expect(machine.phase == .selectingTripodBase)
         try machine.send(.reset)
         try machine.send(.startMapping)
+        try machine.send(.mappingSessionReady)
         try machine.send(.mappingEvaluated(.ready))
         #expect(machine.phase == .reviewingScene)
         try machine.send(.freezeScene)
@@ -135,6 +138,19 @@ struct SpatialGuidanceTests {
         try machine.send(.poseEvaluated(isAligned: true))
         #expect(machine.phase == .aligned)
         #expect(machine.phase.canOpenCamera)
+    }
+
+    @Test("mapping never presents the live-scanning state before the AR session is ready")
+    func mappingStartupState() throws {
+        var machine = SpatialGuidanceStateMachine()
+
+        try machine.send(.startMapping)
+        #expect(machine.phase == .initializingMapping)
+        #expect(!machine.phase.showsLiveCamera)
+
+        try machine.send(.mappingSessionReady)
+        #expect(machine.phase == .mapping)
+        #expect(machine.phase.showsLiveCamera)
     }
 
     @Test("scene review and tripod-base selection keep their required actions reachable")

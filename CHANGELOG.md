@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added atomic spatial-reference replacement that preserves the last usable guide, plus a safe path to continue capture without the guide.
 - Added a live polygonal wireframe of reconstructed LiDAR surfaces, an explicit scene-review checkpoint, and an adjustable tripod-base center that is persisted with the camera pose.
 - Allows people to stop and review a spatial scan after a minimum trustworthy core is captured, without requiring suggested coverage of the entire scene.
+- Starts Spatial Guidance immediately from its project action and presents an explicit camera-and-LiDAR loading state until the first AR frame arrives.
 
 ### Changed
 

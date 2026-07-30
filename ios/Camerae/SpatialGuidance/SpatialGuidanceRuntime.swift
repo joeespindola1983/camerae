@@ -484,6 +484,10 @@ extension SpatialGuidanceSessionModel: ARSessionDelegate {
         Task { @MainActor [weak self] in
             guard let self else { return }
             switch phase {
+            case .initializingMapping:
+                try? machine.send(.mappingSessionReady)
+                phase = machine.phase
+                updateMapping(frame: frame)
             case .mapping, .insufficientCoverage, .reviewingScene:
                 updateMapping(frame: frame)
             case .relocalizing, .positioning, .aligned:

@@ -137,6 +137,7 @@ enum SpatialGuidanceFailure: String, Codable, Equatable, Sendable {
 
 enum SpatialGuidancePhase: Equatable, Sendable {
     case idle
+    case initializingMapping
     case mapping
     case insufficientCoverage
     case reviewingScene
@@ -157,10 +158,22 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     var canOpenCamera: Bool {
         self == .aligned
     }
+
+    var showsLiveCamera: Bool {
+        switch self {
+        case .mapping, .insufficientCoverage, .reviewingScene,
+             .selectingTripodBase, .tripodBaseSelected, .readyToMount,
+             .relocalizing, .positioning, .aligned:
+            true
+        default:
+            false
+        }
+    }
 }
 
 enum SpatialGuidanceEvent: Equatable, Sendable {
     case startMapping
+    case mappingSessionReady
     case mappingEvaluated(SpatialMappingQualityLevel)
     case freezeScene
     case tripodBaseSelected
@@ -184,7 +197,9 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
     mutating func send(_ event: SpatialGuidanceEvent) throws {
         let next: SpatialGuidancePhase? = switch (phase, event) {
         case (_, .reset): .idle
-        case (.idle, .startMapping), (.saved, .startMapping), (.failed, .startMapping): .mapping
+        case (.idle, .startMapping), (.saved, .startMapping),
+             (.failed, .startMapping): .initializingMapping
+        case (.initializingMapping, .mappingSessionReady): .mapping
         case (.mapping, .mappingEvaluated(.insufficient)),
              (.insufficientCoverage, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.mapping, .mappingEvaluated(.ready)),
