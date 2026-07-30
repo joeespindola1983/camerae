@@ -111,38 +111,39 @@ struct SpatialGuidanceProjectTab: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
-            Group {
-                if let image = referencePreviewImage {
-                    Image(uiImage: image)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .clipped()
-                        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                        .overlay {
-                            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                                .stroke(theme.border, lineWidth: 1)
+        ScrollView {
+            VStack(spacing: 16) {
+                Group {
+                    if let image = referencePreviewImage {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(maxWidth: 320, maxHeight: 260)
+                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                                    .stroke(theme.border, lineWidth: 1)
+                            }
+                            .accessibilityLabel("Imagem de referência da posição do tripé")
+                    } else {
+                        VStack(spacing: 10) {
+                            Image(systemName: "viewfinder")
+                                .font(.system(size: 34, weight: .light))
+                            Text("Nenhuma posição de tripé salva")
+                                .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                         }
-                        .accessibilityLabel("Imagem de referência da posição do tripé")
-                } else {
-                    VStack(spacing: 10) {
-                        Image(systemName: "viewfinder")
-                            .font(.system(size: 34, weight: .light))
-                        Text("Nenhuma posição de tripé salva")
-                            .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+                        .foregroundStyle(theme.muted)
+                        .frame(height: 180)
                     }
-                    .foregroundStyle(theme.muted)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
+                .frame(maxWidth: .infinity)
+
+                tripodActions
             }
             .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-
-            tripodActions
-                .padding(.horizontal, 16)
-                .padding(.bottom, 8)
+            .padding(.vertical, 12)
         }
+        .scrollIndicators(.hidden)
         .background(theme.background.ignoresSafeArea())
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)

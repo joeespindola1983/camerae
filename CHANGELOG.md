@@ -30,6 +30,7 @@ test distributions do not require an entry here.
 - Adds an eligible-device-only **Tripod** project tab with the saved spatial screenshot, and makes the direction point immediately draggable with an arrow from the tripod center.
 - Fits the saved tripod screenshot inside the space above bottom-pinned actions, and automatically proposes a fixed-length direction handle that can be rotated from any mapped surface.
 - Fills the portrait Tripod preview with the wide reference image using aspect-preserving cropping, and shortens the direction arrow to 45 cm with a thicker 3D shaft.
+- Restores scrolling in the Tripod tab and presents the complete reference image centered within a compact bounded preview.
 
 ### Changed
 
