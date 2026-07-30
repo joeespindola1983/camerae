@@ -118,8 +118,11 @@ struct SpatialGuidanceProjectTab: View {
 
     @State private var reference: SpatialReferenceBundle?
     @State private var mode: SpatialGuidanceFlowMode?
+    @State private var showsTutorial = false
+    @State private var tutorialContinuation: SpatialGuidanceFlowMode?
 
     private let store: SpatialReferenceStore
+    private let tutorialProgressStore: CameraeTutorialProgressStore
     private let configuration: CameraeNextCaptureConfiguration
     private let theme = CameraeNextTheme(workflow: .repeatable)
 
@@ -139,6 +142,7 @@ struct SpatialGuidanceProjectTab: View {
             projectDirectory: project.directoryURL
         ).loadProfileOrMigrate(module: project.module, summaries: summaries)
         self.store = store
+        tutorialProgressStore = CameraeTutorialProgressStore()
         configuration = profile?.selectedConfiguration ?? .repeatableDefault
         _reference = State(initialValue: try? store.load())
     }
@@ -205,6 +209,13 @@ struct SpatialGuidanceProjectTab: View {
                 }
             )
         }
+        .fullScreenCover(isPresented: $showsTutorial) {
+            CameraeTutorialView(
+                tutorial: .spatialMapping,
+                onContinue: continueFromTutorial,
+                onClose: { showsTutorial = false }
+            )
+        }
     }
 
     private var tripodActions: some View {
@@ -238,6 +249,16 @@ struct SpatialGuidanceProjectTab: View {
                         style: reference == nil ? .primary : .secondary,
                         action: openGuide
                     )
+                    CameraeNextActionButton(
+                        title: "Assistir tutorial",
+                        systemImage: "play.rectangle",
+                        theme: theme,
+                        style: .secondary,
+                        action: {
+                            tutorialContinuation = nil
+                            showsTutorial = true
+                        }
+                    )
                     if reference != nil {
                         CameraeNextActionButton(
                             title: "Mapear novamente",
@@ -267,7 +288,29 @@ struct SpatialGuidanceProjectTab: View {
         if let reference {
             mode = .relocalize(reference)
         } else {
-            mode = .createReference
+            switch CameraeTutorialPresentationPolicy.route(
+                for: .firstUse,
+                tutorial: .spatialMapping,
+                progressStore: tutorialProgressStore
+            ) {
+            case .present:
+                tutorialContinuation = .createReference
+                showsTutorial = true
+            case .continueToFeature:
+                mode = .createReference
+            }
+        }
+    }
+
+    private func continueFromTutorial() {
+        tutorialProgressStore.markCompleted(.spatialMapping)
+        showsTutorial = false
+        guard let tutorialContinuation else {
+            return
+        }
+        self.tutorialContinuation = nil
+        DispatchQueue.main.async {
+            mode = tutorialContinuation
         }
     }
 }

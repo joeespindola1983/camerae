@@ -142,6 +142,14 @@ layout-independent capabilities:
 | Saved guide | Navigate scene, Map again |
 | Saved guide on an incompatible device | Keep the guide discoverable, Continue without guide |
 
+Before the first Spatial Guidance mapping, a versioned video tutorial must be
+presented. The user can continue when the video is unavailable by reading the
+fallback instructions. Completing or skipping the current content version
+must not block later mapping, and **Assistir tutorial** must remain reachable
+from the Tripod tab after completion. Tutorial media does not replace the
+operational AR readiness, capture, restart, positioning, recovery, or cancel
+capabilities below.
+
 The creation flow must keep these actions reachable:
 
 - start capture only after the first usable AR frame and explicit confirmation;
@@ -156,9 +164,11 @@ saved guide until relocalization is trustworthy. Once restored, it presents
 only the tripod, direction, camera marker, and yellow plumb guide; reconstructed
 mesh is not a navigation capability.
 
-The executable contract lives in `SpatialGuidanceTests` and
+The executable contract lives in `CameraeTutorialTests`, `SpatialGuidanceTests`, and
 `CameraeNextSessionCatalogTests`. The current Figma registry begins at
-`682:148` on `05 · Spatial Guidance`.
+`682:148` on `05 · Spatial Guidance`; its first-use tutorial screen is
+`695:158`. The reusable tutorial component is `692:104` on
+`03 · Workflow Components`.
 
 ## Change checklist
 

@@ -419,7 +419,7 @@ struct SpatialGuidanceTests {
         try store.save(
             manifest: makeManifest(id: UUID(), createdAt: .now),
             worldMapData: Data([1, 2, 3]),
-            keyframes: []
+            keyframes: [Data("compatibility-frame".utf8)]
         )
         #expect(try store.load()?.manifest.schemaVersion == SpatialReferenceManifest.currentSchemaVersion)
 

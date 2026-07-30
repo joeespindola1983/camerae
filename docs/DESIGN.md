@@ -97,6 +97,21 @@ Existing domain contracts include:
 - [`repeatable-video-alignment-validation-2026-07-29.md`](product/repeatable-video-alignment-validation-2026-07-29.md)
 - [`repeatable-spatial-guidance-plan.md`](product/repeatable-spatial-guidance-plan.md)
 
+### Video tutorials
+
+- Reusable component: `Tutorial Video` (`692:104`) on
+  `03 · Workflow Components`.
+- States: Poster, Playing, Paused, Completed, and Unavailable.
+- Editable properties: title and caption visibility. State-specific actions
+  and fallback copy remain part of the typed tutorial contract.
+- Tutorials explain a workflow before first use, but never replace operational
+  state, safety, permission, progress, or recovery feedback.
+- Completion is stored per tutorial content version. A completed tutorial is
+  skipped on later first-use entry but remains reachable from contextual help.
+- The first composed consumer is Spatial Guidance screen
+  `CURRENT 02 · First-use Video Tutorial` (`695:158`) on
+  `05 · Spatial Guidance`.
+
 ### Repeatable project organization
 
 - Reusable component: `Project Group Card` (`647:82`) on

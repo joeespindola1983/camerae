@@ -20,6 +20,9 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added a reusable, versioned video-tutorial pattern with captions, first-use
+  completion, contextual replay, and textual fallback while media is not
+  packaged; Spatial Guidance is its first consumer.
 - Added Repeatable Spatial Guidance on eligible LiDAR iPhones, with explicit
   capture start, automatic minimum-map completion, local world-map persistence,
   relocalization, and a dedicated Tripod project tab.

@@ -32,55 +32,62 @@ existing alignment system.
 The first release provides:
 
 1. Runtime eligibility on supported iPhones.
-2. A project-level **Tripod** tab that exists only when Spatial Guidance is
+2. A versioned, caption-ready video tutorial before the first mapping, with
+   textual fallback and later access from the Tripod tab.
+3. A project-level **Tripod** tab that exists only when Spatial Guidance is
    available on the current device.
-3. A guided first-visit scan around a stationary tripod and static surroundings.
-4. Explicit mapping-quality feedback followed by automatic capture completion
+4. A guided first-visit scan around a stationary tripod and static surroundings.
+5. Explicit mapping-quality feedback followed by automatic capture completion
    as soon as the minimum trustworthy contract is met.
-5. A positioning step in which the tripod-base center is selected and
+6. A positioning step in which the tripod-base center is selected and
    confirmed.
-6. A direction step initialized automatically from the operator viewpoint. Its
+7. A direction step initialized automatically from the operator viewpoint. Its
    45-centimeter handle may be rotated by touching or dragging across any mapped
    scene surface before saving.
-7. Atomic local persistence of the world map, anchors, manifest, and guide
+8. Atomic local persistence of the world map, anchors, manifest, and guide
    images.
-8. Later relocalization into the saved map.
-9. A compact center marker and arrowed direction line at the saved tripod-base
+9. Later relocalization into the saved map.
+10. A compact center marker and arrowed direction line at the saved tripod-base
    anchor.
-10. A safe path to continue capture without Spatial Guidance.
-11. A safe remap operation that retains the previous usable guide until the
+11. A safe path to continue capture without Spatial Guidance.
+12. A safe remap operation that retains the previous usable guide until the
     replacement is validated.
-12. A live, translucent polygonal preview of the surfaces already reconstructed
+13. A live, translucent polygonal preview of the surfaces already reconstructed
     by LiDAR.
-13. Immediate touch-and-drag selection of the tripod-base center and camera
+14. Immediate touch-and-drag selection of the tripod-base center and camera
     direction on a horizontal surface.
-14. A final JPEG scene screenshot displayed in the Tripod tab after saving.
-15. A translucent standard-tripod mesh composed from a center tube, three
+15. A final JPEG scene screenshot displayed in the Tripod tab after saving.
+16. A translucent standard-tripod mesh composed from a center tube, three
     evenly spaced legs, and a small direction-oriented head.
-16. A subtle vertical plumb laser and radial ground halo centered on the saved
+17. A subtle vertical plumb laser and radial ground halo centered on the saved
     base, visible during placement and later navigation.
-17. A single creation contrast toggle between white mesh with black
+18. A single creation contrast toggle between white mesh with black
     tripod/camera and black mesh with white tripod/camera.
-18. Navigation-only black/white and opacity controls for tripod and camera;
+19. Navigation-only black/white and opacity controls for tripod and camera;
     reconstructed mesh wireframes remain hidden after relocalization.
-19. A fixed, higher-visibility yellow plumb laser and ground halo independent
+20. A fixed, higher-visibility yellow plumb laser and ground halo independent
     from the selected tripod colors.
 
 ## First-visit flow
 
 1. The compatible Repeatable project shows **Mapear local**.
-2. Selecting the action immediately starts camera and LiDAR preparation; a
+2. On the first use of the current tutorial content version, selecting the
+   action presents the video explanation. Embedded captions are preferred;
+   if the packaged video is absent, concise textual instructions preserve a
+   safe path forward. Completion is versioned, and **Assistir tutorial**
+   remains available in the Tripod tab.
+3. Continuing immediately starts camera and LiDAR preparation; a
    loading state remains visible until the first AR frame arrives.
-3. Once ARKit is ready, the live camera pauses at an explicit confirmation.
+4. Once ARKit is ready, the live camera pauses at an explicit confirmation.
    **Start capture** resets tracking, anchors, metrics, and guide images before
    collection begins. **Restart location** returns to the same clean checkpoint.
-4. Initial guidance asks the person to:
+5. Initial operational guidance asks the person to:
    - keep the tripod stationary;
    - walk slowly around it;
    - include the ground and distinctive static surroundings;
    - avoid people, moving vehicles, and rapid camera motion.
-5. The app starts world tracking, scene depth, and scene reconstruction.
-6. A pure quality evaluator combines:
+6. The app starts world tracking, scene depth, and scene reconstruction.
+7. A pure quality evaluator combines:
    - normal camera tracking;
    - suitable world-mapping status;
    - minimum elapsed scan time;
@@ -88,25 +95,25 @@ The first release provides:
    - detected floor;
    - minimum mapped volume;
    - acceptable thermal state.
-7. As soon as the minimum trustworthy quality contract is satisfied, the app
+8. As soon as the minimum trustworthy quality contract is satisfied, the app
    freezes the reconstructed scene and advances automatically. Suggested
    coverage is not required, preventing an arbitrarily large scene from
    blocking the flow.
-8. The person taps the center between the tripod legs and may drag the marker
+9. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-9. The app estimates tripod height from reconstructed vertices close to the
+10. The app estimates tripod height from reconstructed vertices close to the
    confirmed base, then searches a narrow band above the floor for three
    independent solid angular clusters. Those clusters become individual feet
    connected to the central hub. If three feet are not supported, it falls back
    to a one-meter standard mesh with conservative opening.
-10. The app proposes an initial direction from the tripod toward the operator.
+11. The app proposes an initial direction from the tripod toward the operator.
    The person may touch or drag across any reconstructed surface to rotate its
    fixed 45-centimeter handle. An arrow from the center provides explicit
    orientation while its visual length remains stable.
-11. Only after center and direction are confirmed does the app enable saving.
-12. The app records the tripod-base anchor, direction anchor, estimated height, device, lens,
+12. Only after center and direction are confirmed does the app enable saving.
+13. The app records the tripod-base anchor, direction anchor, estimated height, device, lens,
    zoom, orientation, and guide images.
-13. The store writes a candidate bundle, validates it, and publishes it
+14. The store writes a candidate bundle, validates it, and publishes it
    atomically. Its final guide screenshot becomes the visual reference in the
    Tripod tab.
 
