@@ -39,6 +39,7 @@ test distributions do not require an entry here.
 - Replaces broad radial leg sizing with three low-mesh foot clusters, connecting independently detected feet to the tripod hub and using conservative standard legs when evidence is incomplete.
 - Simplifies the pre-capture confirmation copy, increases ghost-tripod visibility, and adds a subtle vertical plumb laser with a radial ground halo at the selected base center.
 - Adds visualization-only black/white and 25%/50%/100% opacity controls for mesh, tripod, and camera, persists those choices, restores the project title across tabs, and exposes Tripod status plus `Captures (n)` in the project tabs.
+- Replaces creation color editing with one black/white contrast toggle, hides reconstructed wireframes during navigation, limits navigation controls to tripod and camera, and makes the alignment laser and ground halo thicker and yellow.
 
 ### Changed
 

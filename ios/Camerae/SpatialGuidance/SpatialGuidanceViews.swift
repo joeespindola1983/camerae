@@ -294,6 +294,9 @@ struct SpatialGuidanceFlowView: View {
 
             VStack(spacing: 12) {
                 topBar
+                if showsCreationContrastToggle {
+                    creationContrastToggle
+                }
                 if showsAppearanceControls {
                     appearanceToolbar
                     if let appearanceTarget {
@@ -342,7 +345,7 @@ struct SpatialGuidanceFlowView: View {
 
     private var appearanceToolbar: some View {
         HStack(spacing: 10) {
-            ForEach(SpatialGuidanceAppearanceTarget.allCases, id: \.self) { target in
+            ForEach([SpatialGuidanceAppearanceTarget.tripod, .camera], id: \.self) { target in
                 Button {
                     withAnimation(.easeInOut(duration: 0.18)) {
                         appearanceTarget = appearanceTarget == target ? nil : target
@@ -362,6 +365,30 @@ struct SpatialGuidanceFlowView: View {
                 .foregroundStyle(CameraeColor.captureForeground)
                 .accessibilityLabel("Cor de \(target.title.lowercased())")
             }
+            Spacer()
+        }
+    }
+
+    private var showsCreationContrastToggle: Bool {
+        guard case .createReference = mode else { return false }
+        return model.phase.showsLiveCamera
+            && model.phase != .saving
+            && model.phase != .saved
+    }
+
+    private var creationContrastToggle: some View {
+        HStack {
+            Button {
+                model.toggleCreationContrast()
+            } label: {
+                Label("Alternar contraste", systemImage: "circle.lefthalf.filled")
+                    .font(.custom("Outfit-Medium", size: 12, relativeTo: .caption))
+                    .padding(.horizontal, 12)
+                    .frame(height: 38)
+                    .background(Color.black.opacity(0.46), in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(CameraeColor.captureForeground)
             Spacer()
         }
     }

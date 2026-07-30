@@ -52,7 +52,7 @@ struct SpatialGuidanceTests {
     func restrictedAppearance() {
         #expect(SpatialGuidanceAppearance.default.mesh == .white(opacity: 0.5))
         #expect(SpatialGuidanceAppearance.default.tripod == .black(opacity: 0.5))
-        #expect(SpatialGuidanceAppearance.default.camera == .white(opacity: 1))
+        #expect(SpatialGuidanceAppearance.default.camera == .black(opacity: 1))
 
         let restricted = SpatialGuidanceAppearance(
             mesh: .init(red: 0.8, green: 0.7, blue: 0.6, opacity: 0.38),
@@ -63,6 +63,21 @@ struct SpatialGuidanceTests {
         #expect(restricted.mesh == .white(opacity: 0.5))
         #expect(restricted.tripod == .black(opacity: 1))
         #expect(restricted.camera == .black(opacity: 1))
+    }
+
+    @Test("creation contrast toggles every tripod-related element against the mesh")
+    func creationContrastToggle() {
+        let lightMesh = SpatialCreationContrast.lightMesh.appearance
+        let darkMesh = SpatialCreationContrast.darkMesh.appearance
+
+        #expect(lightMesh.mesh == .white(opacity: 0.5))
+        #expect(lightMesh.tripod == .black(opacity: 0.5))
+        #expect(lightMesh.camera == .black(opacity: 1))
+        #expect(darkMesh.mesh == .black(opacity: 0.5))
+        #expect(darkMesh.tripod == .white(opacity: 0.5))
+        #expect(darkMesh.camera == .white(opacity: 1))
+        #expect(SpatialCreationContrast(appearance: lightMesh) == .lightMesh)
+        #expect(SpatialCreationContrast(appearance: darkMesh) == .darkMesh)
     }
 
     @Test("mapping cannot save until tracking, coverage, detail, and keyframes pass")

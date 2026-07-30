@@ -296,7 +296,7 @@ struct SpatialGuidanceAppearance: Codable, Equatable, Hashable, Sendable {
     static let `default` = Self(
         mesh: .white(opacity: 0.5),
         tripod: .black(opacity: 0.5),
-        camera: .white(opacity: 1)
+        camera: .black(opacity: 1)
     )
 
     var restricted: Self {
@@ -305,6 +305,36 @@ struct SpatialGuidanceAppearance: Codable, Equatable, Hashable, Sendable {
             tripod: tripod.restricted,
             camera: camera.restricted
         )
+    }
+}
+
+enum SpatialCreationContrast: Equatable, Sendable {
+    case lightMesh
+    case darkMesh
+
+    init(appearance: SpatialGuidanceAppearance) {
+        self = appearance.mesh.red >= 0.5 ? .lightMesh : .darkMesh
+    }
+
+    var appearance: SpatialGuidanceAppearance {
+        switch self {
+        case .lightMesh:
+            .init(
+                mesh: .white(opacity: 0.5),
+                tripod: .black(opacity: 0.5),
+                camera: .black(opacity: 1)
+            )
+        case .darkMesh:
+            .init(
+                mesh: .black(opacity: 0.5),
+                tripod: .white(opacity: 0.5),
+                camera: .white(opacity: 1)
+            )
+        }
+    }
+
+    var toggled: Self {
+        self == .lightMesh ? .darkMesh : .lightMesh
     }
 }
 

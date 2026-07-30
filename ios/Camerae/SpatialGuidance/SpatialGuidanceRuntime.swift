@@ -255,11 +255,13 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
 
     func updateAppearance(_ appearance: SpatialGuidanceAppearance) {
         self.appearance = appearance.restricted
-        for (id, meshAnchor) in meshAnchors {
-            meshNodes[id]?.geometry = SCNGeometry.spatialWireframe(
-                from: meshAnchor.geometry,
-                color: self.appearance.mesh
-            )
+        if reference == nil {
+            for (id, meshAnchor) in meshAnchors {
+                meshNodes[id]?.geometry = SCNGeometry.spatialWireframe(
+                    from: meshAnchor.geometry,
+                    color: self.appearance.mesh
+                )
+            }
         }
         if let base = tripodBaseCenter {
             var transform = matrix_identity_float4x4
@@ -271,6 +273,12 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         if let base = tripodBaseCenter, let direction = tripodDirectionPoint {
             showTripodDirection(base: base, direction: direction)
         }
+    }
+
+    func toggleCreationContrast() {
+        guard reference == nil else { return }
+        let mode = SpatialCreationContrast(appearance: appearance)
+        updateAppearance(mode.toggled.appearance)
     }
 
     var acceptsTripodBaseSelection: Bool {
@@ -607,20 +615,23 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         center.position.y = 0.018
         marker.addChildNode(center)
 
+        let guidanceYellow = UIColor.systemYellow
         let laserMaterial = SCNMaterial()
-        laserMaterial.diffuse.contents = tripodColor.withAlphaComponent(appearance.tripod.opacity * 0.58)
-        laserMaterial.emission.contents = tripodColor.withAlphaComponent(appearance.tripod.opacity * 0.46)
+        laserMaterial.diffuse.contents = guidanceYellow.withAlphaComponent(0.78)
+        laserMaterial.emission.contents = guidanceYellow.withAlphaComponent(0.72)
         laserMaterial.writesToDepthBuffer = false
         let laserHeight: CGFloat = 1.8
         let laser = SCNNode(
-            geometry: SCNCylinder(radius: 0.0025, height: laserHeight)
+            geometry: SCNCylinder(radius: 0.0045, height: laserHeight)
         )
         laser.geometry?.materials = [laserMaterial]
         laser.position.y = Float(laserHeight / 2) - 0.20
         marker.addChildNode(laser)
 
         let haloMaterial = SCNMaterial()
-        let haloTexture = Self.makeBaseGuidanceTexture(color: appearance.tripod)
+        let haloTexture = Self.makeBaseGuidanceTexture(
+            color: .init(red: 1, green: 0.84, blue: 0, opacity: 1)
+        )
         haloMaterial.diffuse.contents = haloTexture
         haloMaterial.emission.contents = haloTexture
         haloMaterial.isDoubleSided = true
@@ -831,6 +842,11 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {
         meshAnchors[anchor.identifier] = anchor
         meshNodes[anchor.identifier] = node
+        if reference != nil {
+            node.isHidden = true
+            node.geometry = nil
+            return
+        }
         guard !sceneMeshIsFrozen else { return }
         node.name = spatialGuidanceMeshNodeName
         node.geometry = SCNGeometry.spatialWireframe(
