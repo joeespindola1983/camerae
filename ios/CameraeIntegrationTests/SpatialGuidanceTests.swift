@@ -109,6 +109,32 @@ struct SpatialGuidanceTests {
         #expect(ready.progress == 1)
     }
 
+    @Test("the minimum trustworthy mapping threshold advances automatically")
+    func automaticMappingCompletionGate() throws {
+        var machine = SpatialGuidanceStateMachine()
+        try machine.send(.startMapping)
+        try machine.send(.mappingSessionReady)
+        try machine.send(.beginSceneCapture)
+
+        let ready = SpatialMappingQualityEvaluator.evaluate(
+            .init(
+                elapsedSeconds: 20,
+                trackingIsNormal: true,
+                mappedAreaSquareMeters: 6,
+                featurePointCount: 900,
+                keyframeCount: 4
+            )
+        )
+        try machine.send(.mappingEvaluated(ready.level))
+
+        #expect(ready.canSave)
+        #expect(machine.phase == .reviewingScene)
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: machine.phase.visualState) ==
+                [.defineScene, .continueMapping, .cancel]
+        )
+    }
+
     @Test("a minimally trustworthy map can be stopped manually before full coverage")
     func manualMappingCompletionGate() {
         let tooEarly = SpatialMappingQualityEvaluator.evaluate(
@@ -443,6 +469,14 @@ struct SpatialGuidanceTests {
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .aligned) ==
                 [.completeNavigation, .cancel]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .referenceSaved) ==
+                [.navigateScene, .reviewReference, .remapReference]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .confirmRemap) ==
+                [.remapReference, .cancel]
         )
     }
 

@@ -254,7 +254,8 @@ struct CameraeNextProjectRuntimeView: View {
                         selection: $repeatableWorkspace.section,
                         theme: .init(workflow: .repeatable),
                         sections: CameraeNextProjectSection.visibleSections(
-                            spatialGuidanceAvailability: spatialGuidanceAvailability
+                            spatialGuidanceAvailability: spatialGuidanceAvailability,
+                            hasSpatialReference: hasSpatialReference
                         ),
                         hasTripodReference: hasSpatialReference,
                         captureCount: projectCaptureCount
@@ -264,9 +265,16 @@ struct CameraeNextProjectRuntimeView: View {
                     case .configuration:
                         workflowConfiguration(isEmbeddedInProjectWorkspace: true)
                     case .tripod:
-                        SpatialGuidanceProjectTab(project: project) { hasReference in
-                            hasSpatialReference = hasReference
-                        }
+                        SpatialGuidanceProjectTab(
+                            project: project,
+                            availability: spatialGuidanceAvailability,
+                            onReferenceChanged: { hasReference in
+                                hasSpatialReference = hasReference
+                            },
+                            onContinueWithoutGuide: {
+                                repeatableWorkspace.startNewCapture()
+                            }
+                        )
                     case .captures:
                         CameraeNextSessionCatalogView(
                             project: project,

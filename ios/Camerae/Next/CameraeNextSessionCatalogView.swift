@@ -15,9 +15,10 @@ enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
     }
 
     static func visibleSections(
-        spatialGuidanceAvailability: SpatialGuidanceAvailability
+        spatialGuidanceAvailability: SpatialGuidanceAvailability,
+        hasSpatialReference: Bool
     ) -> [Self] {
-        spatialGuidanceAvailability == .available
+        spatialGuidanceAvailability == .available || hasSpatialReference
             ? [.configuration, .tripod, .captures]
             : [.configuration, .captures]
     }

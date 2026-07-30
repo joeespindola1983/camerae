@@ -246,7 +246,11 @@ Assistance`. Composed application entry points remain in `App Screens`.
 Figma must cover:
 
 - first map;
+- explicit start after the first usable AR frame;
 - active map;
+- automatic transition at the minimum trustworthy mapping threshold;
+- tripod-base center selection;
+- automatically proposed, fixed-length camera direction with a draggable handle;
 - replacement confirmation;
 - portrait mapping;
 - portrait and landscape mounted guidance;
@@ -262,7 +266,30 @@ node IDs are approved.
 ### Approved node registry
 
 - Page content wrapper: `665:2`.
-- Component catalog: `665:4444`.
+- Current specification section: `682:148`.
+- Current screen rows: `682:149`, `682:150`, and `682:151`.
+- Eligible Tripod tab without a guide: `683:144`.
+- Ready-to-start checkpoint: `684:145`.
+- Automatic mapping: `685:146`.
+- Tripod-base center selection: `686:147`.
+- Camera-direction selection: `687:148`.
+- Saved Tripod tab and reference thumbnail: `687:4600`.
+- Clean relocalization: `687:4615`.
+- Clean scene navigation without reconstructed mesh: `688:152`.
+- Navigation appearance controls: `688:4604`.
+- Safe remap confirmation: `688:4620`.
+- Relocalization recovery: `688:4632`.
+- Saved guide on an incompatible device: `688:4643`.
+
+The current screen registry is the release contract for the first Repeatable
+delivery. It specifies center-and-direction guidance without numeric pose
+deltas, automatic mapping completion, a yellow plumb guide, and
+navigation-only appearance controls.
+
+The following nodes are retained as legacy design evidence and are not the
+current release contract:
+
+- Legacy component catalog: `665:4444`.
 - `Spatial Status Badge`: `666:17`.
 - `Spatial Progress Card`: `668:26`.
 - `Pose Delta`: `669:32`.
@@ -274,9 +301,9 @@ node IDs are approved.
 - Recovery screens: `675:102`, `675:117`, and `675:132`.
 - Landscape positioning screen: `677:121`.
 
-The existing positioning nodes predate the local navigation-only iteration.
-They are not a release contract until reconciled with the compact center-point
-experience.
+The legacy positioning nodes predate the navigation-only iteration and remain
+only for historical comparison. New implementation and tests must use the
+current registry above.
 
 ## TDD plan
 

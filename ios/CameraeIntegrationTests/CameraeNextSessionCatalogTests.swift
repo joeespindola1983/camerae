@@ -8,12 +8,31 @@ struct CameraeNextSessionCatalogTests {
 
         #expect(state.section == .configuration)
         #expect(
-            CameraeNextProjectSection.visibleSections(spatialGuidanceAvailability: .available)
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .available,
+                hasSpatialReference: false
+            )
                 .map(\.title) == ["Configurar", "Tripé", "Capturas"]
         )
         #expect(
-            CameraeNextProjectSection.visibleSections(spatialGuidanceAvailability: .hardwareUnavailable)
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: false
+            )
                 .map(\.title) == ["Configurar", "Capturas"]
+        )
+    }
+
+    @Test func savedSpatialGuideRemainsDiscoverableOnAnIncompatibleDevice() {
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: true
+            ).map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .incompatibleReference) ==
+                [.remapReference, .continueWithoutReference]
         )
     }
 

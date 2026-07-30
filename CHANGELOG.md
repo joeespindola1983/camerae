@@ -20,30 +20,27 @@ test distributions do not require an entry here.
 
 ### Added
 
-- Added the first Repeatable Spatial Guidance implementation for eligible LiDAR iPhones, including guided scene mapping, local AR world-map persistence, relocalization, a ghost tripod target, and explicit translation and rotation guidance before capture.
-- Added atomic spatial-reference replacement that preserves the last usable guide, plus a safe path to continue capture without the guide.
-- Added a live polygonal wireframe of reconstructed LiDAR surfaces, an explicit scene-review checkpoint, and an adjustable tripod-base center that is persisted with the camera pose.
-- Allows people to stop and review a spatial scan after a minimum trustworthy core is captured, without requiring suggested coverage of the entire scene.
-- Starts Spatial Guidance immediately from its project action and presents an explicit camera-and-LiDAR loading state until the first AR frame arrives.
-- Separates spatial scene navigation from camera alignment: saved projects expose **Navigate scene**, relocalization displays only a compact tripod-center point, and normal camera opening no longer enters spatial guidance automatically.
-- Automatically ends spatial capture when the minimum trustworthy map is ready, then requires the tripod-base center and a second point in front of it to save a reusable camera-direction line.
-- Adds an eligible-device-only **Tripod** project tab with the saved spatial screenshot, and makes the direction point immediately draggable with an arrow from the tripod center.
-- Fits the saved tripod screenshot inside the space above bottom-pinned actions, and automatically proposes a fixed-length direction handle that can be rotated from any mapped surface.
-- Fills the portrait Tripod preview with the wide reference image using aspect-preserving cropping, and shortens the direction arrow to 45 cm with a thicker 3D shaft.
-- Restores scrolling in the Tripod tab and presents the complete reference image centered within a compact bounded preview.
-- Uses aspect fill inside the compact, scrollable Tripod preview so the image fills its bounded frame without distortion.
-- Enlarges the Tripod reference preview by 1.75× and hides the reconstructed LiDAR mesh from the final saved screenshot while retaining the position and direction markers.
-- Renders a translucent standard tripod from the confirmed center and direction, with a central tube, three legs, and an oriented head during setup and later scene navigation.
-- Requires explicit confirmation after ARKit becomes ready, provides a full location reset, and scales the standard tripod from nearby reconstructed height evidence with a safe one-meter fallback.
-- Estimates the tripod leg opening from the nearby reconstructed radial envelope, producing more representative leg length and inclination while retaining a standard fallback.
-- Replaces broad radial leg sizing with three low-mesh foot clusters, connecting independently detected feet to the tripod hub and using conservative standard legs when evidence is incomplete.
-- Simplifies the pre-capture confirmation copy, increases ghost-tripod visibility, and adds a subtle vertical plumb laser with a radial ground halo at the selected base center.
-- Adds visualization-only black/white and 25%/50%/100% opacity controls for mesh, tripod, and camera, persists those choices, restores the project title across tabs, and exposes Tripod status plus `Captures (n)` in the project tabs.
-- Replaces creation color editing with one black/white contrast toggle, hides reconstructed wireframes during navigation, limits navigation controls to tripod and camera, and makes the alignment laser and ground halo thicker and yellow.
+- Added Repeatable Spatial Guidance on eligible LiDAR iPhones, with explicit
+  capture start, automatic minimum-map completion, local world-map persistence,
+  relocalization, and a dedicated Tripod project tab.
+- Added draggable tripod-base and fixed 45-centimeter camera-direction controls,
+  plus an estimated ghost tripod derived from mapped height and three nearby
+  foot clusters with conservative fallbacks.
+- Added a yellow plumb laser and ground halo, a clean reference screenshot, and
+  navigation that restores the tripod and direction without rebuilding the
+  captured wireframe.
+- Added one black/white creation-contrast toggle and navigation-only black/white
+  plus 25%/50%/100% appearance controls for tripod and camera.
+- Added atomic remapping that preserves the last usable guide, keeps saved
+  guides discoverable on incompatible devices, and offers safe recovery or
+  continuation without Spatial Guidance.
 
 ### Changed
 
 - Organized the canonical Figma file into stable design-system, workflow, domain, application, and website pages, and documented the corresponding design governance and Spatial Guidance handoff.
+- Reconciled the canonical Spatial Guidance page with the validated
+  center-and-direction flow and retained the earlier numeric pose-delta concept
+  as legacy design evidence.
 
 ## [9.2.1] - 2026-07-29
 

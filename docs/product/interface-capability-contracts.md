@@ -89,6 +89,40 @@ and `projectCaptureKind`. The corresponding Figma components are
 `Camera Setup State`; the corresponding light and dark Screens are `09A` and
 `09C`.
 
+## Repeatable Spatial Guidance
+
+Spatial Guidance is available only when the typed runtime policy accepts the
+module, world tracking, classified scene reconstruction, scene depth,
+performance budget, and thermal state. Layout must never be used to infer
+eligibility.
+
+An eligible Repeatable project must expose a Tripod tab with these
+layout-independent capabilities:
+
+| Project state | Required actions |
+| --- | --- |
+| No saved guide | Map location |
+| Saved guide | Navigate scene, Map again |
+| Saved guide on an incompatible device | Keep the guide discoverable, Continue without guide |
+
+The creation flow must keep these actions reachable:
+
+- start capture only after the first usable AR frame and explicit confirmation;
+- restart the location from a clean tracking state;
+- select and adjust the tripod-base center;
+- accept the proposed camera direction or drag its fixed-length handle;
+- save only after both points are confirmed;
+- cancel without replacing a previously usable guide.
+
+The return flow must keep cancellation and recovery reachable while hiding the
+saved guide until relocalization is trustworthy. Once restored, it presents
+only the tripod, direction, camera marker, and yellow plumb guide; reconstructed
+mesh is not a navigation capability.
+
+The executable contract lives in `SpatialGuidanceTests` and
+`CameraeNextSessionCatalogTests`. The current Figma registry begins at
+`682:148` on `05 · Spatial Guidance`.
+
 ## Change checklist
 
 For every composed-screen change:

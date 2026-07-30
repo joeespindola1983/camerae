@@ -112,7 +112,9 @@ struct SpatialGuidanceConfigurationCard: View {
 
 struct SpatialGuidanceProjectTab: View {
     let project: CameraProject
+    let availability: SpatialGuidanceAvailability
     let onReferenceChanged: (Bool) -> Void
+    let onContinueWithoutGuide: () -> Void
 
     @State private var reference: SpatialReferenceBundle?
     @State private var mode: SpatialGuidanceFlowMode?
@@ -123,10 +125,14 @@ struct SpatialGuidanceProjectTab: View {
 
     init(
         project: CameraProject,
-        onReferenceChanged: @escaping (Bool) -> Void = { _ in }
+        availability: SpatialGuidanceAvailability,
+        onReferenceChanged: @escaping (Bool) -> Void = { _ in },
+        onContinueWithoutGuide: @escaping () -> Void = {}
     ) {
         self.project = project
+        self.availability = availability
         self.onReferenceChanged = onReferenceChanged
+        self.onContinueWithoutGuide = onContinueWithoutGuide
         let store = SpatialReferenceStore(projectDirectory: project.directoryURL)
         let summaries = TimelapseSessionStore(project: project).sessionSummaries()
         let profile = try? ProjectCaptureConfigurationStore(
@@ -208,27 +214,49 @@ struct SpatialGuidanceProjectTab: View {
                     .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
                     .tracking(1.2)
                     .foregroundStyle(theme.accent)
-                Text(reference == nil ? "Mapeamento espacial" : "Tripé de referência")
+                Text(tripodTitle)
                     .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
                     .foregroundStyle(theme.text)
-                CameraeNextActionButton(
-                    title: reference == nil ? "Criar mapa espacial" : "Navegar cena",
-                    systemImage: nil,
-                    theme: theme,
-                    style: reference == nil ? .primary : .secondary,
-                    action: openGuide
-                )
-                if reference != nil {
+                if reference != nil, availability != .available {
+                    Text(
+                        "A referência continua salva. Use um iPhone compatível ou prossiga sem o guia."
+                    )
+                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                    .foregroundStyle(theme.muted)
                     CameraeNextActionButton(
-                        title: "Mapear novamente",
+                        title: "Continuar sem guia",
                         systemImage: nil,
                         theme: theme,
                         style: .secondary,
-                        action: { mode = .createReference }
+                        action: onContinueWithoutGuide
                     )
+                } else {
+                    CameraeNextActionButton(
+                        title: reference == nil ? "Mapear local" : "Navegar cena",
+                        systemImage: nil,
+                        theme: theme,
+                        style: reference == nil ? .primary : .secondary,
+                        action: openGuide
+                    )
+                    if reference != nil {
+                        CameraeNextActionButton(
+                            title: "Mapear novamente",
+                            systemImage: nil,
+                            theme: theme,
+                            style: .secondary,
+                            action: { mode = .createReference }
+                        )
+                    }
                 }
             }
         }
+    }
+
+    private var tripodTitle: String {
+        if reference != nil, availability != .available {
+            return "Este iPhone não pode usar o guia"
+        }
+        return reference == nil ? "Mapeamento espacial" : "Tripé de referência"
     }
 
     private var referencePreviewImage: UIImage? {

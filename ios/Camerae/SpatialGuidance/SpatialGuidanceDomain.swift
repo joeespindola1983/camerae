@@ -173,6 +173,43 @@ enum SpatialGuidancePhase: Equatable, Sendable {
             false
         }
     }
+
+    var visualState: SpatialGuidanceVisualState {
+        switch self {
+        case .idle, .initializingMapping:
+            .noReference
+        case .readyToStartMapping:
+            .readyToStartMapping
+        case .mapping:
+            .mapping
+        case .insufficientCoverage:
+            .insufficientCoverage
+        case .reviewingScene:
+            .reviewingScene
+        case .selectingTripodBase:
+            .selectingTripodBase
+        case .tripodBaseSelected:
+            .tripodBaseSelected
+        case .selectingTripodDirection:
+            .selectingTripodDirection
+        case .tripodDirectionSelected:
+            .tripodDirectionSelected
+        case .readyToMount, .saving:
+            .readyToMount
+        case .saved:
+            .referenceSaved
+        case .relocalizing:
+            .relocalizing
+        case .positioning:
+            .positioning
+        case .aligned:
+            .aligned
+        case .failed(.incompatibleReference):
+            .incompatibleReference
+        case .failed:
+            .relocalizationFailed
+        }
+    }
 }
 
 enum SpatialGuidanceEvent: Equatable, Sendable {
