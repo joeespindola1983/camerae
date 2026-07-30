@@ -117,8 +117,10 @@ struct SpatialGuidanceProjectTab: View {
                     if let image = referencePreviewImage {
                         Image(uiImage: image)
                             .resizable()
-                            .scaledToFit()
-                            .frame(maxWidth: 320, maxHeight: 260)
+                            .scaledToFill()
+                            .frame(maxWidth: 320)
+                            .frame(height: 220)
+                            .clipped()
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 20, style: .continuous)
