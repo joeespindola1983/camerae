@@ -248,7 +248,7 @@ struct SpatialVector3: Codable, Equatable, Hashable, Sendable {
 }
 
 enum SpatialTripodDirection {
-    static let handleDistanceMeters = 1.0
+    static let handleDistanceMeters = 0.45
 
     static func point(
         base: SpatialVector3,

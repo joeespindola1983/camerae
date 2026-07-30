@@ -515,48 +515,59 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             withName: spatialGuidanceDirectionNodeName,
             recursively: true
         )?.removeFromParentNode()
-        let vertices = [
-            SCNVector3(base.x, base.y + 0.012, base.z),
-            SCNVector3(direction.x, direction.y + 0.012, direction.z)
-        ]
-        let source = SCNGeometrySource(vertices: vertices)
-        let element = SCNGeometryElement(
-            indices: [UInt16(0), UInt16(1)],
-            primitiveType: .line
-        )
-        let geometry = SCNGeometry(sources: [source], elements: [element])
         let material = SCNMaterial()
         material.diffuse.contents = UIColor.systemOrange
         material.emission.contents = UIColor.systemOrange.withAlphaComponent(0.35)
-        geometry.materials = [material]
-        let line = SCNNode(geometry: geometry)
-        line.name = spatialGuidanceDirectionNodeName
-        let endpoint = SCNNode(geometry: SCNSphere(radius: 0.012))
-        endpoint.geometry?.materials = [material]
-        endpoint.position = vertices[1]
-        line.addChildNode(endpoint)
+        let root = SCNNode()
+        root.name = spatialGuidanceDirectionNodeName
+        let start = SIMD3<Float>(
+            Float(base.x),
+            Float(base.y + 0.012),
+            Float(base.z)
+        )
+        let end = SIMD3<Float>(
+            Float(direction.x),
+            Float(direction.y + 0.012),
+            Float(direction.z)
+        )
         let delta = SIMD3<Float>(
             Float(direction.x - base.x),
             0,
             Float(direction.z - base.z)
         )
         if simd_length(delta) > 0 {
+            let unit = simd_normalize(delta)
+            let arrowLength: Float = 0.08
+            let shaftEnd = end - unit * arrowLength
+            let shaftDelta = shaftEnd - start
+            let shaftLength = simd_length(shaftDelta)
+            let shaft = SCNNode(
+                geometry: SCNCylinder(radius: 0.008, height: CGFloat(shaftLength))
+            )
+            shaft.geometry?.materials = [material]
+            shaft.simdPosition = (start + shaftEnd) / 2
+            shaft.simdOrientation = simd_quatf(
+                from: SIMD3<Float>(0, 1, 0),
+                to: simd_normalize(shaftDelta)
+            )
+            root.addChildNode(shaft)
+
             let arrow = SCNNode(
-                geometry: SCNCone(topRadius: 0, bottomRadius: 0.025, height: 0.07)
+                geometry: SCNCone(
+                    topRadius: 0,
+                    bottomRadius: 0.03,
+                    height: CGFloat(arrowLength)
+                )
             )
             arrow.geometry?.materials = [material]
-            arrow.simdPosition = SIMD3<Float>(
-                Float(direction.x),
-                Float(direction.y + 0.012),
-                Float(direction.z)
-            )
+            arrow.simdPosition = end - unit * (arrowLength / 2)
             arrow.simdOrientation = simd_quatf(
                 from: SIMD3<Float>(0, 1, 0),
-                to: simd_normalize(delta)
+                to: unit
             )
-            line.addChildNode(arrow)
+            root.addChildNode(arrow)
         }
-        sceneView.scene.rootNode.addChildNode(line)
+        sceneView.scene.rootNode.addChildNode(root)
     }
 
     private func updateSceneMesh(node: SCNNode, anchor: ARMeshAnchor) {

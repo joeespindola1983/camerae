@@ -40,7 +40,7 @@ The first release provides:
 5. A positioning step in which the tripod-base center is selected and
    confirmed.
 6. A direction step initialized automatically from the operator viewpoint. Its
-   one-meter handle may be rotated by touching or dragging across any mapped
+   45-centimeter handle may be rotated by touching or dragging across any mapped
    scene surface before saving.
 7. Atomic local persistence of the world map, anchors, manifest, and guide
    images.
@@ -83,7 +83,7 @@ The first release provides:
    over the detected floor to correct it.
 8. The app proposes an initial direction from the tripod toward the operator.
    The person may touch or drag across any reconstructed surface to rotate its
-   fixed one-meter handle. An arrow from the center provides explicit
+   fixed 45-centimeter handle. An arrow from the center provides explicit
    orientation while its visual length remains stable.
 9. Only after center and direction are confirmed does the app enable saving.
 10. The app records the tripod-base anchor, direction anchor, device, lens,

@@ -205,8 +205,19 @@ struct SpatialGuidanceTests {
             SpatialTripodDirection.point(base: base, toward: .init(x: 22, y: -5, z: -1))
         )
 
-        #expect(abs(hypot(near.x - base.x, near.z - base.z) - 1) < 0.0001)
-        #expect(abs(hypot(far.x - base.x, far.z - base.z) - 1) < 0.0001)
+        #expect(
+            abs(
+                hypot(near.x - base.x, near.z - base.z)
+                    - SpatialTripodDirection.handleDistanceMeters
+            ) < 0.0001
+        )
+        #expect(
+            abs(
+                hypot(far.x - base.x, far.z - base.z)
+                    - SpatialTripodDirection.handleDistanceMeters
+            ) < 0.0001
+        )
+        #expect(SpatialTripodDirection.handleDistanceMeters == 0.45)
         #expect(near.y == base.y)
         #expect(far.y == base.y)
     }
