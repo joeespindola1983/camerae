@@ -276,7 +276,8 @@ enum SpatialStandardTripod {
 
     static func footPoints(
         base: SpatialVector3,
-        direction: SpatialVector3
+        direction: SpatialVector3,
+        legRadius: Double = legRadiusMeters
     ) -> [SpatialVector3]? {
         let dx = direction.x - base.x
         let dz = direction.z - base.z
@@ -285,9 +286,9 @@ enum SpatialStandardTripod {
         return (0..<3).map { index in
             let angle = heading + Double(index) * (2 * .pi / 3)
             return SpatialVector3(
-                x: base.x + cos(angle) * legRadiusMeters,
+                x: base.x + cos(angle) * legRadius,
                 y: base.y,
-                z: base.z + sin(angle) * legRadiusMeters
+                z: base.z + sin(angle) * legRadius
             )
         }
     }
@@ -319,6 +320,39 @@ enum SpatialTripodHeightEstimator {
     }
 }
 
+enum SpatialTripodShapeEstimator {
+    static let minimumLegRadiusMeters = 0.20
+    static let maximumLegRadiusMeters = 0.58
+    static let minimumSampleCount = 12
+
+    static func estimateLegRadius(
+        base: SpatialVector3,
+        tripodHeight: Double,
+        points: [SpatialVector3]
+    ) -> Double? {
+        let radialSamples = points.compactMap { point -> Double? in
+            let height = point.y - base.y
+            let radius = hypot(point.x - base.x, point.z - base.z)
+            guard height >= 0.04,
+                  height <= tripodHeight * 0.78,
+                  radius >= 0.08,
+                  radius <= maximumLegRadiusMeters + 0.12 else {
+                return nil
+            }
+            return radius
+        }.sorted()
+        guard radialSamples.count >= minimumSampleCount else { return nil }
+        let percentileIndex = min(
+            radialSamples.count - 1,
+            Int((Double(radialSamples.count - 1) * 0.90).rounded())
+        )
+        return min(
+            max(radialSamples[percentileIndex], minimumLegRadiusMeters),
+            maximumLegRadiusMeters
+        )
+    }
+}
+
 struct SpatialPoseSample: Codable, Equatable, Hashable, Sendable {
     var translationMeters: SpatialVector3
     var eulerDegrees: SpatialVector3
@@ -347,6 +381,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
     let tripodBaseCenter: SpatialVector3?
     let tripodDirectionPoint: SpatialVector3?
     let tripodHeightMeters: Double?
+    let tripodLegRadiusMeters: Double?
     let targetPose: SpatialPoseSample?
     let worldMapFileName: String
     let keyframeFileNames: [String]
@@ -363,6 +398,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         tripodBaseCenter: SpatialVector3? = nil,
         tripodDirectionPoint: SpatialVector3? = nil,
         tripodHeightMeters: Double? = nil,
+        tripodLegRadiusMeters: Double? = nil,
         targetPose: SpatialPoseSample? = nil,
         worldMapFileName: String,
         keyframeFileNames: [String]
@@ -378,6 +414,7 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.tripodBaseCenter = tripodBaseCenter
         self.tripodDirectionPoint = tripodDirectionPoint
         self.tripodHeightMeters = tripodHeightMeters
+        self.tripodLegRadiusMeters = tripodLegRadiusMeters
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames

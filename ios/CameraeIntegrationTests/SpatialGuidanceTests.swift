@@ -275,6 +275,40 @@ struct SpatialGuidanceTests {
         #expect(SpatialTripodHeightEstimator.estimate(base: base, points: distantWall) == nil)
     }
 
+    @Test("tripod opening estimates a plausible radial envelope above the floor")
+    func reconstructedTripodOpening() throws {
+        let base = SpatialVector3(x: 0, y: 0, z: 0)
+        let legSamples = (0..<30).map { index in
+            let progress = Double(index) / 29
+            return SpatialVector3(
+                x: 0.12 + progress * 0.30,
+                y: 0.62 - progress * 0.55,
+                z: 0.02
+            )
+        }
+        let floorNoise = (0..<30).map { index in
+            SpatialVector3(x: Double(index) * 0.02, y: 0.005, z: 0.3)
+        }
+
+        let radius = try #require(
+            SpatialTripodShapeEstimator.estimateLegRadius(
+                base: base,
+                tripodHeight: 1.1,
+                points: legSamples + floorNoise
+            )
+        )
+
+        #expect(radius > 0.35)
+        #expect(radius < 0.5)
+        #expect(
+            SpatialTripodShapeEstimator.estimateLegRadius(
+                base: base,
+                tripodHeight: 1.1,
+                points: floorNoise
+            ) == nil
+        )
+    }
+
     @Test("saving a replacement archives the complete previous reference")
     func atomicStoreAndPreviousReference() throws {
         let directory = FileManager.default.temporaryDirectory
@@ -329,10 +363,12 @@ struct SpatialGuidanceTests {
         )
         legacyManifest.removeValue(forKey: "tripodDirectionPoint")
         legacyManifest.removeValue(forKey: "tripodHeightMeters")
+        legacyManifest.removeValue(forKey: "tripodLegRadiusMeters")
         try JSONSerialization.data(withJSONObject: legacyManifest)
             .write(to: manifestURL, options: .atomic)
         #expect(try store.load()?.manifest.tripodDirectionPoint == nil)
         #expect(try store.load()?.manifest.tripodHeightMeters == nil)
+        #expect(try store.load()?.manifest.tripodLegRadiusMeters == nil)
 
         let future = """
         {"schemaVersion":99,"id":"00000000-0000-0000-0000-000000000000"}
@@ -375,6 +411,7 @@ struct SpatialGuidanceTests {
             tripodBaseCenter: .init(x: 0.4, y: 0, z: -1.2),
             tripodDirectionPoint: .init(x: 0.4, y: 0, z: -2.2),
             tripodHeightMeters: 1.18,
+            tripodLegRadiusMeters: 0.41,
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]
