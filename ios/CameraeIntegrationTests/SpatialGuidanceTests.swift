@@ -195,6 +195,22 @@ struct SpatialGuidanceTests {
         }
     }
 
+    @Test("direction handle keeps one fixed radius anywhere the scene is touched")
+    func fixedDirectionHandleRadius() throws {
+        let base = SpatialVector3(x: 2, y: 0.4, z: -1)
+        let near = try #require(
+            SpatialTripodDirection.point(base: base, toward: .init(x: 2.2, y: 8, z: -1))
+        )
+        let far = try #require(
+            SpatialTripodDirection.point(base: base, toward: .init(x: 22, y: -5, z: -1))
+        )
+
+        #expect(abs(hypot(near.x - base.x, near.z - base.z) - 1) < 0.0001)
+        #expect(abs(hypot(far.x - base.x, far.z - base.z) - 1) < 0.0001)
+        #expect(near.y == base.y)
+        #expect(far.y == base.y)
+    }
+
     @Test("saving a replacement archives the complete previous reference")
     func atomicStoreAndPreviousReference() throws {
         let directory = FileManager.default.temporaryDirectory

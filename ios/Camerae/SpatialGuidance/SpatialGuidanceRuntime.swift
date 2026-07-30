@@ -253,22 +253,51 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
 
     func selectTripodDirection(at point: CGPoint) {
         guard acceptsTripodDirectionSelection,
-              let base = tripodBaseCenter,
-              let result = horizontalRaycast(at: point) else {
+              let candidate = sceneDirectionCandidate(at: point) else {
             return
         }
-        let candidate = SpatialVector3(
-            x: Double(result.worldTransform.columns.3.x),
-            y: base.y,
-            z: Double(result.worldTransform.columns.3.z)
-        )
-        guard hypot(candidate.x - base.x, candidate.z - base.z) >= 0.25 else {
+        setTripodDirection(toward: candidate)
+    }
+
+    private func setTripodDirection(toward candidate: SpatialVector3) {
+        guard let base = tripodBaseCenter,
+              let direction = SpatialTripodDirection.point(base: base, toward: candidate) else {
             return
         }
-        tripodDirectionPoint = candidate
-        showTripodDirection(base: base, direction: candidate)
+        tripodDirectionPoint = direction
+        showTripodDirection(base: base, direction: direction)
         try? machine.send(.tripodDirectionSelected)
         phase = machine.phase
+    }
+
+    private func sceneDirectionCandidate(at point: CGPoint) -> SpatialVector3? {
+        let meshHit = sceneView.hitTest(
+            point,
+            options: [
+                .searchMode: SCNHitTestSearchMode.all.rawValue,
+                .ignoreHiddenNodes: true
+            ]
+        ).first { result in
+            var node: SCNNode? = result.node
+            while let current = node {
+                if current.name == spatialGuidanceMeshNodeName { return true }
+                node = current.parent
+            }
+            return false
+        }
+        if let meshHit {
+            return SpatialVector3(
+                x: Double(meshHit.worldCoordinates.x),
+                y: Double(meshHit.worldCoordinates.y),
+                z: Double(meshHit.worldCoordinates.z)
+            )
+        }
+        guard let result = horizontalRaycast(at: point) else { return nil }
+        return SpatialVector3(
+            x: Double(result.worldTransform.columns.3.x),
+            y: Double(result.worldTransform.columns.3.y),
+            z: Double(result.worldTransform.columns.3.z)
+        )
     }
 
     private func horizontalRaycast(at point: CGPoint) -> ARRaycastResult? {
@@ -288,9 +317,27 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     }
 
     func confirmTripodBase() {
-        guard tripodBaseCenter != nil, phase == .tripodBaseSelected else { return }
+        guard let base = tripodBaseCenter, phase == .tripodBaseSelected else { return }
         try? machine.send(.confirmTripodBase)
         phase = machine.phase
+        if let cameraTransform = sceneView.session.currentFrame?.camera.transform {
+            let cameraPosition = SpatialVector3(
+                x: Double(cameraTransform.columns.3.x),
+                y: base.y,
+                z: Double(cameraTransform.columns.3.z)
+            )
+            if SpatialTripodDirection.point(base: base, toward: cameraPosition) != nil {
+                setTripodDirection(toward: cameraPosition)
+                return
+            }
+            setTripodDirection(
+                toward: SpatialVector3(
+                    x: base.x + Double(cameraTransform.columns.2.x),
+                    y: base.y,
+                    z: base.z + Double(cameraTransform.columns.2.z)
+                )
+            )
+        }
     }
 
     func confirmTripodDirection() {

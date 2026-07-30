@@ -28,6 +28,7 @@ test distributions do not require an entry here.
 - Separates spatial scene navigation from camera alignment: saved projects expose **Navigate scene**, relocalization displays only a compact tripod-center point, and normal camera opening no longer enters spatial guidance automatically.
 - Automatically ends spatial capture when the minimum trustworthy map is ready, then requires the tripod-base center and a second point in front of it to save a reusable camera-direction line.
 - Adds an eligible-device-only **Tripod** project tab with the saved spatial screenshot, and makes the direction point immediately draggable with an arrow from the tripod center.
+- Fits the saved tripod screenshot inside the space above bottom-pinned actions, and automatically proposes a fixed-length direction handle that can be rotated from any mapped surface.
 
 ### Changed
 

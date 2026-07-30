@@ -247,6 +247,25 @@ struct SpatialVector3: Codable, Equatable, Hashable, Sendable {
     static let zero = Self(x: 0, y: 0, z: 0)
 }
 
+enum SpatialTripodDirection {
+    static let handleDistanceMeters = 1.0
+
+    static func point(
+        base: SpatialVector3,
+        toward candidate: SpatialVector3
+    ) -> SpatialVector3? {
+        let dx = candidate.x - base.x
+        let dz = candidate.z - base.z
+        let distance = hypot(dx, dz)
+        guard distance > 0.001 else { return nil }
+        return SpatialVector3(
+            x: base.x + (dx / distance) * handleDistanceMeters,
+            y: base.y,
+            z: base.z + (dz / distance) * handleDistanceMeters
+        )
+    }
+}
+
 struct SpatialPoseSample: Codable, Equatable, Hashable, Sendable {
     var translationMeters: SpatialVector3
     var eulerDegrees: SpatialVector3

@@ -39,8 +39,9 @@ The first release provides:
    as soon as the minimum trustworthy contract is met.
 5. A positioning step in which the tripod-base center is selected and
    confirmed.
-6. A direction step in which a second horizontal point, at least 25 cm in front
-   of the base, is selected and confirmed before saving.
+6. A direction step initialized automatically from the operator viewpoint. Its
+   one-meter handle may be rotated by touching or dragging across any mapped
+   scene surface before saving.
 7. Atomic local persistence of the world map, anchors, manifest, and guide
    images.
 8. Later relocalization into the saved map.
@@ -80,10 +81,10 @@ The first release provides:
    blocking the flow.
 7. The person taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-8. The person taps a second point on the floor in front of the tripod and may
-   drag it immediately, without lifting the finger, to define the intended
-   camera direction. The direction point must be at least 25 cm from the center,
-   and an arrow from the center provides explicit orientation.
+8. The app proposes an initial direction from the tripod toward the operator.
+   The person may touch or drag across any reconstructed surface to rotate its
+   fixed one-meter handle. An arrow from the center provides explicit
+   orientation while its visual length remains stable.
 9. Only after center and direction are confirmed does the app enable saving.
 10. The app records the tripod-base anchor, direction anchor, device, lens,
    zoom, orientation, and guide images.

@@ -111,33 +111,37 @@ struct SpatialGuidanceProjectTab: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 12) {
+        VStack(spacing: 12) {
+            Group {
                 if let image = referencePreviewImage {
                     Image(uiImage: image)
                         .resizable()
-                        .scaledToFill()
-                        .frame(maxWidth: .infinity)
-                        .aspectRatio(16 / 10, contentMode: .fit)
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
                         .overlay {
                             RoundedRectangle(cornerRadius: 24, style: .continuous)
                                 .stroke(theme.border, lineWidth: 1)
                         }
                         .accessibilityLabel("Imagem de referência da posição do tripé")
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: "viewfinder")
+                            .font(.system(size: 34, weight: .light))
+                        Text("Nenhuma posição de tripé salva")
+                            .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+                    }
+                    .foregroundStyle(theme.muted)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-
-                SpatialGuidanceConfigurationCard(
-                    availability: .available,
-                    hasReference: reference != nil,
-                    action: openGuide,
-                    remapAction: { mode = .createReference }
-                )
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)
+
+            tripodActions
+                .padding(.horizontal, 16)
+                .padding(.bottom, 8)
         }
-        .scrollIndicators(.hidden)
         .background(theme.background.ignoresSafeArea())
         .navigationTitle(project.name)
         .navigationBarTitleDisplayMode(.inline)
@@ -159,6 +163,36 @@ struct SpatialGuidanceProjectTab: View {
                     mode = nil
                 }
             )
+        }
+    }
+
+    private var tripodActions: some View {
+        CameraeNextCard(theme: theme) {
+            VStack(alignment: .leading, spacing: 10) {
+                Text(reference == nil ? "NÃO CONFIGURADO" : "POSIÇÃO SALVA")
+                    .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
+                    .tracking(1.2)
+                    .foregroundStyle(theme.accent)
+                Text(reference == nil ? "Mapeamento espacial" : "Tripé de referência")
+                    .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+                    .foregroundStyle(theme.text)
+                CameraeNextActionButton(
+                    title: reference == nil ? "Criar mapa espacial" : "Navegar cena",
+                    systemImage: nil,
+                    theme: theme,
+                    style: reference == nil ? .primary : .secondary,
+                    action: openGuide
+                )
+                if reference != nil {
+                    CameraeNextActionButton(
+                        title: "Mapear novamente",
+                        systemImage: nil,
+                        theme: theme,
+                        style: .secondary,
+                        action: { mode = .createReference }
+                    )
+                }
+            }
         }
     }
 
@@ -368,8 +402,8 @@ struct SpatialGuidanceFlowView: View {
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
             Text(
                 hasSelection
-                    ? "Arraste a ponta da linha para ajustar a direção em que a câmera ficará apontada."
-                    : "Toque no chão à frente da base, na direção da câmera. O ponto deve ficar a pelo menos 25 cm do centro."
+                    ? "A direção inicial foi sugerida automaticamente. Arraste a ponta ou toque em qualquer parte mapeada para ajustar somente o ângulo."
+                    : "Calculando uma direção inicial a partir da sua posição."
             )
             .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
             .foregroundStyle(CameraeColor.captureForegroundMuted)
