@@ -294,9 +294,11 @@ struct SpatialGuidanceFlowView: View {
 
             VStack(spacing: 12) {
                 topBar
-                appearanceToolbar
-                if let appearanceTarget {
-                    appearanceEditor(for: appearanceTarget)
+                if showsAppearanceControls {
+                    appearanceToolbar
+                    if let appearanceTarget {
+                        appearanceEditor(for: appearanceTarget)
+                    }
                 }
                 Spacer(minLength: 0)
                 guidancePanel
@@ -364,6 +366,11 @@ struct SpatialGuidanceFlowView: View {
         }
     }
 
+    private var showsAppearanceControls: Bool {
+        guard case .relocalize = mode else { return false }
+        return model.phase == .positioning || model.phase == .aligned
+    }
+
     private func appearanceEditor(
         for target: SpatialGuidanceAppearanceTarget
     ) -> some View {
@@ -371,15 +378,19 @@ struct SpatialGuidanceFlowView: View {
             Text(target.title.uppercased())
                 .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
                 .tracking(1.2)
-            appearanceSlider("R", target: target, component: \.red, tint: .red)
-            appearanceSlider("G", target: target, component: \.green, tint: .green)
-            appearanceSlider("B", target: target, component: \.blue, tint: .blue)
-            appearanceSlider(
-                "Transparência",
-                target: target,
-                component: \.opacity,
-                tint: CameraeColor.captureForeground
-            )
+            HStack(spacing: 10) {
+                Text("Cor")
+                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                appearanceColorButton(target: target, isWhite: true)
+                appearanceColorButton(target: target, isWhite: false)
+            }
+            HStack(spacing: 10) {
+                Text("Opacidade")
+                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                ForEach([0.25, 0.5, 1.0], id: \.self) { opacity in
+                    appearanceOpacityButton(target: target, opacity: opacity)
+                }
+            }
         }
         .foregroundStyle(CameraeColor.captureForeground)
         .padding(12)
@@ -387,35 +398,100 @@ struct SpatialGuidanceFlowView: View {
         .frame(maxWidth: 340)
     }
 
-    private func appearanceSlider(
-        _ label: String,
+    private func appearanceColorButton(
         target: SpatialGuidanceAppearanceTarget,
-        component: WritableKeyPath<SpatialRGBAColor, Double>,
-        tint: Color
+        isWhite: Bool
     ) -> some View {
-        HStack(spacing: 10) {
-            Text(label)
-                .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
-                .frame(width: label.count > 2 ? 82 : 18, alignment: .leading)
-            Slider(
-                value: Binding(
-                    get: { appearanceColor(for: target)[keyPath: component] },
-                    set: { value in
-                        var appearance = model.appearance
-                        var color = appearanceColor(for: target)
-                        color[keyPath: component] = value
-                        switch target {
-                        case .mesh: appearance.mesh = color
-                        case .tripod: appearance.tripod = color
-                        case .camera: appearance.camera = color
-                        }
-                        model.updateAppearance(appearance)
-                    }
-                ),
-                in: 0...1
-            )
-            .tint(tint)
+        let current = appearanceColor(for: target)
+        let isSelected = isWhite ? current.red == 1 : current.red == 0
+        return Button {
+            setAppearanceColor(target: target, isWhite: isWhite)
+        } label: {
+            Circle()
+                .fill(isWhite ? Color.white : Color.black)
+                .frame(width: 28, height: 28)
+                .overlay {
+                    Circle().stroke(
+                        isSelected ? CameraeColor.captureForeground : Color.gray,
+                        lineWidth: isSelected ? 3 : 1
+                    )
+                }
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(isWhite ? "Branco" : "Preto")
+    }
+
+    private func appearanceOpacityButton(
+        target: SpatialGuidanceAppearanceTarget,
+        opacity: Double
+    ) -> some View {
+        let current = appearanceColor(for: target)
+        let selected = current.opacity == opacity
+        let color = Color(
+            red: current.red,
+            green: current.green,
+            blue: current.blue
+        )
+        return Button {
+            setAppearanceOpacity(target: target, opacity: opacity)
+        } label: {
+            VStack(spacing: 2) {
+                Circle()
+                    .fill(color.opacity(opacity))
+                    .frame(width: 25, height: 25)
+                    .overlay {
+                        Circle().stroke(
+                            selected ? CameraeColor.captureForeground : Color.gray,
+                            lineWidth: selected ? 3 : 1
+                        )
+                    }
+                Text("\(Int(opacity * 100))%")
+                    .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Opacidade \(Int(opacity * 100)) por cento")
+    }
+
+    private func setAppearanceColor(
+        target: SpatialGuidanceAppearanceTarget,
+        isWhite: Bool
+    ) {
+        var appearance = model.appearance
+        let opacity = appearanceColor(for: target).opacity
+        let color: SpatialRGBAColor = isWhite
+            ? .white(opacity: opacity)
+            : .black(opacity: opacity)
+        setAppearanceColor(color, target: target, appearance: &appearance)
+        applyAppearance(appearance)
+    }
+
+    private func setAppearanceOpacity(
+        target: SpatialGuidanceAppearanceTarget,
+        opacity: Double
+    ) {
+        var appearance = model.appearance
+        var color = appearanceColor(for: target)
+        color.opacity = opacity
+        setAppearanceColor(color, target: target, appearance: &appearance)
+        applyAppearance(appearance)
+    }
+
+    private func setAppearanceColor(
+        _ color: SpatialRGBAColor,
+        target: SpatialGuidanceAppearanceTarget,
+        appearance: inout SpatialGuidanceAppearance
+    ) {
+        switch target {
+        case .mesh: appearance.mesh = color
+        case .tripod: appearance.tripod = color
+        case .camera: appearance.camera = color
+        }
+    }
+
+    private func applyAppearance(_ appearance: SpatialGuidanceAppearance) {
+        model.updateAppearance(appearance)
+        try? store.updateAppearance(model.appearance)
     }
 
     private func appearanceColor(

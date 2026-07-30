@@ -264,6 +264,28 @@ struct SpatialRGBAColor: Codable, Equatable, Hashable, Sendable {
             opacity: min(max(opacity, 0.05), 1)
         )
     }
+
+    static func white(opacity: Double) -> Self {
+        .init(red: 1, green: 1, blue: 1, opacity: opacity)
+    }
+
+    static func black(opacity: Double) -> Self {
+        .init(red: 0, green: 0, blue: 0, opacity: opacity)
+    }
+
+    var restricted: Self {
+        let isWhite = (red + green + blue) / 3 >= 0.5
+        let restrictedOpacity: Double = if opacity < 0.375 {
+            0.25
+        } else if opacity < 0.75 {
+            0.5
+        } else {
+            1
+        }
+        return isWhite
+            ? .white(opacity: restrictedOpacity)
+            : .black(opacity: restrictedOpacity)
+    }
 }
 
 struct SpatialGuidanceAppearance: Codable, Equatable, Hashable, Sendable {
@@ -272,10 +294,18 @@ struct SpatialGuidanceAppearance: Codable, Equatable, Hashable, Sendable {
     var camera: SpatialRGBAColor
 
     static let `default` = Self(
-        mesh: .init(red: 1, green: 0.50, blue: 0, opacity: 0.72),
-        tripod: .init(red: 1, green: 0.50, blue: 0, opacity: 0.64),
-        camera: .init(red: 0.20, green: 0.78, blue: 1, opacity: 0.90)
+        mesh: .white(opacity: 0.5),
+        tripod: .black(opacity: 0.5),
+        camera: .white(opacity: 1)
     )
+
+    var restricted: Self {
+        .init(
+            mesh: mesh.restricted,
+            tripod: tripod.restricted,
+            camera: camera.restricted
+        )
+    }
 }
 
 enum SpatialTripodDirection {
@@ -487,6 +517,30 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
         self.targetPose = targetPose
         self.worldMapFileName = worldMapFileName
         self.keyframeFileNames = keyframeFileNames
+    }
+
+    func replacingAppearance(
+        _ appearance: SpatialGuidanceAppearance
+    ) -> SpatialReferenceManifest {
+        .init(
+            schemaVersion: schemaVersion,
+            id: id,
+            createdAt: createdAt,
+            module: module,
+            deviceModelIdentifier: deviceModelIdentifier,
+            cameraLens: cameraLens,
+            cameraZoomFactor: cameraZoomFactor,
+            orientation: orientation,
+            tripodBaseCenter: tripodBaseCenter,
+            tripodDirectionPoint: tripodDirectionPoint,
+            tripodHeightMeters: tripodHeightMeters,
+            tripodLegRadiusMeters: tripodLegRadiusMeters,
+            tripodFootPoints: tripodFootPoints,
+            appearance: appearance.restricted,
+            targetPose: targetPose,
+            worldMapFileName: worldMapFileName,
+            keyframeFileNames: keyframeFileNames
+        )
     }
 }
 

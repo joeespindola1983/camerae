@@ -140,7 +140,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     func startRelocalization(reference: SpatialReferenceBundle) {
         resetRuntime()
         self.reference = reference
-        appearance = reference.manifest.appearance ?? .default
+        appearance = (reference.manifest.appearance ?? .default).restricted
         tripodBaseCenter = reference.manifest.tripodBaseCenter
         tripodDirectionPoint = reference.manifest.tripodDirectionPoint
         tripodHeightMeters = reference.manifest.tripodHeightMeters
@@ -254,11 +254,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     }
 
     func updateAppearance(_ appearance: SpatialGuidanceAppearance) {
-        self.appearance = SpatialGuidanceAppearance(
-            mesh: appearance.mesh.clamped(),
-            tripod: appearance.tripod.clamped(),
-            camera: appearance.camera.clamped()
-        )
+        self.appearance = appearance.restricted
         for (id, meshAnchor) in meshAnchors {
             meshNodes[id]?.geometry = SCNGeometry.spatialWireframe(
                 from: meshAnchor.geometry,

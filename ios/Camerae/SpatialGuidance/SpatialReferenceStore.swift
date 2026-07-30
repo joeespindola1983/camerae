@@ -37,6 +37,21 @@ struct SpatialReferenceStore {
         try loadBundle(at: previousDirectory)
     }
 
+    func updateAppearance(_ appearance: SpatialGuidanceAppearance) throws {
+        guard let current = try load() else {
+            throw SpatialReferenceStoreError.invalidManifest
+        }
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(
+            current.manifest.replacingAppearance(appearance)
+        ).write(
+            to: referenceDirectory.appendingPathComponent("manifest.json"),
+            options: .atomic
+        )
+    }
+
     func save(
         manifest: SpatialReferenceManifest,
         worldMapData: Data,

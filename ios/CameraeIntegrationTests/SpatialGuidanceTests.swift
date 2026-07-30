@@ -48,21 +48,21 @@ struct SpatialGuidanceTests {
         )
     }
 
-    @Test("spatial appearance keeps independent mesh, tripod, and camera colors")
-    func appearanceDefaultsAndRoundTrip() throws {
-        var appearance = SpatialGuidanceAppearance.default
-        appearance.mesh = .init(red: 0.1, green: 0.8, blue: 0.3, opacity: 0.4)
-        appearance.tripod = .init(red: 0.9, green: 0.2, blue: 0.1, opacity: 0.7)
-        appearance.camera = .init(red: 0.2, green: 0.4, blue: 1, opacity: 0.9)
+    @Test("spatial appearance is restricted to black or white and three opacity levels")
+    func restrictedAppearance() {
+        #expect(SpatialGuidanceAppearance.default.mesh == .white(opacity: 0.5))
+        #expect(SpatialGuidanceAppearance.default.tripod == .black(opacity: 0.5))
+        #expect(SpatialGuidanceAppearance.default.camera == .white(opacity: 1))
 
-        let decoded = try JSONDecoder().decode(
-            SpatialGuidanceAppearance.self,
-            from: JSONEncoder().encode(appearance)
-        )
+        let restricted = SpatialGuidanceAppearance(
+            mesh: .init(red: 0.8, green: 0.7, blue: 0.6, opacity: 0.38),
+            tripod: .init(red: 0.1, green: 0.2, blue: 0.3, opacity: 0.76),
+            camera: .init(red: 0.9, green: 0.1, blue: 0.1, opacity: 0.92)
+        ).restricted
 
-        #expect(decoded == appearance)
-        #expect(decoded.mesh != decoded.tripod)
-        #expect(decoded.tripod != decoded.camera)
+        #expect(restricted.mesh == .white(opacity: 0.5))
+        #expect(restricted.tripod == .black(opacity: 1))
+        #expect(restricted.camera == .black(opacity: 1))
     }
 
     @Test("mapping cannot save until tracking, coverage, detail, and keyframes pass")
@@ -349,11 +349,18 @@ struct SpatialGuidanceTests {
             worldMapData: Data("second-map".utf8),
             keyframes: [Data("second-frame".utf8)]
         )
+        let visualizationAppearance = SpatialGuidanceAppearance(
+            mesh: .black(opacity: 0.25),
+            tripod: .white(opacity: 1),
+            camera: .black(opacity: 0.5)
+        )
+        try store.updateAppearance(visualizationAppearance)
 
         let current = try #require(try store.load())
         let previous = try #require(try store.loadPrevious())
         #expect(current.manifest.id == second.id)
         #expect(current.worldMapData == Data("second-map".utf8))
+        #expect(current.manifest.appearance == visualizationAppearance)
         #expect(previous.manifest.id == first.id)
         #expect(previous.worldMapData == Data("first-map".utf8))
         #expect(previous.keyframes == [Data("first-frame".utf8)])

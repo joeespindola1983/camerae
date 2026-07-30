@@ -59,8 +59,9 @@ The first release provides:
     evenly spaced legs, and a small direction-oriented head.
 16. A subtle vertical plumb laser and radial ground halo centered on the saved
     base, visible during placement and later navigation.
-17. Independent live RGB and opacity controls for reconstructed mesh, tripod,
-    and camera/direction geometry, persisted with the spatial reference.
+17. Visualization-only black/white controls for reconstructed mesh, tripod,
+    and camera/direction geometry, each with 25%, 50%, or 100% opacity and
+    persisted with the spatial reference.
 
 ## First-visit flow
 
