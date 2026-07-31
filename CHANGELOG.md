@@ -13,13 +13,22 @@ test distributions do not require an entry here.
 
 | Version | Apple status | Public availability | Last updated |
 | --- | --- | --- | --- |
-| `9.3.0` | Waiting for Review | Not yet available | 2026-07-31 |
+| `9.3.0` | Withdrawal requested before review | Not available | 2026-07-31 |
 | `9.1.0` | Withdrawn; superseded by 9.3.0 | Not available | 2026-07-31 |
 | `8.5.1` | Approved | Available on the App Store | 2026-07-30 |
 
 ## [Unreleased]
 
 ### Added
+
+### Changed
+
+### Fixed
+
+## [9.3.1] - 2026-07-31
+
+**Status:** QA candidate (build 34)
+**Areas:** Repeatable Spatial Guidance, project cards, grouped project catalog
 
 ### Changed
 
@@ -31,7 +40,6 @@ test distributions do not require an entry here.
 
 - Separated the project-open affordance from the options menu in grouped
   project lists so their controls no longer overlap.
-
 - Corrected Spatial Guidance after a successful field mapping so temporary
   thermal pressure is shown as a cooling pause instead of falsely reporting an
   incompatible iPhone; availability now refreshes automatically after cooling.
