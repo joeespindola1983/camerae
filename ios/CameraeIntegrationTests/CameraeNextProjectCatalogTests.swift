@@ -143,6 +143,34 @@ struct CameraeNextProjectCatalogTests {
         #expect(!groups.message.isEmpty)
     }
 
+    @Test("group-only catalogs hide project onboarding and project-only controls")
+    func groupOnlyCatalogPresentation() {
+        let empty = CameraeNextProjectCatalogContentPolicy(
+            hasGroups: false,
+            hasUngroupedProjects: false
+        )
+        let groupsOnly = CameraeNextProjectCatalogContentPolicy(
+            hasGroups: true,
+            hasUngroupedProjects: false
+        )
+        let mixed = CameraeNextProjectCatalogContentPolicy(
+            hasGroups: true,
+            hasUngroupedProjects: true
+        )
+
+        #expect(empty.showsFirstProjectOnboarding)
+        #expect(empty.showsProjectSection)
+        #expect(!empty.showsProjectFilters)
+
+        #expect(!groupsOnly.showsFirstProjectOnboarding)
+        #expect(!groupsOnly.showsProjectSection)
+        #expect(!groupsOnly.showsProjectFilters)
+
+        #expect(!mixed.showsFirstProjectOnboarding)
+        #expect(mixed.showsProjectSection)
+        #expect(mixed.showsProjectFilters)
+    }
+
     @Test("organization catalogs present root groups, subgroups, then direct projects")
     func organizationHierarchy() {
         let rootID = UUID()
@@ -173,6 +201,8 @@ struct CameraeNextProjectCatalogTests {
         )
 
         #expect(model.rootNodes.map(\.name) == ["Catedral"])
+        #expect(model.hasGroups)
+        #expect(model.hasUngroupedProjects)
         #expect(model.childNodes(of: rootID).map(\.name) == ["Detalhes"])
         #expect(model.directProjects(in: rootID).map(\.name) == ["Fachada"])
         #expect(model.directProjects(in: subgroupID).map(\.name) == ["Escultura"])
