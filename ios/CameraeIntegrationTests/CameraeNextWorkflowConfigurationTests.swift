@@ -18,8 +18,8 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(configuration.referenceOpacity == 0.5)
     }
 
-    @Test("the first project capture configuration remains fixed for later captures")
-    func projectCaptureConfigurationLock() throws {
+    @Test("project hardware stays fixed while each capture type keeps editable defaults")
+    func projectHardwareLockAndCaptureTypeDefaults() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CameraeCaptureDefaults-\(UUID().uuidString)", isDirectory: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -31,17 +31,31 @@ struct CameraeNextWorkflowConfigurationTests {
         initialVideo.videoSettings = WorkflowVideoSettings(resolution: .fourK, fps: 30, quality: .max)
         initialVideo.cameraLens = .telephoto
         initialVideo.cameraZoomFactor = 2
-        let changedLater = CameraeNextCaptureConfiguration.repeatableDefault
+        var laterTimelapse = CameraeNextCaptureConfiguration.repeatableDefault
+        laterTimelapse.durationMinutes = 15
+        laterTimelapse.intervalSeconds = 3
+        laterTimelapse.cameraLens = .wide
+        laterTimelapse.cameraZoomFactor = 1
 
-        let first = try store.saveInitial(initialVideo)
-        let second = try store.saveInitial(changedLater)
+        let first = try store.saveDefaults(initialVideo)
+        let second = try store.saveDefaults(laterTimelapse)
+        let profile = try #require(try store.loadProfile())
 
         #expect(first == initialVideo)
-        #expect(second == initialVideo)
-        #expect(try store.load() == initialVideo)
+        #expect(second.repeatableKind == .timelapse)
+        #expect(second.durationMinutes == 15)
+        #expect(second.intervalSeconds == 3)
+        #expect(second.cameraLens == .telephoto)
+        #expect(second.cameraZoomFactor == 2)
+        #expect(profile.hardware == .init(cameraLens: .telephoto, cameraZoomFactor: 2))
+        #expect(profile.configuration(for: .video).videoSettings == initialVideo.videoSettings)
+        #expect(profile.configuration(for: .video).videoDurationSeconds == 120)
+        #expect(profile.configuration(for: .timelapse).intervalSeconds == 3)
+        #expect(profile.configuration(for: .photo).repeatableKind == .photo)
+        #expect(profile.selectedKind == .timelapse)
     }
 
-    @Test("captured legacy projects migrate once into an immutable project configuration")
+    @Test("captured legacy projects migrate once into hardware plus per-type defaults")
     func legacyProjectConfigurationMigration() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CameraeLegacyCapture-\(UUID().uuidString)", isDirectory: true)
@@ -70,6 +84,11 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(migrated.cameraLens == .telephoto)
         #expect(migrated.cameraZoomFactor == 2)
         #expect(migrated.sourceFormat == .jpeg)
+        let migratedProfile = try #require(try store.loadProfile())
+        #expect(migratedProfile.hardware.cameraLens == .telephoto)
+        #expect(migratedProfile.hardware.cameraZoomFactor == 2)
+        #expect(migratedProfile.configuration(for: .photo).repeatableKind == .photo)
+        #expect(migratedProfile.configuration(for: .video).repeatableKind == .video)
 
         let laterVideo = makeLegacySummary(
             directory: directory,
@@ -95,7 +114,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(try store.loadOrMigrate(module: .repeatable, summaries: []) == nil)
     }
 
-    @Test("capture configuration decodes schema one and rejects unsupported future schemas")
+    @Test("capture configuration migrates schema one and rejects unsupported future schemas")
     func captureConfigurationSchemaCompatibility() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CameraeConfigurationSchema-\(UUID().uuidString)", isDirectory: true)
@@ -110,7 +129,14 @@ struct CameraeNextWorkflowConfigurationTests {
             configuration: configuration,
             to: fileURL
         )
-        #expect(try store.load() == configuration)
+        let migrated = try #require(
+            try store.loadProfileOrMigrate(module: .repeatable, summaries: [])
+        )
+        #expect(migrated.selectedConfiguration == configuration)
+        #expect(migrated.configuration(for: .photo).repeatableKind == .photo)
+        #expect(migrated.configuration(for: .video).repeatableKind == .video)
+        #expect(migrated.configuration(for: .timelapse).repeatableKind == .timelapse)
+        #expect(try store.loadProfile() == migrated)
 
         try writeConfigurationDocument(
             schemaVersion: 99,
@@ -123,7 +149,7 @@ struct CameraeNextWorkflowConfigurationTests {
     }
 
     @Test(
-        "photo, timelapse, and video projects restore their initial capture kind",
+        "photo, timelapse, and video remain available in every Repeatable project",
         arguments: RepeatableCaptureKind.captureOptions
     )
     func projectCaptureKind(kind: RepeatableCaptureKind) throws {
@@ -135,9 +161,17 @@ struct CameraeNextWorkflowConfigurationTests {
         var configuration = CameraeNextCaptureConfiguration.repeatableDefault
         configuration.repeatableKind = kind
 
-        _ = try store.saveInitial(configuration)
+        _ = try store.saveDefaults(configuration)
 
-        #expect(try store.load()?.repeatableKind == kind)
+        let profile = try #require(try store.loadProfile())
+        #expect(profile.selectedKind == kind)
+        #expect(profile.configuration(for: kind).repeatableKind == kind)
+        #expect(
+            CameraeNextProjectCaptureCapabilityPolicy.repeatable.availableCaptureKinds ==
+                [.photo, .video, .timelapse]
+        )
+        #expect(CameraeNextProjectCaptureCapabilityPolicy.repeatable.locksCameraHardware)
+        #expect(CameraeNextProjectCaptureCapabilityPolicy.repeatable.allowsEditingCaptureDefaults)
     }
 
     private func makeLegacySummary(
@@ -148,7 +182,8 @@ struct CameraeNextWorkflowConfigurationTests {
         lens: RepeatableCameraLens,
         zoom: Double,
         fileExtension: String,
-        hasVideo: Bool = false
+        hasVideo: Bool = false,
+        createdAt: Date = Date(timeIntervalSince1970: 1)
     ) -> TimelapseSessionSummary {
         let sessionDirectory = directory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let session = TimelapseSession(
@@ -164,7 +199,7 @@ struct CameraeNextWorkflowConfigurationTests {
             cameraZoomFactor: zoom,
             name: "legacy",
             directoryURL: sessionDirectory,
-            createdAt: Date(timeIntervalSince1970: 1)
+            createdAt: createdAt
         )
         return TimelapseSessionSummary(
             session: session,
@@ -248,9 +283,9 @@ struct CameraeNextWorkflowConfigurationTests {
         let timelapsePresentation = CameraeNextWorkflowConfigurationPresentation(configuration: .repeatableDefault)
 
         #expect(videoPresentation.navigationTitle == CameraeL10n.newVideo)
-        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
+        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min", CameraeL10n.customDurationShort])
         #expect(videoPresentation.adjustmentTitles == ["EV"])
-        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min"])
+        #expect(videoPresentation.durationLabels == ["30 s", "1 min", "2 min", CameraeL10n.customDurationShort])
         #expect(videoPresentation.showsVideoSettings)
         #expect(!videoPresentation.showsInterval)
         #expect(video.estimatedFrameCount == video.videoDurationSeconds * video.videoSettings.fps)
@@ -258,6 +293,86 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(timelapsePresentation.navigationTitle == CameraeL10n.newTimelapse)
         #expect(!timelapsePresentation.showsVideoSettings)
         #expect(timelapsePresentation.showsInterval)
+    }
+
+    @Test("A saved custom duration remains selected without changing the persisted value")
+    func restoredCustomDurationSelection() {
+        var video = CameraeNextCaptureConfiguration.repeatableDefault
+        video.repeatableKind = .video
+        video.videoDurationSeconds = 720
+
+        #expect(CameraeNextDurationSelection(configuration: video).selectedValue == 0)
+        #expect(video.videoDurationSeconds == 720)
+
+        video.videoDurationSeconds = 60
+        #expect(CameraeNextDurationSelection(configuration: video).selectedValue == 60)
+
+        var timelapse = CameraeNextCaptureConfiguration.repeatableDefault
+        timelapse.durationMinutes = 10
+        #expect(CameraeNextDurationSelection(configuration: timelapse).selectedValue == 0)
+        #expect(timelapse.durationMinutes == 10)
+    }
+
+    @Test("Recorded video durations close to a preset restore the intended preset")
+    func recordedVideoDurationNormalization() {
+        #expect(CameraeNextVideoDurationPolicy.normalized(29) == 30)
+        #expect(CameraeNextVideoDurationPolicy.normalized(59) == 60)
+        #expect(CameraeNextVideoDurationPolicy.normalized(119) == 120)
+        #expect(CameraeNextVideoDurationPolicy.normalized(25) == 25)
+
+        var recordedVideo = CameraeNextCaptureConfiguration.repeatableDefault
+        recordedVideo.repeatableKind = .video
+        recordedVideo.videoDurationSeconds = 29
+        let profile = ProjectCaptureProfile(initialConfiguration: recordedVideo)
+
+        #expect(profile.selectedConfiguration.videoDurationSeconds == 30)
+        #expect(CameraeNextDurationSelection(configuration: profile.selectedConfiguration).selectedValue == 30)
+    }
+
+    @Test("The latest recorded clip refreshes the project's video duration default")
+    func latestClipRefreshesVideoDefault() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeLatestVideoDefault-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        var savedVideo = CameraeNextCaptureConfiguration.repeatableDefault
+        savedVideo.repeatableKind = .video
+        savedVideo.videoDurationSeconds = 60
+        _ = try store.saveDefaults(savedVideo)
+
+        let olderClip = makeLegacySummary(
+            directory: directory,
+            kind: .video,
+            frameCount: 0,
+            duration: 60,
+            lens: .wide,
+            zoom: 1,
+            fileExtension: "mp4",
+            hasVideo: true,
+            createdAt: Date(timeIntervalSince1970: 1)
+        )
+        let latestClip = makeLegacySummary(
+            directory: directory,
+            kind: .video,
+            frameCount: 0,
+            duration: 29,
+            lens: .wide,
+            zoom: 1,
+            fileExtension: "mp4",
+            hasVideo: true,
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+
+        let refreshed = try #require(
+            try store.loadProfileOrMigrate(
+                module: .repeatable,
+                summaries: [olderClip, latestClip]
+            )
+        )
+
+        #expect(refreshed.configuration(for: .video).videoDurationSeconds == 30)
+        #expect(try store.loadProfile()?.configuration(for: .video).videoDurationSeconds == 30)
     }
 
     @Test("Repeatable photo is a single-frame workflow without timed or Astro controls")
@@ -273,7 +388,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(!presentation.showsInterval)
         #expect(!presentation.showsVideoSettings)
         #expect(!presentation.showsAstroPhotoStacking)
-        #expect(CameraeNextCaptureModeOption.repeatableItems.map(\.value) == [.photo, .timelapse, .video])
+        #expect(CameraeNextCaptureModeOption.repeatableItems.map(\.value) == [.photo, .video, .timelapse])
     }
 
     @Test("Astro photo presentation uses stacking instead of a duration")

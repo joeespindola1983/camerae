@@ -38,6 +38,8 @@ enum CameraeLocalization {
 
 enum CameraeL10n {
     static var cancel: String { text("common.cancel", "Cancelar") }
+    static var create: String { text("common.create", "Criar") }
+    static var save: String { text("common.save", "Salvar") }
     static var okay: String { text("common.ok", "OK") }
     static var error: String { text("common.error", "Erro") }
     static var archive: String { text("project.archive", "Arquivar") }
@@ -83,15 +85,117 @@ enum CameraeL10n {
             "Você poderá alterar os detalhes de captura na próxima tela."
         )
     }
+    static var organizationUnavailable: String {
+        text("organization.unavailable.title", "Organização indisponível")
+    }
+    static var organizationUnavailableMessage: String {
+        text("organization.unavailable.message", "O grupo pode ter sido removido ou arquivado.")
+    }
+    static var organizationGroup: String { text("organization.group", "Grupo") }
+    static var organizationSubgroup: String { text("organization.subgroup", "Subgrupo") }
+    static var organizationGroups: String { text("organization.groups", "GRUPOS") }
+    static var organizationSubgroups: String { text("organization.subgroups", "SUBGRUPOS") }
+    static var organizationArchivedGroups: String {
+        text("organization.groups.archived", "GRUPOS ARQUIVADOS")
+    }
+    static var organizationNoProjects: String {
+        text("organization.empty.projects", "Sem projetos")
+    }
+    static var organizationSafety: String {
+        text(
+            "organization.safety",
+            "Organizar não altera nem remove projetos ou arquivos."
+        )
+    }
+    static var organizationUngrouped: String {
+        text("organization.ungrouped", "Sem grupo")
+    }
+    static var organizationListRoot: String {
+        text("organization.list_root", "Raiz da lista")
+    }
+    static var organizationMoveProject: String {
+        text("organization.move_project", "Mover projeto")
+    }
+    static var organizationMoveToGroup: String {
+        text("organization.move_to_group", "Mover para grupo")
+    }
+    static var organizationNoProjectHere: String {
+        text("organization.empty.location.title", "Nenhum projeto aqui")
+    }
+    static var organizationNoProjectHereMessage: String {
+        text(
+            "organization.empty.location.message",
+            "Crie um projeto ou mova um projeto existente para este local."
+        )
+    }
+    static var organizationNewGroup: String {
+        text("organization.new_group", "Novo grupo")
+    }
+    static var organizationNewSubgroup: String {
+        text("organization.new_subgroup", "Novo subgrupo")
+    }
+    static var organizationDelete: String {
+        text("organization.delete", "Excluir organização")
+    }
+    static var organizationDeletePreservingMessage: String {
+        text(
+            "organization.delete.preserving",
+            "Os projetos voltarão para “Sem grupo”. Referências, capturas, vídeos e timelapses serão preservados."
+        )
+    }
+    static var organizationCreateGroupOrProject: String {
+        text("organization.create_group_or_project", "Criar grupo ou projeto")
+    }
+    static var organizationOrganizeLocations: String {
+        text("organization.empty.title", "Organize seus locais")
+    }
+    static var organizationNoArchivedGroups: String {
+        text("organization.empty.archived", "Nenhum grupo arquivado")
+    }
+    static var organizationHelper: String {
+        text(
+            "organization.empty.message",
+            "Crie grupos e subgrupos sem alterar seus projetos."
+        )
+    }
+    static var organizationRename: String {
+        text("organization.rename", "Renomear")
+    }
+
+    static func organizationProjectCount(_ count: Int) -> String {
+        format("organization.project_count", defaultValue: "%d projetos", count)
+    }
+
+    static func organizationSubgroupCount(_ count: Int) -> String {
+        format("organization.subgroup_count", defaultValue: "%d subgrupos", count)
+    }
+
+    static func organizationProjectsSection(isSubgroup: Bool) -> String {
+        isSubgroup
+            ? text("organization.projects_in_subgroup", "PROJETOS NESTE SUBGRUPO")
+            : text("organization.projects_in_group", "PROJETOS NESTE GRUPO")
+    }
 
     static var moduleRepeatable: String { text("home.module.repeatable", "Repetível") }
     static var moduleAstro: String { text("home.module.astro", "Astrofotografia") }
     static var moduleEdit: String { text("home.module.edit", "Editar") }
     static var configure: String { text("workflow.tab.configure", "Configurar") }
     static var captures: String { text("workflow.tab.captures", "Capturas") }
+    static var newCapture: String { text("capture.new", "Nova captura") }
+    static var noCapturesYet: String { text("capture.empty.title", "Nenhuma captura ainda") }
+    static var firstCaptureMessage: String {
+        text(
+            "capture.empty.message",
+            "Sua primeira sessão aparecerá aqui assim que uma imagem for salva."
+        )
+    }
+    static var noEditsYet: String { text("edit.empty.title", "Nenhuma montagem") }
 
     static func captureCount(_ count: Int) -> String {
         format("project.capture_count", defaultValue: "%d capturas", count)
+    }
+    static func sessionCount(_ count: Int) -> String {
+        format("capture.session_count", defaultValue: "%d SESSÕES", count)
     }
     static var video: String { text("workflow.mode.video", "Vídeo") }
     static var photo: String { text("workflow.mode.photo", "Foto") }
@@ -127,7 +231,7 @@ enum CameraeL10n {
     static var qualityHigh: String { text("workflow.video.quality.high", "Alta") }
     static var qualityMaximum: String { text("workflow.video.quality.maximum", "Máxima") }
     static var preview: String { text("workflow.video.resolution.preview", "Prévia") }
-    static var customDurationShort: String { text("workflow.duration.custom.short", "Personal.") }
+    static var customDurationShort: String { text("workflow.duration.other.short", "Outro") }
     static var takePhoto: String { text("workflow.reference.take_photo", "Tirar foto") }
     static var importPhoto: String { text("workflow.reference.import", "Importar") }
     static var replace: String { text("workflow.reference.replace", "Substituir") }

@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import CameraeCore
 import Foundation
@@ -513,6 +514,15 @@ final class TimelapseSessionStore {
     }
 
     private func captureDuration(in session: TimelapseSession) -> TimeInterval? {
+        if session.captureKind == .video,
+           let videoURL = existingVideoURL(for: session)
+                ?? existingVideoClipURL(for: session)
+                ?? existingAlignedVideoURL(for: session) {
+            let seconds = AVURLAsset(url: videoURL).duration.seconds
+            if seconds.isFinite, seconds > 0 {
+                return seconds
+            }
+        }
         guard let lastFrame = frameURLs(in: session).last,
               let values = try? lastFrame.resourceValues(forKeys: [.contentModificationDateKey]),
               let modifiedAt = values.contentModificationDate else { return nil }

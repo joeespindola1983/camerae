@@ -1,0 +1,697 @@
+import Foundation
+
+enum SpatialGuidancePerformanceClass: String, Codable, Equatable, Sendable {
+    case constrained
+    case standard
+    case high
+}
+
+struct SpatialGuidanceDeviceCapabilities: Equatable, Sendable {
+    let supportsWorldTracking: Bool
+    let supportsSceneReconstruction: Bool
+    let supportsSceneDepth: Bool
+    let performanceClass: SpatialGuidancePerformanceClass
+}
+
+enum SpatialGuidanceThermalState: Equatable, Sendable {
+    case nominal
+    case fair
+    case serious
+    case critical
+}
+
+enum SpatialGuidanceAvailability: Equatable, Sendable {
+    case available
+    case moduleUnavailable
+    case hardwareUnavailable
+    case performanceUnavailable
+    case temporarilyUnavailable
+}
+
+enum SpatialGuidanceAvailabilityPolicy {
+    static func resolve(
+        module: CameraModule,
+        capabilities: SpatialGuidanceDeviceCapabilities,
+        thermalState: SpatialGuidanceThermalState
+    ) -> SpatialGuidanceAvailability {
+        guard module == .repeatable else { return .moduleUnavailable }
+        guard thermalState != .serious, thermalState != .critical else {
+            return .temporarilyUnavailable
+        }
+        guard capabilities.supportsWorldTracking,
+              capabilities.supportsSceneReconstruction,
+              capabilities.supportsSceneDepth else {
+            return .hardwareUnavailable
+        }
+        guard capabilities.performanceClass == .high else {
+            return .performanceUnavailable
+        }
+        return .available
+    }
+}
+
+enum SpatialMappingRequirement: String, CaseIterable, Equatable, Sendable {
+    case duration
+    case tracking
+    case coverage
+    case detail
+    case keyframes
+}
+
+struct SpatialMappingMetrics: Equatable, Sendable {
+    let elapsedSeconds: TimeInterval
+    let trackingIsNormal: Bool
+    let mappedAreaSquareMeters: Double
+    let featurePointCount: Int
+    let keyframeCount: Int
+}
+
+enum SpatialMappingQualityLevel: Equatable, Sendable {
+    case insufficient
+    case ready
+}
+
+struct SpatialMappingQuality: Equatable, Sendable {
+    let level: SpatialMappingQualityLevel
+    let progress: Double
+    let missingRequirements: Set<SpatialMappingRequirement>
+    let canDefineScene: Bool
+
+    var canSave: Bool { level == .ready }
+
+    static let insufficient = Self(
+        level: .insufficient,
+        progress: 0,
+        missingRequirements: Set(SpatialMappingRequirement.allCases),
+        canDefineScene: false
+    )
+    static let ready = Self(
+        level: .ready,
+        progress: 1,
+        missingRequirements: [],
+        canDefineScene: true
+    )
+}
+
+enum SpatialMappingQualityEvaluator {
+    private static let minimumDuration: TimeInterval = 20
+    private static let minimumAreaSquareMeters = 6.0
+    private static let minimumFeaturePoints = 900
+    private static let minimumKeyframes = 4
+
+    static func evaluate(_ metrics: SpatialMappingMetrics) -> SpatialMappingQuality {
+        var missing: Set<SpatialMappingRequirement> = []
+        if metrics.elapsedSeconds < minimumDuration { missing.insert(.duration) }
+        if !metrics.trackingIsNormal { missing.insert(.tracking) }
+        if metrics.mappedAreaSquareMeters < minimumAreaSquareMeters { missing.insert(.coverage) }
+        if metrics.featurePointCount < minimumFeaturePoints { missing.insert(.detail) }
+        if metrics.keyframeCount < minimumKeyframes { missing.insert(.keyframes) }
+
+        let scores = [
+            min(metrics.elapsedSeconds / minimumDuration, 1),
+            metrics.trackingIsNormal ? 1 : 0,
+            min(metrics.mappedAreaSquareMeters / minimumAreaSquareMeters, 1),
+            min(Double(metrics.featurePointCount) / Double(minimumFeaturePoints), 1),
+            min(Double(metrics.keyframeCount) / Double(minimumKeyframes), 1)
+        ]
+        let progress = scores.reduce(0, +) / Double(scores.count)
+        return SpatialMappingQuality(
+            level: missing.isEmpty ? .ready : .insufficient,
+            progress: missing.isEmpty ? 1 : progress,
+            missingRequirements: missing,
+            canDefineScene: metrics.elapsedSeconds >= 12
+                && metrics.trackingIsNormal
+                && metrics.mappedAreaSquareMeters >= 2
+                && metrics.featurePointCount >= 500
+                && metrics.keyframeCount >= 3
+        )
+    }
+}
+
+enum SpatialGuidanceFailure: String, Codable, Equatable, Sendable {
+    case trackingUnavailable
+    case relocalizationTimedOut
+    case incompatibleReference
+    case persistenceFailed
+}
+
+enum SpatialGuidancePhase: Equatable, Sendable {
+    case idle
+    case initializingMapping
+    case readyToStartMapping
+    case mapping
+    case insufficientCoverage
+    case reviewingScene
+    case selectingTripodBase
+    case tripodBaseSelected
+    case selectingTripodDirection
+    case tripodDirectionSelected
+    case readyToMount
+    case saving
+    case saved
+    case relocalizing
+    case positioning
+    case aligned
+    case failed(SpatialGuidanceFailure)
+
+    var showsGhost: Bool {
+        false
+    }
+
+    var canOpenCamera: Bool {
+        self == .aligned
+    }
+
+    var showsLiveCamera: Bool {
+        switch self {
+        case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene,
+             .selectingTripodBase, .tripodBaseSelected, .readyToMount,
+             .selectingTripodDirection, .tripodDirectionSelected,
+             .relocalizing, .positioning, .aligned:
+            true
+        default:
+            false
+        }
+    }
+
+    var visualState: SpatialGuidanceVisualState {
+        switch self {
+        case .idle, .initializingMapping:
+            .noReference
+        case .readyToStartMapping:
+            .readyToStartMapping
+        case .mapping:
+            .mapping
+        case .insufficientCoverage:
+            .insufficientCoverage
+        case .reviewingScene:
+            .reviewingScene
+        case .selectingTripodBase:
+            .selectingTripodBase
+        case .tripodBaseSelected:
+            .tripodBaseSelected
+        case .selectingTripodDirection:
+            .selectingTripodDirection
+        case .tripodDirectionSelected:
+            .tripodDirectionSelected
+        case .readyToMount, .saving:
+            .readyToMount
+        case .saved:
+            .referenceSaved
+        case .relocalizing:
+            .relocalizing
+        case .positioning:
+            .positioning
+        case .aligned:
+            .aligned
+        case .failed(.incompatibleReference):
+            .incompatibleReference
+        case .failed:
+            .relocalizationFailed
+        }
+    }
+}
+
+enum SpatialGuidanceEvent: Equatable, Sendable {
+    case startMapping
+    case mappingSessionReady
+    case beginSceneCapture
+    case mappingEvaluated(SpatialMappingQualityLevel)
+    case freezeScene
+    case tripodBaseSelected
+    case confirmTripodBase
+    case tripodDirectionSelected
+    case confirmTripodDirection
+    case beginSaving
+    case referenceSaved
+    case startRelocalization
+    case anchorRestored
+    case poseEvaluated(isAligned: Bool)
+    case fail(SpatialGuidanceFailure)
+    case reset
+}
+
+enum SpatialGuidanceTransitionError: Error, Equatable {
+    case invalid(phase: SpatialGuidancePhase, event: SpatialGuidanceEvent)
+}
+
+struct SpatialGuidanceStateMachine: Equatable, Sendable {
+    private(set) var phase: SpatialGuidancePhase = .idle
+
+    mutating func send(_ event: SpatialGuidanceEvent) throws {
+        let next: SpatialGuidancePhase? = switch (phase, event) {
+        case (_, .reset): .idle
+        case (.idle, .startMapping), (.saved, .startMapping),
+             (.failed, .startMapping): .initializingMapping
+        case (.initializingMapping, .mappingSessionReady): .readyToStartMapping
+        case (.readyToStartMapping, .beginSceneCapture): .mapping
+        case (.mapping, .mappingEvaluated(.insufficient)),
+             (.insufficientCoverage, .mappingEvaluated(.insufficient)): .insufficientCoverage
+        case (.mapping, .mappingEvaluated(.ready)),
+             (.insufficientCoverage, .mappingEvaluated(.ready)): .reviewingScene
+        case (.mapping, .freezeScene),
+             (.insufficientCoverage, .freezeScene): .selectingTripodBase
+        case (.reviewingScene, .mappingEvaluated(.insufficient)): .insufficientCoverage
+        case (.reviewingScene, .mappingEvaluated(.ready)): .reviewingScene
+        case (.reviewingScene, .freezeScene): .selectingTripodBase
+        case (.selectingTripodBase, .tripodBaseSelected),
+             (.tripodBaseSelected, .tripodBaseSelected): .tripodBaseSelected
+        case (.tripodBaseSelected, .confirmTripodBase): .selectingTripodDirection
+        case (.selectingTripodDirection, .tripodDirectionSelected),
+             (.tripodDirectionSelected, .tripodDirectionSelected): .tripodDirectionSelected
+        case (.tripodDirectionSelected, .confirmTripodDirection): .readyToMount
+        case (.readyToMount, .beginSaving): .saving
+        case (.readyToMount, .referenceSaved), (.saving, .referenceSaved): .saved
+        case (.idle, .startRelocalization),
+             (.saved, .startRelocalization),
+             (.failed, .startRelocalization): .relocalizing
+        case (.relocalizing, .anchorRestored): .positioning
+        case (.positioning, .poseEvaluated(true)): .aligned
+        case (.positioning, .poseEvaluated(false)), (.aligned, .poseEvaluated(false)): .positioning
+        case (.aligned, .poseEvaluated(true)): .aligned
+        case (_, .fail(let failure)): .failed(failure)
+        default: nil
+        }
+        guard let next else {
+            throw SpatialGuidanceTransitionError.invalid(phase: phase, event: event)
+        }
+        phase = next
+    }
+}
+
+struct SpatialVector3: Codable, Equatable, Hashable, Sendable {
+    var x: Double
+    var y: Double
+    var z: Double
+
+    static let zero = Self(x: 0, y: 0, z: 0)
+}
+
+struct SpatialRGBAColor: Codable, Equatable, Hashable, Sendable {
+    var red: Double
+    var green: Double
+    var blue: Double
+    var opacity: Double
+
+    func clamped() -> Self {
+        .init(
+            red: min(max(red, 0), 1),
+            green: min(max(green, 0), 1),
+            blue: min(max(blue, 0), 1),
+            opacity: min(max(opacity, 0.05), 1)
+        )
+    }
+
+    static func white(opacity: Double) -> Self {
+        .init(red: 1, green: 1, blue: 1, opacity: opacity)
+    }
+
+    static func black(opacity: Double) -> Self {
+        .init(red: 0, green: 0, blue: 0, opacity: opacity)
+    }
+
+    var restricted: Self {
+        let isWhite = (red + green + blue) / 3 >= 0.5
+        let restrictedOpacity: Double = if opacity < 0.375 {
+            0.25
+        } else if opacity < 0.75 {
+            0.5
+        } else {
+            1
+        }
+        return isWhite
+            ? .white(opacity: restrictedOpacity)
+            : .black(opacity: restrictedOpacity)
+    }
+}
+
+struct SpatialGuidanceAppearance: Codable, Equatable, Hashable, Sendable {
+    var mesh: SpatialRGBAColor
+    var tripod: SpatialRGBAColor
+    var camera: SpatialRGBAColor
+
+    static let `default` = Self(
+        mesh: .white(opacity: 0.5),
+        tripod: .black(opacity: 0.5),
+        camera: .black(opacity: 1)
+    )
+
+    var restricted: Self {
+        .init(
+            mesh: mesh.restricted,
+            tripod: tripod.restricted,
+            camera: camera.restricted
+        )
+    }
+}
+
+enum SpatialCreationContrast: Equatable, Sendable {
+    case lightMesh
+    case darkMesh
+
+    init(appearance: SpatialGuidanceAppearance) {
+        self = appearance.mesh.red >= 0.5 ? .lightMesh : .darkMesh
+    }
+
+    var appearance: SpatialGuidanceAppearance {
+        switch self {
+        case .lightMesh:
+            .init(
+                mesh: .white(opacity: 0.5),
+                tripod: .black(opacity: 0.5),
+                camera: .black(opacity: 1)
+            )
+        case .darkMesh:
+            .init(
+                mesh: .black(opacity: 0.5),
+                tripod: .white(opacity: 0.5),
+                camera: .white(opacity: 1)
+            )
+        }
+    }
+
+    var toggled: Self {
+        self == .lightMesh ? .darkMesh : .lightMesh
+    }
+}
+
+enum SpatialTripodDirection {
+    static let handleDistanceMeters = 0.45
+
+    static func point(
+        base: SpatialVector3,
+        toward candidate: SpatialVector3
+    ) -> SpatialVector3? {
+        let dx = candidate.x - base.x
+        let dz = candidate.z - base.z
+        let distance = hypot(dx, dz)
+        guard distance > 0.001 else { return nil }
+        return SpatialVector3(
+            x: base.x + (dx / distance) * handleDistanceMeters,
+            y: base.y,
+            z: base.z + (dz / distance) * handleDistanceMeters
+        )
+    }
+}
+
+enum SpatialStandardTripod {
+    static let heightMeters = 1.0
+    static let legRadiusMeters = 0.38
+    static let legHubHeightMeters = 0.72
+
+    static func footPoints(
+        base: SpatialVector3,
+        direction: SpatialVector3,
+        legRadius: Double = legRadiusMeters
+    ) -> [SpatialVector3]? {
+        let dx = direction.x - base.x
+        let dz = direction.z - base.z
+        guard hypot(dx, dz) > 0.001 else { return nil }
+        let heading = atan2(dz, dx)
+        return (0..<3).map { index in
+            let angle = heading + Double(index) * (2 * .pi / 3)
+            return SpatialVector3(
+                x: base.x + cos(angle) * legRadius,
+                y: base.y,
+                z: base.z + sin(angle) * legRadius
+            )
+        }
+    }
+}
+
+enum SpatialTripodHeightEstimator {
+    static let sampleRadiusMeters = 0.24
+    static let minimumHeightMeters = 0.55
+    static let maximumHeightMeters = 1.65
+    static let minimumSampleCount = 12
+
+    static func estimate(
+        base: SpatialVector3,
+        points: [SpatialVector3]
+    ) -> Double? {
+        let heights = points.compactMap { point -> Double? in
+            guard hypot(point.x - base.x, point.z - base.z) <= sampleRadiusMeters else {
+                return nil
+            }
+            let height = point.y - base.y
+            return height >= 0.08 ? height : nil
+        }.sorted()
+        guard heights.count >= minimumSampleCount else { return nil }
+        let percentileIndex = min(
+            heights.count - 1,
+            Int((Double(heights.count - 1) * 0.95).rounded())
+        )
+        return min(max(heights[percentileIndex], minimumHeightMeters), maximumHeightMeters)
+    }
+}
+
+enum SpatialTripodFootEstimator {
+    private static let sectorCount = 24
+    private static let minimumPointsPerFoot = 4
+    private static let minimumRadiusMeters = 0.10
+    private static let maximumRadiusMeters = 0.55
+    private static let minimumHeightMeters = 0.025
+    private static let maximumHeightMeters = 0.16
+
+    static func estimate(
+        base: SpatialVector3,
+        points: [SpatialVector3]
+    ) -> [SpatialVector3]? {
+        let candidates = points.compactMap { point -> (point: SpatialVector3, sector: Int)? in
+            let height = point.y - base.y
+            let dx = point.x - base.x
+            let dz = point.z - base.z
+            let radius = hypot(dx, dz)
+            guard height >= minimumHeightMeters,
+                  height <= maximumHeightMeters,
+                  radius >= minimumRadiusMeters,
+                  radius <= maximumRadiusMeters else {
+                return nil
+            }
+            let normalizedAngle = (atan2(dz, dx) + 2 * .pi)
+                .truncatingRemainder(dividingBy: 2 * .pi)
+            let sector = min(
+                sectorCount - 1,
+                Int((normalizedAngle / (2 * .pi)) * Double(sectorCount))
+            )
+            return (point, sector)
+        }
+        guard candidates.count >= minimumPointsPerFoot * 3 else { return nil }
+
+        var counts = Array(repeating: 0, count: sectorCount)
+        candidates.forEach { counts[$0.sector] += 1 }
+        let rankedSectors = counts.indices.sorted { counts[$0] > counts[$1] }
+        var selected: [Int] = []
+        for sector in rankedSectors where counts[sector] >= minimumPointsPerFoot {
+            guard selected.allSatisfy({
+                circularSectorDistance($0, sector) >= 4
+            }) else {
+                continue
+            }
+            selected.append(sector)
+            if selected.count == 3 { break }
+        }
+        guard selected.count == 3 else { return nil }
+
+        let feet = selected.compactMap { sector -> SpatialVector3? in
+            let cluster = candidates.filter {
+                circularSectorDistance($0.sector, sector) <= 1
+            }.map(\.point)
+            guard cluster.count >= minimumPointsPerFoot else { return nil }
+            return SpatialVector3(
+                x: cluster.map(\.x).reduce(0, +) / Double(cluster.count),
+                y: base.y,
+                z: cluster.map(\.z).reduce(0, +) / Double(cluster.count)
+            )
+        }
+        return feet.count == 3 ? feet : nil
+    }
+
+    private static func circularSectorDistance(_ lhs: Int, _ rhs: Int) -> Int {
+        let direct = abs(lhs - rhs)
+        return min(direct, sectorCount - direct)
+    }
+}
+
+struct SpatialPoseSample: Codable, Equatable, Hashable, Sendable {
+    var translationMeters: SpatialVector3
+    var eulerDegrees: SpatialVector3
+
+    static let zero = Self(translationMeters: .zero, eulerDegrees: .zero)
+}
+
+enum SpatialCaptureOrientation: String, Codable, Equatable, Sendable {
+    case portrait
+    case portraitUpsideDown
+    case landscapeLeft
+    case landscapeRight
+}
+
+struct SpatialReferenceManifest: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let id: UUID
+    let createdAt: Date
+    let module: CameraModule
+    let deviceModelIdentifier: String
+    let cameraLens: RepeatableCameraLens
+    let cameraZoomFactor: Double
+    let orientation: SpatialCaptureOrientation
+    let tripodBaseCenter: SpatialVector3?
+    let tripodDirectionPoint: SpatialVector3?
+    let tripodHeightMeters: Double?
+    let tripodLegRadiusMeters: Double?
+    let tripodFootPoints: [SpatialVector3]?
+    let appearance: SpatialGuidanceAppearance?
+    let targetPose: SpatialPoseSample?
+    let worldMapFileName: String
+    let keyframeFileNames: [String]
+
+    init(
+        schemaVersion: Int = Self.currentSchemaVersion,
+        id: UUID,
+        createdAt: Date,
+        module: CameraModule,
+        deviceModelIdentifier: String,
+        cameraLens: RepeatableCameraLens,
+        cameraZoomFactor: Double,
+        orientation: SpatialCaptureOrientation,
+        tripodBaseCenter: SpatialVector3? = nil,
+        tripodDirectionPoint: SpatialVector3? = nil,
+        tripodHeightMeters: Double? = nil,
+        tripodLegRadiusMeters: Double? = nil,
+        tripodFootPoints: [SpatialVector3]? = nil,
+        appearance: SpatialGuidanceAppearance? = nil,
+        targetPose: SpatialPoseSample? = nil,
+        worldMapFileName: String,
+        keyframeFileNames: [String]
+    ) {
+        self.schemaVersion = schemaVersion
+        self.id = id
+        self.createdAt = createdAt
+        self.module = module
+        self.deviceModelIdentifier = deviceModelIdentifier
+        self.cameraLens = cameraLens
+        self.cameraZoomFactor = cameraZoomFactor
+        self.orientation = orientation
+        self.tripodBaseCenter = tripodBaseCenter
+        self.tripodDirectionPoint = tripodDirectionPoint
+        self.tripodHeightMeters = tripodHeightMeters
+        self.tripodLegRadiusMeters = tripodLegRadiusMeters
+        self.tripodFootPoints = tripodFootPoints
+        self.appearance = appearance
+        self.targetPose = targetPose
+        self.worldMapFileName = worldMapFileName
+        self.keyframeFileNames = keyframeFileNames
+    }
+
+    func replacingAppearance(
+        _ appearance: SpatialGuidanceAppearance
+    ) -> SpatialReferenceManifest {
+        .init(
+            schemaVersion: schemaVersion,
+            id: id,
+            createdAt: createdAt,
+            module: module,
+            deviceModelIdentifier: deviceModelIdentifier,
+            cameraLens: cameraLens,
+            cameraZoomFactor: cameraZoomFactor,
+            orientation: orientation,
+            tripodBaseCenter: tripodBaseCenter,
+            tripodDirectionPoint: tripodDirectionPoint,
+            tripodHeightMeters: tripodHeightMeters,
+            tripodLegRadiusMeters: tripodLegRadiusMeters,
+            tripodFootPoints: tripodFootPoints,
+            appearance: appearance.restricted,
+            targetPose: targetPose,
+            worldMapFileName: worldMapFileName,
+            keyframeFileNames: keyframeFileNames
+        )
+    }
+}
+
+enum SpatialGuidanceVisualState: Equatable, Sendable {
+    case noReference
+    case referenceSaved
+    case unsupported
+    case readyToStartMapping
+    case mapping
+    case insufficientCoverage
+    case reviewingScene
+    case selectingTripodBase
+    case tripodBaseSelected
+    case selectingTripodDirection
+    case tripodDirectionSelected
+    case readyToMount
+    case relocalizing
+    case positioning
+    case aligned
+    case relocalizationFailed
+    case incompatibleReference
+    case confirmRemap
+}
+
+enum SpatialGuidanceAction: Equatable, Sendable {
+    case createReference
+    case navigateScene
+    case reviewReference
+    case remapReference
+    case beginSceneCapture
+    case restartSceneCapture
+    case continueWithoutReference
+    case retryRelocalization
+    case saveReference
+    case defineScene
+    case continueMapping
+    case selectTripodBase
+    case adjustTripodBase
+    case confirmTripodBase
+    case selectTripodDirection
+    case adjustTripodDirection
+    case confirmTripodDirection
+    case openCamera
+    case completeNavigation
+    case cancel
+}
+
+enum SpatialGuidanceInterfaceCapabilityPolicy {
+    static func actions(for state: SpatialGuidanceVisualState) -> [SpatialGuidanceAction] {
+        switch state {
+        case .noReference:
+            [.createReference, .continueWithoutReference]
+        case .referenceSaved:
+            [.navigateScene, .reviewReference, .remapReference]
+        case .unsupported:
+            [.continueWithoutReference]
+        case .readyToStartMapping:
+            [.beginSceneCapture, .restartSceneCapture, .cancel]
+        case .mapping, .insufficientCoverage:
+            [.cancel]
+        case .reviewingScene:
+            [.defineScene, .continueMapping, .cancel]
+        case .selectingTripodBase:
+            [.selectTripodBase, .cancel]
+        case .tripodBaseSelected:
+            [.adjustTripodBase, .confirmTripodBase, .cancel]
+        case .selectingTripodDirection:
+            [.selectTripodDirection, .cancel]
+        case .tripodDirectionSelected:
+            [.adjustTripodDirection, .confirmTripodDirection, .cancel]
+        case .readyToMount:
+            [.saveReference, .cancel]
+        case .relocalizing:
+            [.cancel]
+        case .positioning:
+            [.completeNavigation, .cancel]
+        case .aligned:
+            [.completeNavigation, .cancel]
+        case .relocalizationFailed:
+            [.retryRelocalization, .remapReference, .cancel]
+        case .incompatibleReference:
+            [.remapReference, .continueWithoutReference]
+        case .confirmRemap:
+            [.remapReference, .cancel]
+        }
+    }
+}

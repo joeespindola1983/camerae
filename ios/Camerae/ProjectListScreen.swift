@@ -1,5 +1,13 @@
 import SwiftUI
 
+struct ProjectNavigationRoute: Hashable, Sendable {
+    let projectID: UUID
+
+    init(project: CameraProject) {
+        projectID = project.id
+    }
+}
+
 struct ProjectListScreen: View {
     @EnvironmentObject private var projectStore: ProjectStore
 
@@ -41,7 +49,7 @@ struct ProjectListScreen: View {
             ScrollView {
                 LazyVStack(spacing: 0) {
                     if let lastOpenedProject {
-                        NavigationLink(value: lastOpenedProject) {
+                        NavigationLink(value: ProjectNavigationRoute(project: lastOpenedProject)) {
                             ProjectListHeroCard(project: lastOpenedProject, theme: theme)
                         }
                         .buttonStyle(.plain)
@@ -78,7 +86,7 @@ struct ProjectListScreen: View {
                     } else {
                         LazyVStack(spacing: 8) {
                             ForEach(remainingProjects) { project in
-                                NavigationLink(value: project) {
+                                NavigationLink(value: ProjectNavigationRoute(project: project)) {
                                     ProjectListRow(project: project, theme: theme)
                                 }
                                 .buttonStyle(.plain)
@@ -228,7 +236,7 @@ struct ProjectListScreen: View {
                     project: project,
                     returnPathCount: path.count
                 )
-                path.append(project)
+                path.append(ProjectNavigationRoute(project: project))
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -340,11 +348,16 @@ struct ProjectCatalogActionsMenu: View {
     let theme: ProjectListTheme
     let setArchived: (Bool) -> Void
     let requestDelete: () -> Void
+    var requestMove: () -> Void = {}
 
     var body: some View {
         Menu {
             ForEach(ProjectCatalogActionPolicy.actions(for: project), id: \.self) { action in
                 switch action {
+                case .move:
+                    Button(action: requestMove) {
+                        Label("Mover para grupo", systemImage: "folder")
+                    }
                 case .archive:
                     Button {
                         setArchived(true)
@@ -480,7 +493,7 @@ struct ProjectListRow: View {
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(
-                    project.captureConfiguration?.projectSummary
+                    project.captureProfile?.projectSummary
                         ?? ProjectRowSummary(project: project).subtitle.uppercased()
                 )
                     .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))

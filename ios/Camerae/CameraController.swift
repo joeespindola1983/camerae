@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import CameraeCore
+import CameraeMedia
 import CoreLocation
 import CoreMotion
 import ImageIO
@@ -79,12 +80,16 @@ enum CameraeVideoCaptureFormatPolicy {
         guard !compatible.isEmpty else { return nil }
         if resolution == .fullSensor {
             return compatible.max {
+                let leftPixels = capabilities[$0].width * capabilities[$0].height
+                let rightPixels = capabilities[$1].width * capabilities[$1].height
+                if leftPixels != rightPixels {
+                    return leftPixels < rightPixels
+                }
                 if capabilities[$0].supportsStandardStabilization !=
                     capabilities[$1].supportsStandardStabilization {
                     return !capabilities[$0].supportsStandardStabilization
                 }
-                return capabilities[$0].width * capabilities[$0].height
-                    < capabilities[$1].width * capabilities[$1].height
+                return false
             }
         }
         let target: (short: Int, long: Int) = switch resolution {
@@ -109,6 +114,24 @@ enum CameraeVideoCaptureFormatPolicy {
     }
 }
 
+struct CameraeRecordedVideoContract: Equatable, Sendable {
+    let pixelWidth: Int
+    let pixelHeight: Int
+    let framesPerSecond: Int
+
+    func accepts(pixelWidth actualWidth: Int, pixelHeight actualHeight: Int, frameRate: Double) -> Bool {
+        let expectedShort = min(pixelWidth, pixelHeight)
+        let expectedLong = max(pixelWidth, pixelHeight)
+        let actualShort = min(actualWidth, actualHeight)
+        let actualLong = max(actualWidth, actualHeight)
+        let fpsTolerance = max(Double(framesPerSecond) * 0.02, 1)
+        return actualShort >= expectedShort &&
+            actualLong >= expectedLong &&
+            frameRate.isFinite &&
+            abs(frameRate - Double(framesPerSecond)) <= fpsTolerance
+    }
+}
+
 enum CameraeVideoEncodingPolicy {
     static func averageBitRate(settings: WorkflowVideoSettings) -> Int {
         let base: Double = switch settings.resolution {
@@ -125,24 +148,15 @@ enum CameraeVideoEncodingPolicy {
 
 enum CameraeVideoStabilizationPolicy {
     static func preferredMode(
-        supportedModes: [AVCaptureVideoStabilizationMode]
+        supportedModes _: [AVCaptureVideoStabilizationMode]
     ) -> AVCaptureVideoStabilizationMode {
-        if supportedModes.contains(.standard) { return .standard }
-        if supportedModes.contains(.cinematic) { return .cinematic }
-        if supportedModes.contains(.cinematicExtended) { return .cinematicExtended }
-        return .off
+        .off
     }
 
     static func preferredMode(
-        for format: AVCaptureDevice.Format
+        for _: AVCaptureDevice.Format
     ) -> AVCaptureVideoStabilizationMode {
-        preferredMode(
-            supportedModes: [
-                .standard,
-                .cinematic,
-                .cinematicExtended
-            ].filter(format.isVideoStabilizationModeSupported)
-        )
+        .off
     }
 }
 
@@ -202,6 +216,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var astroExposureStrategy = AstroExposureStrategy.automatic(maxDuration: 1.0)
     private var timelapseTask: Task<Void, Never>?
     private var videoStopTask: Task<Void, Never>?
+    private var activeRecordedVideoContract: CameraeRecordedVideoContract?
     private var latestLocation: CLLocation?
     private var latestHeading: CLHeading?
     private var bestFineGeoPose: GeoPose?
@@ -1333,7 +1348,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             stoppedForStorage = false
             try await configureIfNeeded()
             guard movieOutput.isRecording == false else { return }
-            try await configureVideoRecording(plan: plan, settings: settings)
+            activeRecordedVideoContract = try await configureVideoRecording(
+                plan: plan,
+                settings: settings
+            )
 
             let videoSession = try store.createSession(
                 captureKind: .video,
@@ -1391,6 +1409,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 if !Task.isCancelled { self?.stopVideoRecording() }
             }
         } catch {
+            activeRecordedVideoContract = nil
             isVideoRecording = false
             cameraeVisionCoordinator.resume(.videoRecording)
             status = "Video falhou: \(error.localizedDescription)"
@@ -1400,7 +1419,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private func configureVideoRecording(
         plan: CapturePlan,
         settings: WorkflowVideoSettings
-    ) async throws {
+    ) async throws -> CameraeRecordedVideoContract {
         let expectedResolution: CaptureResolution = switch settings.resolution {
         case .preview: .fullHD
         case .fourK: .ultraHD
@@ -1411,18 +1430,18 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
               plan.resolution == expectedResolution else {
             throw CameraError.unsupportedVideoConfiguration
         }
-        try await withCheckedThrowingContinuation { continuation in
+        return try await withCheckedThrowingContinuation { continuation in
             captureQueue.async {
                 do {
                     guard let device = self.device else { throw CameraError.noCamera }
                     self.session.beginConfiguration()
                     defer { self.session.commitConfiguration() }
-                    try self.applyVideoConfiguration(
+                    let contract = try self.applyVideoConfiguration(
                         device: device,
                         settings: settings,
                         resolution: plan.resolution
                     )
-                    continuation.resume(returning: ())
+                    continuation.resume(returning: contract)
                 } catch {
                     CameraeCaptureDiagnostics.error(
                         "C96 video.configuration.failed",
@@ -1438,7 +1457,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         device: AVCaptureDevice,
         settings: WorkflowVideoSettings,
         resolution: CaptureResolution
-    ) throws {
+    ) throws -> CameraeRecordedVideoContract {
         let capabilities = device.formats.map { format in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             let ranges = format.videoSupportedFrameRateRanges
@@ -1505,6 +1524,11 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             "C19 video.configuration",
             "requested=\(settings.summary) actual=\(selected.width)x\(selected.height) fps=\(settings.fps) codec=\(codec.rawValue) bitrate=\(CameraeVideoEncodingPolicy.averageBitRate(settings: settings)) stabilization=\(connection.preferredVideoStabilizationMode.rawValue)"
         )
+        return CameraeRecordedVideoContract(
+            pixelWidth: selected.width,
+            pixelHeight: selected.height,
+            framesPerSecond: settings.fps
+        )
     }
 
     private func stopVideoRecording() {
@@ -1521,9 +1545,25 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         isVideoRecording = false
         cameraeVisionCoordinator.resume(.videoRecording)
         videoRecordingStartedAt = nil
+        let recordedVideoContract = activeRecordedVideoContract
+        activeRecordedVideoContract = nil
 
         do {
             let outputURL = try result.get()
+            if let recordedVideoContract {
+                let metadata = try await MediaAssetProbe().probe(url: outputURL)
+                guard recordedVideoContract.accepts(
+                    pixelWidth: metadata.pixelWidth,
+                    pixelHeight: metadata.pixelHeight,
+                    frameRate: metadata.frameRate
+                ) else {
+                    CameraeCaptureDiagnostics.error(
+                        "C97 video.output.mismatch",
+                        "expected=\(recordedVideoContract.pixelWidth)x\(recordedVideoContract.pixelHeight)@\(recordedVideoContract.framesPerSecond) actual=\(metadata.pixelWidth)x\(metadata.pixelHeight)@\(metadata.frameRate)"
+                    )
+                    throw CameraError.recordedVideoFormatMismatch
+                }
+            }
             guard let currentSession else { throw CameraError.missingSession }
             try await saveFirstVideoFrame(from: outputURL, in: currentSession)
             frameCount = store.frameCount(in: currentSession)
@@ -1725,7 +1765,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     self.photoOutput.maxPhotoQualityPrioritization = .quality
                     self.device = device
                     if let videoConfiguration = self.pendingVideoConfiguration {
-                        try self.applyVideoConfiguration(
+                        _ = try self.applyVideoConfiguration(
                             device: device,
                             settings: videoConfiguration.settings,
                             resolution: videoConfiguration.resolution
@@ -2362,6 +2402,7 @@ enum CameraError: LocalizedError {
     case missingSession
     case cancelled
     case unsupportedVideoConfiguration
+    case recordedVideoFormatMismatch
 
     var errorDescription: String? {
         switch self {
@@ -2377,6 +2418,8 @@ enum CameraError: LocalizedError {
             return "captura cancelada"
         case .unsupportedVideoConfiguration:
             return "a câmera selecionada não suporta a resolução e o FPS solicitados"
+        case .recordedVideoFormatMismatch:
+            return "o vídeo gravado não preservou a resolução e o FPS selecionados"
         }
     }
 }

@@ -58,18 +58,58 @@ struct CameraeSettingsTests {
         )
     }
 
+    @Test("full sensor video keeps the largest format before considering stabilization")
+    func fullSensorPrioritizesResolution() {
+        let formats = [
+            CameraeVideoFormatCapability(
+                width: 1720,
+                height: 1290,
+                minimumFPS: 1,
+                maximumFPS: 60,
+                supportsStandardStabilization: true
+            ),
+            CameraeVideoFormatCapability(
+                width: 3840,
+                height: 2160,
+                minimumFPS: 24,
+                maximumFPS: 60
+            )
+        ]
+
+        #expect(
+            CameraeVideoCaptureFormatPolicy.preferredIndex(
+                capabilities: formats,
+                resolution: .fullSensor,
+                framesPerSecond: 60
+            ) == 1
+        )
+    }
+
+    @Test("recorded video must satisfy the selected format and frame rate")
+    func recordedVideoContractRejectsSilentDowngrade() {
+        let contract = CameraeRecordedVideoContract(
+            pixelWidth: 3840,
+            pixelHeight: 2160,
+            framesPerSecond: 60
+        )
+
+        #expect(contract.accepts(pixelWidth: 3840, pixelHeight: 2160, frameRate: 59.94))
+        #expect(!contract.accepts(pixelWidth: 1720, pixelHeight: 1290, frameRate: 30))
+        #expect(!contract.accepts(pixelWidth: 3840, pixelHeight: 2160, frameRate: 30))
+    }
+
     @Test("video quality contributes to the actual encoder bitrate")
     func videoQualityControlsEncoderBitrate() {
         let settings = WorkflowVideoSettings(resolution: .fourK, fps: 60, quality: .high)
         #expect(CameraeVideoEncodingPolicy.averageBitRate(settings: settings) == 120_000_000)
     }
 
-    @Test("video stabilization prefers the low-crop standard mode consistently")
-    func videoStabilizationUsesStandardMode() {
+    @Test("Repeatable video keeps electronic stabilization off for tripod capture")
+    func videoStabilizationPreservesNativeTripodCapture() {
         #expect(
             CameraeVideoStabilizationPolicy.preferredMode(
                 supportedModes: [.cinematic, .standard, .cinematicExtended]
-            ) == .standard
+            ) == .off
         )
         #expect(
             CameraeVideoStabilizationPolicy.preferredMode(supportedModes: []) == .off

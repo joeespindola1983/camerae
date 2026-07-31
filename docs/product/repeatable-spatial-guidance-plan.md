@@ -1,0 +1,485 @@
+# Repeatable spatial guidance plan
+
+## Status
+
+- Product name: **Spatial Guidance** in design and code; **Guia espacial**
+  in Portuguese user-facing copy.
+- Implementation status: local evaluation branch
+  `codex/repeatable-spatial-guide`; not promoted to QA or a release branch.
+- Initial module: Repeatable.
+- Future module: Astro, enabled by capability policy rather than a separate
+  implementation.
+- Delivery order: approved Figma flow, short-lived branch, failing tests,
+  implementation, automated verification, and on-device Xcode validation.
+- This document is the implementation plan. Figma remains the visual source of
+  truth, and typed interface-capability policies remain the functional source
+  of truth.
+
+## Outcome
+
+Help a person return the tripod base to a previously recorded physical point
+and recover its intended horizontal orientation. The first visit saves an
+ARKit world map, a compact center anchor, and a second point in front of the
+tripod. A later visit relocalizes into that map and displays the center plus a
+direction line on the ground.
+
+Spatial Guidance is scene navigation, not camera alignment. Lens framing,
+rotation, height, and post-capture registration remain responsibilities of the
+existing alignment system.
+
+## MVP scope
+
+The first release provides:
+
+1. Runtime eligibility on supported iPhones.
+2. A versioned, caption-ready video tutorial before the first mapping, with
+   textual fallback and later access from the Tripod tab.
+3. A project-level **Tripod** tab that exists only when Spatial Guidance is
+   available on the current device.
+4. A guided first-visit scan around a stationary tripod and static surroundings.
+5. Explicit mapping-quality feedback followed by automatic capture completion
+   as soon as the minimum trustworthy contract is met.
+6. A positioning step in which the tripod-base center is selected and
+   confirmed.
+7. A direction step initialized automatically from the operator viewpoint. Its
+   45-centimeter handle may be rotated by touching or dragging across any mapped
+   scene surface before saving.
+8. Atomic local persistence of the world map, anchors, manifest, and guide
+   images.
+9. Later relocalization into the saved map.
+10. A compact center marker and arrowed direction line at the saved tripod-base
+   anchor.
+11. A safe path to continue capture without Spatial Guidance.
+12. A safe remap operation that retains the previous usable guide until the
+    replacement is validated.
+13. A live, translucent polygonal preview of the surfaces already reconstructed
+    by LiDAR.
+14. Immediate touch-and-drag selection of the tripod-base center and camera
+    direction on a horizontal surface.
+15. A final JPEG scene screenshot displayed in the Tripod tab after saving.
+16. A translucent standard-tripod mesh composed from a center tube, three
+    evenly spaced legs, and a small direction-oriented head.
+17. A subtle vertical plumb laser and radial ground halo centered on the saved
+    base, visible during placement and later navigation.
+18. A single creation contrast toggle between white mesh with black
+    tripod/camera and black mesh with white tripod/camera.
+19. Navigation-only black/white and opacity controls for tripod and camera;
+    reconstructed mesh wireframes remain hidden after relocalization.
+20. A fixed, higher-visibility yellow plumb laser and ground halo independent
+    from the selected tripod colors.
+
+## First-visit flow
+
+1. The compatible Repeatable project shows **Mapear local**.
+2. On the first use of the current tutorial content version, selecting the
+   action presents the video explanation. Embedded captions are preferred;
+   if the packaged video is absent, concise textual instructions preserve a
+   safe path forward. Completion is versioned, and **Assistir tutorial**
+   remains available in the Tripod tab.
+3. Continuing immediately starts camera and LiDAR preparation; a
+   loading state remains visible until the first AR frame arrives.
+4. Once ARKit is ready, the live camera pauses at an explicit confirmation.
+   **Start capture** resets tracking, anchors, metrics, and guide images before
+   collection begins. **Restart location** returns to the same clean checkpoint.
+5. Initial operational guidance asks the person to:
+   - keep the tripod stationary;
+   - walk slowly around it;
+   - include the ground and distinctive static surroundings;
+   - avoid people, moving vehicles, and rapid camera motion.
+6. The app starts world tracking, scene depth, and scene reconstruction.
+7. A pure quality evaluator combines:
+   - normal camera tracking;
+   - suitable world-mapping status;
+   - minimum elapsed scan time;
+   - angular coverage around the target;
+   - detected floor;
+   - minimum mapped volume;
+   - acceptable thermal state.
+8. As soon as the minimum trustworthy quality contract is satisfied, the app
+   freezes the reconstructed scene and advances automatically. Suggested
+   coverage is not required, preventing an arbitrarily large scene from
+   blocking the flow.
+9. The person taps the center between the tripod legs and may drag the marker
+   over the detected floor to correct it.
+10. The app estimates tripod height from reconstructed vertices close to the
+   confirmed base, then searches a narrow band above the floor for three
+   independent solid angular clusters. Those clusters become individual feet
+   connected to the central hub. If three feet are not supported, it falls back
+   to a one-meter standard mesh with conservative opening.
+11. The app proposes an initial direction from the tripod toward the operator.
+   The person may touch or drag across any reconstructed surface to rotate its
+   fixed 45-centimeter handle. An arrow from the center provides explicit
+   orientation while its visual length remains stable.
+12. Only after center and direction are confirmed does the app enable saving.
+13. The app records the tripod-base anchor, direction anchor, estimated height, device, lens,
+   zoom, orientation, and guide images.
+14. The store writes a candidate bundle, validates it, and publishes it
+   atomically. Its final guide screenshot becomes the visual reference in the
+   Tripod tab.
+
+## Return flow
+
+1. The project shows **Usar guia espacial**.
+2. The saved world map becomes the session's initial world map.
+3. Saved guide images help the person revisit previously observed viewpoints.
+4. The tripod-center point and direction line stay hidden while tracking is initializing or
+   relocalizing.
+5. The navigation guide appears only after:
+   - tracking returns to normal;
+   - the saved target anchor is restored;
+   - the base anchor is restored.
+6. The person positions and mounts the tripod.
+7. The person positions the center of the tripod base over the point, rotates
+   the camera to follow the direction line, and concludes navigation when
+   satisfied.
+
+## Eligibility
+
+Eligibility is resolved at runtime and is independent from view geometry.
+The policy accepts neutral capability inputs and initially enables only:
+
+- `CameraModule.repeatable`;
+- iPhone;
+- AR world tracking;
+- scene reconstruction with classification;
+- scene depth and smoothed scene depth;
+- an acceptable resource and thermal budget.
+
+Astro remains disabled in version one even on compatible hardware. A saved
+guide opened on incompatible hardware must remain identifiable and must not be
+silently deleted or replaced.
+
+Model names are not the primary compatibility contract. Apple capability
+checks, resource state, and tested performance define availability.
+
+## Component architecture
+
+The feature must not live inside `RepeatableCameraView`.
+
+### Domain
+
+`SpatialReferenceDomain` owns neutral value types and state:
+
+- feature availability;
+- mapping and relocalization phases;
+- quality observations and decisions;
+- restored base-anchor confidence;
+- persisted manifest model;
+- module policy.
+
+It does not import ARKit or SwiftUI.
+
+### Session abstraction
+
+`SpatialSceneSession` is a protocol that publishes:
+
+- tracking state;
+- mapping status;
+- scene observations;
+- restored anchors;
+- restored tripod-base anchor;
+- final world-map data;
+- cancellation and failure.
+
+`ARKitSpatialSceneSession` is the production adapter. Tests use deterministic
+fakes.
+
+### Persistence
+
+`SpatialReferenceStore` owns a versioned project-level bundle:
+
+```text
+spatial_reference/
+├── manifest.json
+├── world_map.bin
+├── keyframes/
+│   ├── 001.jpg
+│   ├── 002.jpg
+│   └── ...
+└── previous/
+```
+
+The version-one manifest records:
+
+- schema version;
+- creation date;
+- device model;
+- lens identifier and zoom;
+- capture orientation;
+- tripod-base center in world-map coordinates;
+- tripod-direction point in world-map coordinates;
+- optional estimated tripod height;
+- optional estimated tripod leg radius;
+- optional detected tripod foot points;
+- optional mesh, tripod, and camera RGBA appearance;
+- optional legacy camera transform for forward decoding of existing references;
+- anchor identifiers;
+- world-map filename;
+- guide-image filenames;
+- mapping-quality evidence.
+
+Guide images use JPEG quality `0.75` and a maximum long edge of `1920` pixels.
+Spatial data remains local by default and is excluded from media sharing and
+exports unless a future explicit product contract says otherwise.
+
+### Presentation
+
+Reusable presentation is divided into:
+
+- `SpatialGuideCard` for project configuration;
+- `SpatialGuideFlowView` for mapping and relocalization;
+- a compact spatial center renderer.
+- a parametric standard-tripod renderer driven only by center and direction.
+
+Theme and module availability are injected. Domain and storage types must not
+contain `Repeatable` in their names.
+
+## Figma contract
+
+The dedicated `05 · Spatial Guidance` page (`662:2`) owns:
+
+- mapping introduction;
+- mapping progress and missing-coverage states;
+- tripod-base center selection;
+- saved-guide state;
+- relocalization;
+- tripod-center navigation;
+- success, timeout, incompatibility, remap, and recovery.
+
+Reusable project-entry components may live in `Workflow Components` after they
+are approved. Live capture helpers may reuse primitives from `Capture
+Assistance`. Composed application entry points remain in `App Screens`.
+
+Figma must cover:
+
+- first map;
+- explicit start after the first usable AR frame;
+- active map;
+- automatic transition at the minimum trustworthy mapping threshold;
+- tripod-base center selection;
+- automatically proposed, fixed-length camera direction with a draggable handle;
+- replacement confirmation;
+- portrait mapping;
+- portrait and landscape mounted guidance;
+- relocalizing;
+- low confidence;
+- failure and retry;
+- incompatible device with a saved guide;
+- continue without guide.
+
+No SwiftUI hierarchy work begins before the flow, copy, component states, and
+node IDs are approved.
+
+### Approved node registry
+
+- Page content wrapper: `665:2`.
+- Current specification section: `682:148`.
+- Current screen rows: `682:149`, `682:150`, and `682:151`.
+- Eligible Tripod tab without a guide: `683:144`.
+- Ready-to-start checkpoint: `684:145`.
+- Automatic mapping: `685:146`.
+- Tripod-base center selection: `686:147`.
+- Camera-direction selection: `687:148`.
+- Saved Tripod tab and reference thumbnail: `687:4600`.
+- Clean relocalization: `687:4615`.
+- Clean scene navigation without reconstructed mesh: `688:152`.
+- Navigation appearance controls: `688:4604`.
+- Safe remap confirmation: `688:4620`.
+- Relocalization recovery: `688:4632`.
+- Saved guide on an incompatible device: `688:4643`.
+
+The current screen registry is the release contract for the first Repeatable
+delivery. It specifies center-and-direction guidance without numeric pose
+deltas, automatic mapping completion, a yellow plumb guide, and
+navigation-only appearance controls.
+
+The following nodes are retained as legacy design evidence and are not the
+current release contract:
+
+- Legacy component catalog: `665:4444`.
+- `Spatial Status Badge`: `666:17`.
+- `Spatial Progress Card`: `668:26`.
+- `Pose Delta`: `669:32`.
+- `Spatial Guide Card`: `670:20`.
+- `Ghost Rig`: `671:35`.
+- Configuration screens: `672:6`, `672:20`, and `672:34`.
+- First-visit mapping screens: `673:24`, `673:43`, and `673:62`.
+- Return and positioning screens: `674:42`, `674:62`, and `674:97`.
+- Recovery screens: `675:102`, `675:117`, and `675:132`.
+- Landscape positioning screen: `677:121`.
+
+The legacy positioning nodes predate the navigation-only iteration and remain
+only for historical comparison. New implementation and tests must use the
+current registry above.
+
+## TDD plan
+
+### Availability policy
+
+Write failing tests for:
+
+- supported Repeatable device is eligible;
+- missing LiDAR capabilities is ineligible;
+- compatible Astro remains disabled;
+- critical thermal state pauses the operation;
+- low-power behavior is explicit;
+- another device or lens cannot claim high precision;
+- a saved incompatible guide remains discoverable.
+
+### State machine
+
+Cover the successful paths:
+
+```text
+empty
+→ mapping
+→ sufficient
+→ awaiting mount
+→ saving
+→ ready
+
+ready
+→ relocalizing
+→ localized
+→ navigating
+```
+
+Cover cancellation, excessive motion, insufficient features, tracking loss,
+timeout, retry, invalid anchors, and safe fallback to the previous guide.
+
+### Quality evaluator
+
+Use pure inputs to test tracking, world-mapping status, elapsed time, angular
+coverage, floor evidence, mapped volume, and thermal state.
+Unit tests must not require a physical AR session.
+
+### Store and schema
+
+Test:
+
+- current schema round trip;
+- empty project;
+- malformed or unversioned data;
+- unsupported newer schema;
+- atomic candidate publication;
+- cancellation preserving the previous guide;
+- JPEG dimensions and format;
+- project deletion removing spatial data;
+- normal media export excluding spatial data.
+
+No artificial legacy migration is created without historical evidence. Absence
+of a spatial bundle is the valid pre-feature state.
+
+### Interface capabilities
+
+The typed policy must keep these actions reachable when applicable:
+
+- map location;
+- use guide;
+- review guide images;
+- remap;
+- retry relocalization;
+- continue without guide;
+- continue to capture.
+
+It must also prove that Astro does not expose the first release. Capability
+tests remain independent from layout and orientation.
+
+### ARKit integration
+
+Fakes simulate map completion, base-anchor restoration, timeout, and failure.
+The real adapter is validated by compilation
+and a physical-device test matrix.
+
+## Delivery slices
+
+1. Domain policies, state machine, codec, and store.
+2. Configuration entry and complete flow driven by a fake session.
+3. ARKit capability provider and first-visit map persistence.
+4. Relocalization, restored base anchor, and compact point navigation.
+5. Diagnostics, accessibility, localization, recovery, and device validation.
+
+Each slice starts with failing tests and leaves the Draft PR buildable.
+
+## Local evaluation implementation
+
+The evaluation branch contains:
+
+- neutral availability, mapping-quality, state-machine, manifest, and
+  interface-capability policies;
+- a versioned project-local store with staging, validation, atomic publication,
+  and retention of the previous complete reference;
+- an ARKit adapter using world tracking, classified mesh reconstruction, scene
+  depth, guide JPEGs, a saved world map, and a named tripod-base anchor;
+- reusable SwiftUI configuration and full-screen guidance flows;
+- Repeatable configuration and capture handoff without adding module-specific
+  names to the domain or persistence layers.
+
+This branch is intentionally handed off locally for physical-device testing.
+It does not imply QA approval, release selection, or Astro enablement.
+
+The live-code evaluation currently advances beyond the approved Figma nodes by
+adding mesh review and tripod-base selection. Figma remains intentionally
+unchanged during this faster physical-device iteration; these states must be
+reconciled before the feature can be proposed for QA or release.
+
+## Git and verification
+
+After Figma approval:
+
+1. Start from a clean, fast-forwarded `develop`.
+2. Create `codex/repeatable-spatial-guide`.
+3. Open a Draft PR into `develop`.
+4. Add the failing test for the current slice.
+5. Implement only enough to pass it.
+6. Run relevant capability, domain, persistence, integration, and UI tests.
+7. Regenerate the Xcode project if project configuration changes.
+8. Run the device-SDK build and compile all affected test targets.
+9. Hand the green branch to Xcode for physical-device validation.
+
+## Device validation
+
+The first internal build exposes temporary diagnostics for:
+
+- scene-depth support;
+- scene-reconstruction support;
+- tracking state;
+- mapping status;
+- angular and volume coverage;
+- thermal state;
+- restored-anchor state;
+- restored-base confidence;
+- saved-map size.
+
+The manual matrix includes:
+
+- app termination between visits;
+- tripod displacement of 10–30 cm;
+- near and far scene objects;
+- portrait and landscape capture;
+- different lighting, including day and night;
+- remap cancellation;
+- tracking loss and retry;
+- temperature, battery, storage, and capture handoff.
+
+## Acceptance criteria
+
+The MVP is ready for product evaluation when:
+
+- approved Figma states and node IDs exist;
+- only eligible Repeatable projects expose the active feature;
+- a crash or cancellation cannot destroy the last usable guide;
+- an app relaunch can restore the saved anchor on a supported device;
+- the center point appears only after trustworthy relocalization;
+- capture without the guide still works;
+- automated contracts pass;
+- the branch builds and runs from Xcode on a supported iPhone.
+
+## Deferred precision work
+
+Version one does not perform independent registration of two dense LiDAR maps.
+After physical testing measures real relocalization error, a second phase may
+save a decimated static mesh and use geometric registration to validate or
+refine ARKit. Flat-floor-only scenes, symmetric environments, appearance
+changes, drift, and false confidence must be evaluated before that behavior can
+be automatic.

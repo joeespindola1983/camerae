@@ -4,11 +4,95 @@ All notable Camerae changes are recorded in this file.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Historical entries before this file was introduced were reconstructed from immutable Git tags and commit history. When the original release commit did not contain detailed notes, the entry is intentionally described as a consolidated historical milestone.
 
+## App Store release status
+
+This table is the operational source of truth for production submissions to
+Apple. It is intentionally separate from internal QA and release-candidate
+status. Update it whenever App Store Connect changes state; Firebase and other
+test distributions do not require an entry here.
+
+| Version | Apple status | Public availability | Last updated |
+| --- | --- | --- | --- |
+| `9.1.0` | In Review | Not yet available | 2026-07-30 |
+| `8.5.1` | Approved | Available on the App Store | 2026-07-30 |
+
 ## [Unreleased]
 
 ### Added
 
 - Added authentic Repeatable day/night and changing-condition App Store screenshot candidates for iPhone and iPad, plus reproducible alignment diagnostics for all three video pairs.
+- Added a reusable, versioned video-tutorial pattern with captions, first-use
+  completion, contextual replay, and textual fallback while media is not
+  packaged; Spatial Guidance is its first consumer.
+- Added Repeatable Spatial Guidance on eligible LiDAR iPhones, with explicit
+  capture start, automatic minimum-map completion, local world-map persistence,
+  relocalization, and a dedicated Tripod project tab.
+- Added draggable tripod-base and fixed 45-centimeter camera-direction controls,
+  plus an estimated ghost tripod derived from mapped height and three nearby
+  foot clusters with conservative fallbacks.
+- Added a yellow plumb laser and ground halo, a clean reference screenshot, and
+  navigation that restores the tripod and direction without rebuilding the
+  captured wireframe.
+- Added one black/white creation-contrast toggle and navigation-only black/white
+  plus 25%/50%/100% appearance controls for tripod and camera.
+- Added atomic remapping that preserves the last usable guide, keeps saved
+  guides discoverable on incompatible devices, and offers safe recovery or
+  continuation without Spatial Guidance.
+- Added two-level Repeatable project organization with groups, subgroups,
+  project moves, archive controls, safe organization deletion, and
+  zero-to-four-thumbnail mosaics.
+- Added a versioned organization document that keeps existing projects
+  ungrouped by default and never rewrites project manifests or media.
+- Added paired light and dark Figma Screens for iPhone and iPad plus creation,
+  movement, action-menu, safe-delete, and empty states.
+- Added complete project-organization localization for Portuguese, Spanish,
+  English, French, German, and Russian.
+
+### Changed
+
+- Canonicalized the Repeatable project workspace across Figma and SwiftUI so
+  the project title, conditional Tripod tab, saved-guide status, and capture
+  count share one tested presentation and capability contract.
+- Canonicalized project and group catalogs across Figma and SwiftUI, including
+  current project-card geometry, native catalog toolbars, empty-state recovery,
+  and tested filter, sort, group-creation, and project-creation capabilities.
+- Organized the canonical Figma file into stable design-system, workflow, domain, application, and website pages, and documented the corresponding design governance and Spatial Guidance handoff.
+- Reconciled the canonical Spatial Guidance page with the validated
+  center-and-direction flow and retained the earlier numeric pose-delta concept
+  as legacy design evidence.
+- Shows Repeatable groups before ungrouped projects and subgroups before projects directly assigned to a group.
+- Extends the typed interface-capability contract so Repeatable project cards always retain Move, Archive or Unarchive, and Delete actions.
+
+## [9.2.1] - 2026-07-29
+
+**Status:** Approved
+**Areas:** Repeatable mixed captures, project navigation, video duration, 4K/60 export
+
+### Fixed
+
+- Keeps project-card navigation keyed by the stable project ID so the recently opened project remains tappable while its metadata and list position refresh.
+- Restores video duration from the project's latest recorded clip, normalizes near-preset recordings such as 29 seconds back to 30 seconds, and labels non-preset durations as Other.
+- Preserve the recorded resolution, frame rate, HEVC codec, and source bitrate when exporting aligned Repeatable videos, including 4K at 60 fps, and reject silent capture or export downgrades.
+- Select the largest full-sensor recording format before using stabilization support as a tie-breaker, preventing an unintended fallback to 1720 × 1290.
+- Keep electronic video stabilization disabled for tripod-based Repeatable capture, preserving native field of view and resolution for alignment.
+
+### Added
+
+- Added obvious Photo, Video, and Timelapse SF Symbol badges to capture-type selection and every project capture card.
+- Added independent editable defaults for Photo, Video, and Timelapse inside the same Repeatable project.
+
+### Changed
+
+- Locks only the project's physical camera and zoom after the first capture; all other capture settings remain preselected and editable.
+- Migrates legacy immutable capture configurations to schema 3 hardware contracts with independent per-type presets.
+
+## [9.2.0] - 2026-07-28
+
+**Status:** QA candidate
+**Areas:** Project catalog, storage, capture configuration, migration, Repeatable video alignment, Camerae Vision, Figma
+
+### Added
+
 - Added project actions to permanently delete a project or remove only original timelapse frames while preserving the reference image, generated photos, videos, and exports.
 - Added a themed project-storage screen for Repeatable and Astro, matching the canonical light and dark examples in Figma.
 - Added project-level capture configuration locking so Photo, Timelapse, and Video projects automatically reuse the type and exact settings selected for their first capture.
@@ -22,14 +106,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 - Added one-time migration for captured legacy projects so historical capture type, camera, format, duration, interval, and Astro stack size become a normalized immutable project configuration.
 - Added independent project sorting by last activity or creation date with newest projects first.
 - Added the fixed project capture type and configuration summary to project cards and subsequent capture setup.
+- Uses the midpoint of the first Repeatable video as the project alignment reference and evaluates five points across every later clip before applying one constant reframe.
+- Hides video alignment from the reference clip while preserving playback, sharing, and deletion.
 
 ### Fixed
 
 - Restored project-list thumbnails for Astro captures and legacy projects while continuing to prefer an explicit Repeatable reference image.
+- Localized the Repeatable capture-empty state, capture count and action, plus the Edit empty state, across all six release languages.
+- Improved Repeatable video registration for appearance and contrast changes with SIFT, CLAHE, higher-resolution feature extraction, and temporally consistent confidence recovery.
+- Keeps geometrically unstable, low-overlap, extreme-scale, and unsafe-projective Repeatable video matches blocked.
 
 ## [9.1.0] - 2026-07-28
 
-**Status:** Release candidate
+**Internal status:** Release candidate
+
+**App Store status:** In Review; not yet publicly available
 **Areas:** Repeatable, single-photo capture, contour alignment, catalog, Figma
 
 ### Added
@@ -80,7 +171,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and 
 
 ## [8.5.1] - 2026-07-24
 
-**Status:** QA candidate
+**Internal status:** Released
+
+**App Store status:** Approved by Apple and available on the App Store
 **Areas:** Repeatable, video alignment, reference images, playback, sharing
 
 ### Fixed

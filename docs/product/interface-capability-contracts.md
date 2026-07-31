@@ -19,8 +19,10 @@ returned by `ProjectCatalogActionPolicy`.
 
 | Project state | Required actions |
 | --- | --- |
-| Active | Archive, Delete |
-| Archived | Unarchive, Delete |
+| Active Repeatable | Move, Archive, Delete |
+| Archived Repeatable | Move, Unarchive, Delete |
+| Active Astro | Archive, Delete |
+| Archived Astro | Unarchive, Delete |
 
 Additional invariants:
 
@@ -35,6 +37,138 @@ The executable contract lives in
 `CameraeNextProjectCatalogTests.projectCardCapabilities`. UI evidence remains
 useful for visual approval, while this test protects the business capability
 when the view hierarchy changes.
+
+## Repeatable project organization
+
+Organization is independent of capture type and project media. The catalog has
+exactly two organization levels: group and subgroup. A project belongs to at
+most one organization node.
+
+Every visible group or subgroup card must expose the actions returned by
+`ProjectOrganizationActionPolicy`.
+
+| Organization state | Required actions |
+| --- | --- |
+| Active | Rename, Archive, Delete organization |
+| Archived | Rename, Unarchive, Delete organization |
+
+Additional invariants:
+
+- Root groups appear before ungrouped projects.
+- Subgroups appear before projects directly assigned to a group.
+- A project can move to a root group, subgroup, or Ungrouped.
+- Deleting a group also removes its subgroup organization and returns every
+  descendant project to Ungrouped.
+- Deleting a subgroup returns its projects to Ungrouped.
+- Organization deletion never deletes a project directory, reference, capture,
+  video, timelapse, export, or cache.
+- Card mosaics show zero to four descendant project thumbnails and use `+N`
+  when more projects exist.
+- Menus remain reachable independently of mosaic geometry, image orientation,
+  compact width, or iPad layout.
+
+The executable contracts live in
+`CameraeNextProjectCatalogTests.organizationHierarchy`,
+`organizationCapabilities`, and `projectCardCapabilities`. The canonical Figma
+component is `Project Group Card`; the paired light/dark iPhone and iPad Screens
+are `10A` through `10R`.
+
+## Repeatable capture catalog
+
+Every Repeatable project can contain Photo, Video, and Timelapse captures.
+Each visible capture card must expose a layout-independent type presentation:
+
+| Capture type | Required SF Symbol |
+| --- | --- |
+| Photo | `camera.fill` |
+| Video | `video.fill` |
+| Timelapse | `timelapse` |
+
+The executable contract lives in
+`CameraeNextSessionCatalogTests.captureTypeIcon`. The corresponding light and
+dark Figma Screens are `09B` and `09D`.
+
+The first recorded video that contains a usable saved reference frame is the
+project's geometric reference. Its capture card must expose playback, sharing,
+and deletion, but must not offer alignment against itself.
+
+Every later recorded video with available source media must expose:
+
+- playback using the aligned export when one exists, otherwise the original;
+- Process alignment against the project video reference;
+- sharing of the default playback artifact;
+- deletion through the project capture actions.
+
+A legacy video without a saved reference frame cannot silently become the
+geometric reference. The next oldest usable video becomes the reference
+instead.
+
+The executable capability contract lives in
+`CameraeNextSessionCatalogTests.theReferenceVideoHidesAlignmentWhileLaterVideosRemainAlignable`.
+The legacy fallback is protected by
+`CameraeNextSessionCatalogTests.legacyVideoWithoutAReferenceFrameNeverBecomesTheAlignmentReference`.
+The corresponding Figma Screen is
+`05 · Repeatable — Projeto · Capturas · Referência + Alinháveis`.
+
+## Project capture configuration
+
+Every Repeatable project configuration must keep all three capture types
+reachable. Changing capture type restores that type's last captured defaults,
+which remain editable.
+
+The physical camera and zoom become immutable when the first capture starts.
+No subsequent Photo, Video, or Timelapse preset may change them.
+
+The executable contract lives in
+`CameraeNextWorkflowConfigurationTests.projectHardwareLockAndCaptureTypeDefaults`
+and `projectCaptureKind`. The corresponding Figma components are
+`Capture Type Selector`, `Capture Type Badge`, and the `Locked` variants of
+`Camera Setup State`; the corresponding light and dark Screens are `09A` and
+`09C`.
+
+## Repeatable Spatial Guidance
+
+Spatial Guidance is available only when the typed runtime policy accepts the
+module, world tracking, classified scene reconstruction, scene depth,
+performance budget, and thermal state. Layout must never be used to infer
+eligibility.
+
+An eligible Repeatable project must expose a Tripod tab with these
+layout-independent capabilities:
+
+| Project state | Required actions |
+| --- | --- |
+| No saved guide | Map location |
+| Saved guide | Navigate scene, Map again |
+| Saved guide on an incompatible device | Keep the guide discoverable, Continue without guide |
+
+Before the first Spatial Guidance mapping, a versioned video tutorial must be
+presented. The user can continue when the video is unavailable by reading the
+fallback instructions. Completing or skipping the current content version
+must not block later mapping, and **Assistir tutorial** must remain reachable
+from the Tripod tab after completion. Tutorial media does not replace the
+operational AR readiness, capture, restart, positioning, recovery, or cancel
+capabilities below.
+
+The creation flow must keep these actions reachable:
+
+- start capture only after the first usable AR frame and explicit confirmation;
+- restart the location from a clean tracking state;
+- select and adjust the tripod-base center;
+- accept the proposed camera direction or drag its fixed-length handle;
+- save only after both points are confirmed;
+- cancel without replacing a previously usable guide.
+
+The return flow must keep cancellation and recovery reachable while hiding the
+saved guide until relocalization is trustworthy. Once restored, it presents
+only the tripod, direction, camera marker, and yellow plumb guide; reconstructed
+mesh is not a navigation capability.
+
+The executable contract lives in `CameraeTutorialTests`, `SpatialGuidanceTests`, and
+`CameraeNextSessionCatalogTests`. The current Figma registry begins at
+`682:148` on `05 · Spatial Guidance`; its first-use tutorial screen is
+`695:158`. The reusable tutorial component is `692:104` on
+`03 · Workflow Components`.
 
 ## Change checklist
 

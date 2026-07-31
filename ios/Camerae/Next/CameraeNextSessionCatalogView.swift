@@ -3,12 +3,79 @@ import SwiftUI
 
 enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
     case configuration
+    case tripod
     case captures
 
     var title: String {
         switch self {
         case .configuration: CameraeL10n.configure
+        case .tripod: "Tripé"
         case .captures: CameraeL10n.captures
+        }
+    }
+
+    static func visibleSections(
+        spatialGuidanceAvailability: SpatialGuidanceAvailability,
+        hasSpatialReference: Bool
+    ) -> [Self] {
+        spatialGuidanceAvailability == .available || hasSpatialReference
+            ? [.configuration, .tripod, .captures]
+            : [.configuration, .captures]
+    }
+}
+
+enum CameraeNextProjectWorkspaceAction: Equatable, Sendable {
+    case configure
+    case openTripod
+    case openCaptures
+
+    var section: CameraeNextProjectSection {
+        switch self {
+        case .configure: .configuration
+        case .openTripod: .tripod
+        case .openCaptures: .captures
+        }
+    }
+}
+
+enum CameraeNextProjectWorkspaceCapabilityPolicy {
+    static func actions(
+        spatialGuidanceAvailability: SpatialGuidanceAvailability,
+        hasSpatialReference: Bool
+    ) -> [CameraeNextProjectWorkspaceAction] {
+        CameraeNextProjectSection.visibleSections(
+            spatialGuidanceAvailability: spatialGuidanceAvailability,
+            hasSpatialReference: hasSpatialReference
+        ).map {
+            switch $0 {
+            case .configuration: .configure
+            case .tripod: .openTripod
+            case .captures: .openCaptures
+            }
+        }
+    }
+}
+
+struct CameraeNextProjectWorkspacePresentation: Equatable, Sendable {
+    let projectTitle: String
+    let tabs: [CameraeNextProjectTabPresentation]
+
+    init(
+        projectTitle: String,
+        spatialGuidanceAvailability: SpatialGuidanceAvailability,
+        hasSpatialReference: Bool,
+        captureCount: Int
+    ) {
+        self.projectTitle = projectTitle
+        tabs = CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+            spatialGuidanceAvailability: spatialGuidanceAvailability,
+            hasSpatialReference: hasSpatialReference
+        ).map {
+            CameraeNextProjectTabPresentation(
+                section: $0.section,
+                hasTripodReference: hasSpatialReference,
+                captureCount: captureCount
+            )
         }
     }
 }
@@ -69,11 +136,37 @@ enum CameraeNextSessionTrailingAction: Equatable, Sendable {
     case menu
 }
 
+struct CameraeNextCaptureTypePresentation: Equatable, Sendable {
+    let title: String
+    let systemImage: String
+
+    init(kind: RepeatableCaptureKind) {
+        switch kind {
+        case .photo:
+            title = CameraeL10n.photo
+            systemImage = "camera.fill"
+        case .video:
+            title = CameraeL10n.video
+            systemImage = "video.fill"
+        case .timelapse:
+            title = CameraeL10n.timelapse
+            systemImage = "timelapse"
+        }
+    }
+
+    init(title: String, systemImage: String) {
+        self.title = title
+        self.systemImage = systemImage
+    }
+}
+
 struct CameraeNextSessionCardPresentation: Equatable, Sendable {
     let statusText: String
     let trailingAction: CameraeNextSessionTrailingAction
+    let captureType: CameraeNextCaptureTypePresentation
 
     init(summary: TimelapseSessionSummary) {
+        captureType = CameraeNextCaptureTypePresentation(kind: summary.captureKind)
         if summary.session.module == .astrophotography {
             statusText = "ABRIR PROCESSAMENTO"
             trailingAction = .menu
@@ -110,10 +203,15 @@ struct CameraeNextProcessVideoAlignmentPrompt: Equatable, Sendable {
 
 enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
     case available
+    case referenceClip
     case referenceUnavailable
     case mediaUnavailable
 
-    init(summary: TimelapseSessionSummary, projectReferenceURL: URL?) {
+    init(
+        summary: TimelapseSessionSummary,
+        projectReferenceURL: URL?,
+        referenceSessionID: UUID? = nil
+    ) {
         guard projectReferenceURL != nil else {
             self = .referenceUnavailable
             return
@@ -123,8 +221,14 @@ enum CameraeNextSessionAlignmentAvailability: Equatable, Sendable {
             self = .mediaUnavailable
             return
         }
+        guard summary.id != referenceSessionID else {
+            self = .referenceClip
+            return
+        }
         self = .available
     }
+
+    var showsAlignmentAction: Bool { self == .available }
 }
 
 enum CameraeNextSessionAlignmentReference {
@@ -140,22 +244,32 @@ enum CameraeNextSessionAlignmentReference {
 struct CameraeNextProjectTabs: View {
     @Binding var selection: CameraeNextProjectSection
     let theme: CameraeNextTheme
+    let presentations: [CameraeNextProjectTabPresentation]
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(CameraeNextProjectSection.allCases, id: \.self) { section in
+            ForEach(presentations, id: \.section) { presentation in
                 Button {
-                    selection = section
+                    selection = presentation.section
                 } label: {
-                    Text(section.title)
-                        .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
-                        .foregroundStyle(selection == section ? Color.white : theme.text)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 44)
-                        .background(selection == section ? theme.accent : Color.clear, in: Capsule())
+                    HStack(spacing: 5) {
+                        if let systemImage = presentation.systemImage {
+                            Image(systemName: systemImage)
+                                .font(.caption)
+                        }
+                        Text(presentation.title)
+                            .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
+                    }
+                    .foregroundStyle(selection == presentation.section ? Color.white : theme.text)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 44)
+                    .background(
+                        selection == presentation.section ? theme.accent : Color.clear,
+                        in: Capsule()
+                    )
                 }
                 .buttonStyle(.plain)
-                .accessibilityAddTraits(selection == section ? .isSelected : [])
+                .accessibilityAddTraits(selection == presentation.section ? .isSelected : [])
             }
         }
         .padding(3)
@@ -166,10 +280,36 @@ struct CameraeNextProjectTabs: View {
     }
 }
 
+struct CameraeNextProjectTabPresentation: Equatable, Sendable {
+    let section: CameraeNextProjectSection
+    let title: String
+    let systemImage: String?
+
+    init(
+        section: CameraeNextProjectSection,
+        hasTripodReference: Bool,
+        captureCount: Int
+    ) {
+        self.section = section
+        switch section {
+        case .configuration:
+            title = section.title
+            systemImage = nil
+        case .tripod:
+            title = section.title
+            systemImage = hasTripodReference ? "checkmark.circle.fill" : "circle.dashed"
+        case .captures:
+            title = "\(section.title) (\(captureCount))"
+            systemImage = nil
+        }
+    }
+}
+
 struct CameraeNextSessionCatalogModel: Equatable {
     let sessions: [TimelapseSessionSummary]
     let referenceFrameURL: URL?
     let alignmentReferenceFrameURL: URL?
+    let alignmentReferenceSessionID: UUID?
 
     init(summaries: [TimelapseSessionSummary]) {
         let populated = summaries.filter { $0.frameCount > 0 }
@@ -185,14 +325,16 @@ struct CameraeNextSessionCatalogModel: Equatable {
             .first
 
         referenceFrameURL = explicitReference ?? automaticReference
-        alignmentReferenceFrameURL = populated
+        let alignmentReference = populated
             .filter {
                 $0.captureKind == .video &&
-                    ($0.videoClipURL != nil || $0.videoURL != nil)
+                    ($0.videoClipURL != nil || $0.videoURL != nil) &&
+                    $0.referenceFrameURL != nil
             }
             .sorted { $0.session.createdAt < $1.session.createdAt }
-            .compactMap(\.referenceFrameURL)
             .first
+        alignmentReferenceFrameURL = alignmentReference?.referenceFrameURL
+        alignmentReferenceSessionID = alignmentReference?.id
         sessions = populated
             .filter { $0.session.purpose != .projectReference }
             .sorted { $0.session.createdAt > $1.session.createdAt }
@@ -225,6 +367,7 @@ struct CameraeNextSessionCatalogView: View {
     var isEmbedded = false
     var isFinalizingCapture = false
     var onCatalogLoaded: () -> Void = {}
+    var onCatalogCountChanged: (Int) -> Void = { _ in }
 
     @State private var summaries: [TimelapseSessionSummary] = []
     @State private var selectedAstroSession: TimelapseSessionSummary?
@@ -365,7 +508,7 @@ struct CameraeNextSessionCatalogView: View {
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
                 Button(action: onStartNew) {
-                    Label("Nova captura", systemImage: "plus")
+                    Label(CameraeL10n.newCapture, systemImage: "plus")
                 }
             }
         }
@@ -378,7 +521,7 @@ struct CameraeNextSessionCatalogView: View {
         }
         .safeAreaInset(edge: .bottom) {
             CameraeNextActionButton(
-                title: "Nova captura",
+                title: CameraeL10n.newCapture,
                 systemImage: nil,
                 theme: theme,
                 action: onStartNew
@@ -426,7 +569,7 @@ struct CameraeNextSessionCatalogView: View {
             Text(CameraeL10n.captures.uppercased())
                 .foregroundStyle(theme.muted)
             Spacer()
-            Text("\(catalog.sessions.count + (isFinalizingCapture ? 1 : 0)) SESSÕES")
+            Text(CameraeL10n.sessionCount(catalog.sessions.count + (isFinalizingCapture ? 1 : 0)))
                 .foregroundStyle(theme.accent)
         }
         .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
@@ -442,11 +585,11 @@ struct CameraeNextSessionCatalogView: View {
                 .frame(width: 72, height: 72)
                 .background(theme.surface, in: Circle())
 
-            Text("Nenhuma captura ainda")
+            Text(CameraeL10n.noCapturesYet)
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
                 .foregroundStyle(theme.text)
 
-            Text("Sua primeira sessão aparecerá aqui assim que uma imagem for salva.")
+            Text(CameraeL10n.firstCaptureMessage)
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(theme.muted)
                 .multilineTextAlignment(.center)
@@ -541,6 +684,19 @@ struct CameraeNextSessionCatalogView: View {
                     )
 
                     VStack(alignment: .leading, spacing: 3) {
+                        Label(
+                            cardPresentation.captureType.title.uppercased(),
+                            systemImage: cardPresentation.captureType.systemImage
+                        )
+                            .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                            .tracking(1.4)
+                            .foregroundStyle(theme.accent)
+                            .padding(.horizontal, 9)
+                            .frame(height: 26)
+                            .background(theme.surface, in: Capsule())
+                            .overlay {
+                                Capsule().stroke(theme.accent, lineWidth: 1)
+                            }
                         Text(summary.session.createdAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                             .foregroundStyle(theme.text)
@@ -603,17 +759,23 @@ struct CameraeNextSessionCatalogView: View {
             )
         case let .videoMenu(url):
             Menu {
-                Button("Processar alinhamento", systemImage: "viewfinder") {
-                    switch CameraeNextSessionAlignmentAvailability(
-                        summary: summary,
-                        projectReferenceURL: alignmentReferenceURL
-                    ) {
-                    case .available:
-                        pendingVideoAlignmentConfirmation = summary
-                    case .referenceUnavailable:
-                        errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
-                    case .mediaUnavailable:
-                        errorMessage = "O vídeo original desta sessão não está disponível."
+                let availability = CameraeNextSessionAlignmentAvailability(
+                    summary: summary,
+                    projectReferenceURL: alignmentReferenceURL,
+                    referenceSessionID: catalog.alignmentReferenceSessionID
+                )
+                if availability.showsAlignmentAction {
+                    Button("Processar alinhamento", systemImage: "viewfinder") {
+                        switch availability {
+                        case .available:
+                            pendingVideoAlignmentConfirmation = summary
+                        case .referenceClip:
+                            break
+                        case .referenceUnavailable:
+                            errorMessage = "Adicione uma imagem de referência ao projeto antes de processar o alinhamento."
+                        case .mediaUnavailable:
+                            errorMessage = "O vídeo original desta sessão não está disponível."
+                        }
                     }
                 }
                 Button("Compartilhar", systemImage: "square.and.arrow.up") {
@@ -741,6 +903,7 @@ struct CameraeNextSessionCatalogView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
+        onCatalogCountChanged(summaries.filter { $0.frameCount > 0 }.count)
         onCatalogLoaded()
     }
 

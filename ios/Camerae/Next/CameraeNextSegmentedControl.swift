@@ -3,6 +3,7 @@ import SwiftUI
 struct CameraeNextSegmentItem<Value: Hashable>: Identifiable {
     let value: Value
     let label: String
+    var systemImage: String? = nil
 
     var id: Value { value }
 }
@@ -28,8 +29,14 @@ struct CameraeNextSegmentedControl<Value: Hashable>: View {
                         selection = item.value
                     }
                 } label: {
-                    Text(item.label)
-                        .font(.custom("Outfit-Regular", size: height >= 38 ? 14 : 12, relativeTo: .body))
+                    Group {
+                        if let systemImage = item.systemImage {
+                            Label(item.label, systemImage: systemImage)
+                        } else {
+                            Text(item.label)
+                        }
+                    }
+                        .font(.custom("Outfit-SemiBold", size: height >= 38 ? 13 : 12, relativeTo: .body))
                         .foregroundStyle(selection == item.value ? Color.white : theme.text)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .contentShape(Capsule())
@@ -60,14 +67,26 @@ enum CameraeNextCaptureModeOption: String, Hashable, Sendable {
     case manual
 
     static var repeatableItems: [CameraeNextSegmentItem<Self>] { [
-        CameraeNextSegmentItem(value: Self.photo, label: CameraeL10n.photo),
-        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse),
-        CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video),
+        CameraeNextSegmentItem(value: Self.photo, label: CameraeL10n.photo, systemImage: "camera.fill"),
+        CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video, systemImage: "video.fill"),
+        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse, systemImage: "timelapse"),
     ] }
 
     static var astroItems: [CameraeNextSegmentItem<Self>] { [
-        CameraeNextSegmentItem(value: Self.photo, label: "Foto"),
-        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse),
-        CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video)
+        CameraeNextSegmentItem(value: Self.photo, label: CameraeL10n.photo, systemImage: "camera.fill"),
+        CameraeNextSegmentItem(value: Self.video, label: CameraeL10n.video, systemImage: "video.fill"),
+        CameraeNextSegmentItem(value: Self.timelapse, label: CameraeL10n.timelapse, systemImage: "timelapse")
     ] }
+}
+
+struct CameraeNextProjectCaptureCapabilityPolicy: Equatable, Sendable {
+    let availableCaptureKinds: [RepeatableCaptureKind]
+    let locksCameraHardware: Bool
+    let allowsEditingCaptureDefaults: Bool
+
+    static let repeatable = Self(
+        availableCaptureKinds: [.photo, .video, .timelapse],
+        locksCameraHardware: true,
+        allowsEditingCaptureDefaults: true
+    )
 }

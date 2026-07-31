@@ -7,7 +7,92 @@ struct CameraeNextSessionCatalogTests {
         let state = CameraeNextRepeatableProjectWorkspaceState()
 
         #expect(state.section == .configuration)
-        #expect(CameraeNextProjectSection.allCases.map(\.title) == ["Configurar", "Capturas"])
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .available,
+                hasSpatialReference: false
+            )
+                .map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: false
+            )
+                .map(\.title) == ["Configurar", "Capturas"]
+        )
+    }
+
+    @Test func savedSpatialGuideRemainsDiscoverableOnAnIncompatibleDevice() {
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: true
+            ).map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .incompatibleReference) ==
+                [.remapReference, .continueWithoutReference]
+        )
+    }
+
+    @Test func projectTabLabelsExposeTripodStatusAndCaptureCount() {
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .tripod,
+                hasTripodReference: true,
+                captureCount: 4
+            ).systemImage == "checkmark.circle.fill"
+        )
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .tripod,
+                hasTripodReference: false,
+                captureCount: 4
+            ).systemImage == "circle.dashed"
+        )
+        #expect(
+            CameraeNextProjectTabPresentation(
+                section: .captures,
+                hasTripodReference: true,
+                captureCount: 4
+            ).title == "Capturas (4)"
+        )
+    }
+
+    @Test func repeatableWorkspaceCapabilitiesRemainReachableIndependentOfLayout() {
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .available,
+                hasSpatialReference: false
+            ) == [.configure, .openTripod, .openCaptures]
+        )
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: false
+            ) == [.configure, .openCaptures]
+        )
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: true
+            ) == [.configure, .openTripod, .openCaptures]
+        )
+    }
+
+    @Test func workspacePresentationKeepsProjectTitleAndCanonicalTabOrder() {
+        let presentation = CameraeNextProjectWorkspacePresentation(
+            projectTitle: "Projeto Aurora",
+            spatialGuidanceAvailability: .available,
+            hasSpatialReference: true,
+            captureCount: 3
+        )
+
+        #expect(presentation.projectTitle == "Projeto Aurora")
+        #expect(presentation.tabs.map(\.section) == [.configuration, .tripod, .captures])
+        #expect(presentation.tabs.map(\.title) == ["Configurar", "Tripé", "Capturas (3)"])
+        #expect(presentation.tabs[1].systemImage == "checkmark.circle.fill")
     }
 
     @Test func completedRepeatableCaptureReturnsToCatalogWhileFinalizingInline() {
@@ -52,7 +137,30 @@ struct CameraeNextSessionCatalogTests {
         )
 
         #expect(CameraeNextSessionOpenRoute(summary: summary) == .image(url))
-        #expect(CameraeNextSessionCardPresentation(summary: summary).trailingAction == .share(url))
+        let presentation = CameraeNextSessionCardPresentation(summary: summary)
+        #expect(presentation.trailingAction == .share(url))
+        #expect(presentation.captureType == .init(title: "Foto", systemImage: "camera.fill"))
+    }
+
+    @Test(
+        "every capture card exposes an obvious typed icon independent of its layout",
+        arguments: [
+            (RepeatableCaptureKind.photo, "Foto", "camera.fill"),
+            (RepeatableCaptureKind.video, "Vídeo", "video.fill"),
+            (RepeatableCaptureKind.timelapse, "Timelapse", "timelapse"),
+        ]
+    )
+    func captureTypeIcon(
+        kind: RepeatableCaptureKind,
+        title: String,
+        systemImage: String
+    ) {
+        let presentation = CameraeNextSessionCardPresentation(
+            summary: fixture(frameCount: 1, captureKind: kind, purpose: .capture)
+        )
+
+        #expect(presentation.captureType.title == title)
+        #expect(presentation.captureType.systemImage == systemImage)
     }
 
     @Test func openingRepeatableCaptureWithoutRenderedVideoNeverStartsCamera() {
@@ -129,7 +237,7 @@ struct CameraeNextSessionCatalogTests {
         #expect(prompt.message.contains("frame de referência do projeto"))
     }
 
-    @Test func everyRecordedVideoIsAlignableWhenTheProjectHasAReference() {
+    @Test func theReferenceVideoHidesAlignmentWhileLaterVideosRemainAlignable() {
         let first = fixture(
             frameCount: 1,
             videoClipURL: URL(fileURLWithPath: "/tmp/first.mov"),
@@ -144,12 +252,24 @@ struct CameraeNextSessionCatalogTests {
 
         #expect(CameraeNextSessionAlignmentAvailability(
             summary: first,
-            projectReferenceURL: referenceURL
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
+        ) == .referenceClip)
+        #expect(!CameraeNextSessionAlignmentAvailability(
+            summary: first,
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
+        ).showsAlignmentAction)
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: second,
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
         ) == .available)
         #expect(CameraeNextSessionAlignmentAvailability(
             summary: second,
-            projectReferenceURL: referenceURL
-        ) == .available)
+            projectReferenceURL: referenceURL,
+            referenceSessionID: first.id
+        ).showsAlignmentAction)
     }
 
     @Test func alignmentEligibilityNeverDependsOnAnotherVideo() {
@@ -219,11 +339,36 @@ struct CameraeNextSessionCatalogTests {
 
         #expect(catalog.referenceFrameURL == photoURL)
         #expect(catalog.alignmentReferenceFrameURL == firstVideoFrameURL)
+        #expect(catalog.alignmentReferenceSessionID == firstVideo.id)
         #expect(CameraeNextSessionAlignmentReference.resolve(
             projectReferenceURL: photoURL,
             catalogReferenceURL: catalog.referenceFrameURL,
             geometricReferenceURL: catalog.alignmentReferenceFrameURL
         ) == firstVideoFrameURL)
+    }
+
+    @Test func legacyVideoWithoutAReferenceFrameNeverBecomesTheAlignmentReference() {
+        let legacyVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/legacy.mov"),
+            captureKind: .video,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let usableReferenceURL = URL(fileURLWithPath: "/tmp/usable-reference.jpg")
+        let usableVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/usable.mov"),
+            captureKind: .video,
+            referenceFrameURL: usableReferenceURL,
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+
+        let catalog = CameraeNextSessionCatalogModel(
+            summaries: [usableVideo, legacyVideo]
+        )
+
+        #expect(catalog.alignmentReferenceFrameURL == usableReferenceURL)
+        #expect(catalog.alignmentReferenceSessionID == usableVideo.id)
     }
 
     @Test func astroCaptureKeepsProcessingDestination() {

@@ -31,6 +31,11 @@ struct RepeatableSessionVideoAlignmentProcessorTests {
         #expect(await analyzer.receivedReferenceFingerprint?.contains("reference.jpg") == true)
         #expect(await composer.receivedAlignment == fixture.plan)
         #expect(await composer.receivedItemCount == 1)
+        #expect(await composer.receivedDescriptor?.pixelWidth == 3840)
+        #expect(await composer.receivedDescriptor?.pixelHeight == 2160)
+        #expect(await composer.receivedDescriptor?.frameRate == 59.94)
+        #expect(await composer.receivedDescriptor?.videoCodec == "hevc")
+        #expect(await composer.receivedDescriptor?.videoBitRate == 100_000_000)
     }
 
     @Test("position mode removes rotation and scale before export")
@@ -204,7 +209,16 @@ private struct Fixture {
 
 private struct MediaProbeStub: MediaAssetProbing {
     func probe(url: URL) async throws -> MediaAssetTechnicalMetadata {
-        .init(duration: 5, pixelWidth: 1920, pixelHeight: 1080, hasAudio: true, fileSize: 1)
+        .init(
+            duration: 5,
+            pixelWidth: 3840,
+            pixelHeight: 2160,
+            frameRate: 59.94,
+            videoCodec: "hevc",
+            videoBitRate: 100_000_000,
+            hasAudio: true,
+            fileSize: 1
+        )
     }
 }
 
@@ -236,6 +250,7 @@ private actor ReferenceAnalyzerStub: RepeatableSessionReferenceAlignmentAnalyzin
 private actor AlignmentComposerStub: EditVideoComposing {
     private(set) var receivedAlignment: EditSpatialAlignmentPlan?
     private(set) var receivedItemCount = 0
+    private(set) var receivedDescriptor: MediaAssetDescriptor?
 
     func export(
         project: EditProjectDocument,
@@ -255,6 +270,7 @@ private actor AlignmentComposerStub: EditVideoComposing {
     ) async throws -> URL {
         receivedAlignment = spatialAlignment
         receivedItemCount = project.items.count
+        receivedDescriptor = assets.values.first?.descriptor
         return outputURL
     }
 

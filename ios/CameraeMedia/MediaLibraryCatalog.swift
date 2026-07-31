@@ -77,6 +77,9 @@ public actor MediaLibraryCatalog: MediaLibraryProviding {
                 duration: metadata.duration,
                 pixelWidth: metadata.pixelWidth,
                 pixelHeight: metadata.pixelHeight,
+                frameRate: metadata.frameRate,
+                videoCodec: metadata.videoCodec,
+                videoBitRate: metadata.videoBitRate,
                 hasAudio: metadata.hasAudio,
                 fileSize: metadata.fileSize,
                 isAvailable: true
