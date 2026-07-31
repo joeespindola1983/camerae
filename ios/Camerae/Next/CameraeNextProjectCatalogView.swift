@@ -248,7 +248,16 @@ struct CameraeNextProjectOrganizationModel: Equatable {
     }
 
     func descendantProjects(in nodeID: UUID) -> [CameraProject] {
-        directProjects(in: nodeID) + childNodes(of: nodeID).flatMap { directProjects(in: $0.id) }
+        var visited = Set<UUID>()
+
+        func collect(from currentNodeID: UUID) -> [CameraProject] {
+            guard visited.insert(currentNodeID).inserted else { return [] }
+            return directProjects(in: currentNodeID) + childNodes(of: currentNodeID).flatMap {
+                collect(from: $0.id)
+            }
+        }
+
+        return collect(from: nodeID)
     }
 
     func mosaicProjects(in nodeID: UUID) -> [CameraProject] {

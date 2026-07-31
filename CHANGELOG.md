@@ -27,6 +27,7 @@ test distributions do not require an entry here.
 ### Fixed
 
 - Fixed Repeatable group-only catalogs so existing groups no longer trigger first-project onboarding or empty project filter controls.
+- Fixed group preview mosaics to show up to four recursive project thumbnails with equal-sized divisions.
 
 ## [9.3.0] - 2026-07-30
 
