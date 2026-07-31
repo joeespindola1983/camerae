@@ -23,7 +23,14 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Updated canonical project cards in Figma and SwiftUI to show only capture
+  types that exist with per-type session counts, emphasize the camera used on
+  its own line, and show the weekday, date, and time of the latest capture.
+
 ### Fixed
+
+- Separated the project-open affordance from the options menu in grouped
+  project lists so their controls no longer overlap.
 
 - Corrected Spatial Guidance after a successful field mapping so temporary
   thermal pressure is shown as a cooling pause instead of falsely reporting an

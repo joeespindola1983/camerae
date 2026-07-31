@@ -134,6 +134,14 @@ Existing domain contracts include:
 - Project-card variants: Repeatable or Astro workflow, each with Hero and Row
   roles. Both roles preserve the production 160-point thumbnail followed by
   information content, with a 244-point minimum card height.
+- Project-card information is capture-derived: the first line lists only
+  capture kinds that exist with their session counts, the camera used has a
+  dedicated emphasized line, and the final line contains weekday, date, and
+  time of the newest durable capture without an “Opened” prefix.
+- The options control occupies the thumbnail trailing region while the project
+  opening affordance occupies the information trailing region. They must never
+  share an overlay or hit target. Group-detail screens on iPhone and iPad use
+  instances of this same canonical component.
 - Reusable component: `Project Group Card` (`647:82`) on
   `02 · Components`.
 - Mosaic variants: Empty, 1, 2, 3, 4, and More.
