@@ -109,6 +109,40 @@ struct CameraeNextProjectCatalogTests {
         #expect(ProjectCatalogActionPolicy.actions(for: archived) == [.move, .unarchive, .delete])
     }
 
+    @Test("catalog toolbar capabilities remain reachable independent of layout")
+    func catalogToolbarCapabilities() {
+        #expect(
+            CameraeNextProjectCatalogCapabilityPolicy.actions(for: .repeatable) ==
+                [.filter, .sort, .createGroup, .createProject]
+        )
+        #expect(
+            CameraeNextProjectCatalogCapabilityPolicy.actions(for: .astrophotography) ==
+                [.filter, .sort, .createProject]
+        )
+    }
+
+    @Test("catalog empty states expose the correct recovery action")
+    func catalogEmptyStatePresentation() {
+        let projects = CameraeNextCatalogEmptyStatePresentation(
+            scope: .projects,
+            filter: .recent
+        )
+        let groups = CameraeNextCatalogEmptyStatePresentation(
+            scope: .groups,
+            filter: .recent
+        )
+        let archivedGroups = CameraeNextCatalogEmptyStatePresentation(
+            scope: .groups,
+            filter: .archived
+        )
+
+        #expect(projects.action == .createProject)
+        #expect(groups.action == .createGroup)
+        #expect(archivedGroups.action == nil)
+        #expect(!projects.title.isEmpty)
+        #expect(!groups.message.isEmpty)
+    }
+
     @Test("organization catalogs present root groups, subgroups, then direct projects")
     func organizationHierarchy() {
         let rootID = UUID()

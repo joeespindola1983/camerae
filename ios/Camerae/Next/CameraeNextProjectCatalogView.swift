@@ -73,6 +73,53 @@ enum CameraeNextProjectCatalogSort: String, CaseIterable, Identifiable, Sendable
     }
 }
 
+enum CameraeNextProjectCatalogCapability: Hashable, Sendable {
+    case filter
+    case sort
+    case createGroup
+    case createProject
+}
+
+enum CameraeNextProjectCatalogCapabilityPolicy {
+    static func actions(for module: CameraModule) -> [CameraeNextProjectCatalogCapability] {
+        switch module {
+        case .repeatable:
+            [.filter, .sort, .createGroup, .createProject]
+        case .astrophotography, .edit:
+            [.filter, .sort, .createProject]
+        }
+    }
+}
+
+enum CameraeNextCatalogEmptyStateScope: Equatable, Sendable {
+    case projects
+    case groups
+}
+
+struct CameraeNextCatalogEmptyStatePresentation: Equatable, Sendable {
+    let title: String
+    let message: String
+    let action: CameraeNextProjectCatalogCapability?
+
+    init(
+        scope: CameraeNextCatalogEmptyStateScope,
+        filter: CameraeNextProjectCatalogFilter
+    ) {
+        switch scope {
+        case .projects:
+            title = filter == .recent ? CameraeL10n.noProjectsYet : CameraeL10n.noProjectsInFilter
+            message = CameraeL10n.startFirstProject
+            action = filter == .recent ? .createProject : nil
+        case .groups:
+            title = filter == .archived
+                ? CameraeL10n.organizationNoArchivedGroups
+                : CameraeL10n.organizationOrganizeLocations
+            message = CameraeL10n.organizationHelper
+            action = filter == .archived ? nil : .createGroup
+        }
+    }
+}
+
 struct CameraeNextProjectCatalogModel: Equatable {
     let projects: [CameraProject]
     let module: CameraModule
@@ -267,6 +314,9 @@ struct CameraeNextProjectCatalogView: View {
 
     private var theme: ProjectListTheme { .init(module: module) }
     private var layout: CameraeNextProjectCatalogLayout { .init(module: module) }
+    private var catalogCapabilities: Set<CameraeNextProjectCatalogCapability> {
+        Set(CameraeNextProjectCatalogCapabilityPolicy.actions(for: module))
+    }
     private var organizationModel: CameraeNextProjectOrganizationModel {
         .init(
             projects: projectStore.projects,
@@ -408,29 +458,33 @@ struct CameraeNextProjectCatalogView: View {
             }
 
             ToolbarItemGroup(placement: .topBarTrailing) {
-                Menu {
-                    Picker(CameraeL10n.filterProjects, selection: $filter) {
-                        ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
-                            Label(option.title, systemImage: option.systemImage).tag(option)
+                if catalogCapabilities.contains(.filter) {
+                    Menu {
+                        Picker(CameraeL10n.filterProjects, selection: $filter) {
+                            ForEach(CameraeNextProjectCatalogFilter.allCases) { option in
+                                Label(option.title, systemImage: option.systemImage).tag(option)
+                            }
                         }
+                    } label: {
+                        Image(systemName: "line.3.horizontal.decrease")
                     }
-                } label: {
-                    Image(systemName: "line.3.horizontal.decrease")
+                    .accessibilityLabel(CameraeL10n.filterProjects)
                 }
-                .accessibilityLabel(CameraeL10n.filterProjects)
 
-                Menu {
-                    Picker(CameraeL10n.sortProjects, selection: $sort) {
-                        ForEach(CameraeNextProjectCatalogSort.allCases) { option in
-                            Label(option.title, systemImage: option.systemImage).tag(option)
+                if catalogCapabilities.contains(.sort) {
+                    Menu {
+                        Picker(CameraeL10n.sortProjects, selection: $sort) {
+                            ForEach(CameraeNextProjectCatalogSort.allCases) { option in
+                                Label(option.title, systemImage: option.systemImage).tag(option)
+                            }
                         }
+                    } label: {
+                        Image(systemName: "arrow.up.arrow.down")
                     }
-                } label: {
-                    Image(systemName: "arrow.up.arrow.down")
+                    .accessibilityLabel(CameraeL10n.sortProjects)
                 }
-                .accessibilityLabel(CameraeL10n.sortProjects)
 
-                if module == .repeatable {
+                if catalogCapabilities.contains(.createGroup) {
                     Menu {
                         Button(CameraeL10n.organizationNewGroup, systemImage: "folder.badge.plus", action: beginCreatingGroup)
                         Button(CameraeL10n.newProject, systemImage: "plus.rectangle", action: beginCreatingProject)
@@ -439,7 +493,7 @@ struct CameraeNextProjectCatalogView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .accessibilityLabel(CameraeL10n.organizationCreateGroupOrProject)
-                } else {
+                } else if catalogCapabilities.contains(.createProject) {
                     Button(action: beginCreatingProject) {
                         Image(systemName: "plus")
                     }
@@ -521,7 +575,12 @@ struct CameraeNextProjectCatalogView: View {
     }
 
     private var organizationSection: some View {
-        VStack(spacing: 10) {
+        let emptyPresentation = CameraeNextCatalogEmptyStatePresentation(
+            scope: .groups,
+            filter: filter
+        )
+
+        return VStack(spacing: 10) {
             HStack {
                 Text(
                     filter == .archived
@@ -544,19 +603,15 @@ struct CameraeNextProjectCatalogView: View {
                             .font(.title2)
                             .foregroundStyle(theme.accent)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(
-                                filter == .archived
-                                    ? CameraeL10n.organizationNoArchivedGroups
-                                    : CameraeL10n.organizationOrganizeLocations
-                            )
+                            Text(emptyPresentation.title)
                                 .font(.custom("Outfit-SemiBold", size: 16, relativeTo: .headline))
                                 .foregroundStyle(theme.text)
-                            Text(CameraeL10n.organizationHelper)
+                            Text(emptyPresentation.message)
                                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                                 .foregroundStyle(theme.muted)
                         }
                         Spacer()
-                        if filter != .archived {
+                        if emptyPresentation.action == .createGroup {
                             Image(systemName: "plus.circle.fill")
                                 .foregroundStyle(theme.accent)
                         }
@@ -570,7 +625,7 @@ struct CameraeNextProjectCatalogView: View {
                     }
                 }
                 .buttonStyle(.plain)
-                .disabled(filter == .archived)
+                .disabled(emptyPresentation.action == nil)
                 .accessibilityIdentifier("organization.create.first")
             } else {
                 ForEach(organizationModel.rootNodes) { node in
@@ -636,10 +691,15 @@ struct CameraeNextProjectCatalogView: View {
     }
 
     private var emptyFilteredState: some View {
-        VStack(spacing: 8) {
+        let presentation = CameraeNextCatalogEmptyStatePresentation(
+            scope: .projects,
+            filter: filter
+        )
+
+        return VStack(spacing: 8) {
             Image(systemName: "rectangle.stack")
                 .font(.title2)
-            Text(catalog.projectCount == 0 ? CameraeL10n.noProjectsYet : CameraeL10n.noProjectsInFilter)
+            Text(presentation.title)
                 .font(.custom("Outfit-Medium", size: 15, relativeTo: .subheadline))
         }
         .foregroundStyle(theme.muted)
