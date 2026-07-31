@@ -40,7 +40,8 @@ jobs:
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           FIREBASE_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
-          FIREBASE_GROUPS: ${{ secrets.FIREBASE_GROUPS }}
+          # Canonical Camerae QA group. Change only for an intentional migration.
+          FIREBASE_GROUPS: testers
           FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
           RELEASE_NOTES: "QA build from ${{ github.ref_name }} at ${{ github.sha }}"
         run: ./scripts/distribute-firebase.sh
