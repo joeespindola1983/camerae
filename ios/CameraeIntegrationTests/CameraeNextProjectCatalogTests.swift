@@ -100,6 +100,55 @@ struct CameraeNextProjectCatalogTests {
         #expect(layout.thumbnailRange.upperBound <= layout.informationRange.lowerBound)
     }
 
+    @Test("project cards summarize only durable captures by type")
+    func projectCardCaptureSummary() {
+        let date = Date(timeIntervalSince1970: 1_754_000_000)
+        let summaries = [
+            makeSessionSummary(kind: .photo, purpose: .projectReference, date: date),
+            makeSessionSummary(kind: .photo, date: date.addingTimeInterval(60)),
+            makeSessionSummary(kind: .video, date: date.addingTimeInterval(120)),
+            makeSessionSummary(kind: .video, date: date.addingTimeInterval(180))
+        ]
+
+        let presentation = ProjectListCardPresentation(
+            summaries: summaries,
+            fallbackHardware: nil,
+            locale: Locale(identifier: "pt_BR"),
+            timeZone: TimeZone(secondsFromGMT: 0)!
+        )
+
+        #expect(presentation.captureTypesText == "FOTO (1) · VÍDEO (2)")
+        #expect(!presentation.captureTypesText.contains("TIMELAPSE"))
+    }
+
+    @Test("project cards give the used camera its own line and show the latest capture date without opened copy")
+    func projectCardCameraAndLatestCapture() {
+        let earlier = Date(timeIntervalSince1970: 1_754_000_000)
+        let latest = earlier.addingTimeInterval(3_600)
+        let summaries = [
+            makeSessionSummary(kind: .photo, date: earlier, lens: .wide, zoom: 1),
+            makeSessionSummary(kind: .video, date: latest, lens: .ultraWide, zoom: 1)
+        ]
+
+        let presentation = ProjectListCardPresentation(
+            summaries: summaries,
+            fallbackHardware: nil,
+            locale: Locale(identifier: "pt_BR"),
+            timeZone: TimeZone(secondsFromGMT: 0)!
+        )
+
+        #expect(presentation.cameraText == "CÂMERA · ULTRA-ANGULAR 1×")
+        #expect(presentation.lastCaptureText?.contains("ABERTO") == false)
+        #expect(presentation.lastCaptureText?.contains(":") == true)
+    }
+
+    @Test("project card opening and options stay in distinct semantic regions")
+    func projectCardActionRegions() {
+        #expect(ProjectListCardCapabilityPolicy.openRegion == .information)
+        #expect(ProjectListCardCapabilityPolicy.optionsRegion == .thumbnail)
+        #expect(ProjectListCardCapabilityPolicy.openRegion != ProjectListCardCapabilityPolicy.optionsRegion)
+    }
+
     @Test("every Repeatable project card keeps move, reversible archive, and destructive delete capabilities")
     func projectCardCapabilities() {
         let active = makeProject(name: "Active", module: .repeatable, day: 1)
@@ -388,6 +437,43 @@ struct CameraeNextProjectCatalogTests {
             createdAt: date,
             updatedAt: date,
             isArchived: false
+        )
+    }
+
+    private func makeSessionSummary(
+        kind: RepeatableCaptureKind,
+        purpose: TimelapseSession.Purpose = .capture,
+        date: Date,
+        lens: RepeatableCameraLens? = nil,
+        zoom: Double? = nil
+    ) -> TimelapseSessionSummary {
+        let id = UUID()
+        let session = TimelapseSession(
+            id: id,
+            projectID: UUID(),
+            module: .repeatable,
+            captureKind: kind,
+            purpose: purpose,
+            referenceMotion: nil,
+            referenceGeoPose: nil,
+            referenceOrientation: nil,
+            cameraLens: lens,
+            cameraZoomFactor: zoom,
+            name: id.uuidString,
+            directoryURL: URL(fileURLWithPath: "/tmp/\(id.uuidString)"),
+            createdAt: date
+        )
+        return TimelapseSessionSummary(
+            session: session,
+            captureKind: kind,
+            frameCount: 1,
+            captureDuration: nil,
+            referenceFrameURL: URL(fileURLWithPath: "/tmp/frame.jpg"),
+            videoURL: kind == .video ? URL(fileURLWithPath: "/tmp/video.mov") : nil,
+            videoClipURL: nil,
+            alignedVideoURL: nil,
+            isAstroProcessed: false,
+            hasRenderedOutput: kind == .video
         )
     }
 }

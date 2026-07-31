@@ -32,9 +32,16 @@ Additional invariants:
 - Archive and unarchive update the catalog without deleting media.
 - The actions menu remains available regardless of thumbnail orientation,
   thumbnail size, card hierarchy, or metadata layout.
+- Project opening and project options occupy distinct semantic regions:
+  `ProjectListCardCapabilityPolicy.openRegion` is information and
+  `optionsRegion` is thumbnail.
+- Capture summaries exclude project-reference images and list only durable
+  capture-session kinds with counts. Camera and latest-capture date remain
+  separate fields, and the date never describes when the project was opened.
 
 The executable contract lives in
-`CameraeNextProjectCatalogTests.projectCardCapabilities`. UI evidence remains
+`CameraeNextProjectCatalogTests.projectCardCapabilities`,
+`projectCardCaptureSummary`, and `projectCardActionRegions`. UI evidence remains
 useful for visual approval, while this test protects the business capability
 when the view hierarchy changes.
 

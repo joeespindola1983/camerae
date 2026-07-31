@@ -391,8 +391,16 @@ struct ProjectCatalogActionsMenu: View {
 struct ProjectListHeroCard: View {
     let project: CameraProject
     let theme: ProjectListTheme
+    private let presentation: ProjectListCardPresentation
 
-    private var summary: ProjectRowSummary { .init(project: project) }
+    init(project: CameraProject, theme: ProjectListTheme) {
+        self.project = project
+        self.theme = theme
+        presentation = .init(
+            summaries: TimelapseSessionStore(project: project).sessionSummaries(),
+            fallbackHardware: project.captureProfile?.hardware
+        )
+    }
     private let layout = ProjectListRowLayout(containerWidth: 361)
 
     var body: some View {
@@ -401,37 +409,35 @@ struct ProjectListHeroCard: View {
                 project: project,
                 height: layout.thumbnailSize.height,
                 theme: theme
-            ) {
-                Text(CameraeL10n.lastOpened)
-                    .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
-                    .tracking(0.64)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 9)
-                    .frame(height: 22)
-                    .background(.black.opacity(0.62), in: Capsule())
-                    .padding(12)
-            }
+            ) { EmptyView() }
 
-            VStack(alignment: .leading, spacing: 5) {
-                Text(summary.subtitle)
-                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-                HStack(spacing: 14) {
-                    metric("camera", "\(project.summary?.sessionCount ?? 0)x")
-                    if let bytes = project.summary?.totalKnownBytes {
-                        metric("externaldrive", ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file))
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(presentation.captureTypesText)
+                        .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                        .foregroundStyle(theme.accent)
+                        .lineLimit(1)
+                    if let camera = presentation.cameraText {
+                        Text(camera)
+                            .font(.custom("Outfit-SemiBold", size: 11, relativeTo: .caption))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
                     }
-                    Spacer(minLength: 2)
-                    ProjectListCaptureCountBadge(
-                        count: project.summary?.mediaCount ?? 0,
-                        theme: theme
-                    )
+                    if let date = presentation.lastCaptureText {
+                        Text(date)
+                            .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                    }
                 }
-                .padding(.top, 3)
+                Spacer(minLength: 4)
+                Image(systemName: "chevron.right")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(theme.muted)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 11)
+            .padding(.vertical, 9)
         }
         .background(theme.card)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
@@ -442,11 +448,6 @@ struct ProjectListHeroCard: View {
         .accessibilityIdentifier(CameraeAccessibility.openProject(project.id))
     }
 
-    private func metric(_ image: String, _ value: String) -> some View {
-        Label(value, systemImage: image)
-            .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-            .foregroundStyle(theme.muted)
-    }
 }
 
 struct ProjectListRowLayout: Equatable {
@@ -471,10 +472,89 @@ struct ProjectListRowLayout: Equatable {
     }
 }
 
+enum ProjectListCardRegion: Equatable {
+    case thumbnail
+    case information
+}
+
+enum ProjectListCardCapabilityPolicy {
+    static let optionsRegion: ProjectListCardRegion = .thumbnail
+    static let openRegion: ProjectListCardRegion = .information
+}
+
+struct ProjectListCardPresentation: Equatable {
+    let captureTypesText: String
+    let cameraText: String?
+    let lastCaptureText: String?
+
+    init(
+        summaries: [TimelapseSessionSummary],
+        fallbackHardware: ProjectCaptureHardware?,
+        locale: Locale = .current,
+        timeZone: TimeZone = .current
+    ) {
+        let captures = summaries.filter { summary in
+            summary.session.purpose == .capture && (
+                summary.frameCount > 0 || summary.videoURL != nil ||
+                    summary.videoClipURL != nil || summary.alignedVideoURL != nil ||
+                    summary.isAstroProcessed || summary.hasRenderedOutput
+            )
+        }
+        let labels: [RepeatableCaptureKind: String] = [
+            .photo: "FOTO", .video: "VÍDEO", .timelapse: "TIMELAPSE"
+        ]
+        captureTypesText = [RepeatableCaptureKind.photo, .video, .timelapse].compactMap { kind in
+            let count = captures.count { $0.captureKind == kind }
+            return count > 0 ? "\(labels[kind]!) (\(count))" : nil
+        }.joined(separator: " · ")
+
+        let latest = captures.max { $0.session.createdAt < $1.session.createdAt }
+        let lens = latest?.session.cameraLens ?? fallbackHardware?.cameraLens
+        let zoom = latest?.session.cameraZoomFactor ?? fallbackHardware?.cameraZoomFactor
+        if let lens {
+            let lensName = switch lens {
+            case .ultraWide: "ULTRA-ANGULAR"
+            case .wide: "PRINCIPAL"
+            case .telephoto: "TELEOBJETIVA"
+            }
+            let zoomText = zoom.map {
+                $0.formatted(.number.locale(locale).precision(.fractionLength(0...1))) + "×"
+            }
+            cameraText = "CÂMERA · " + [lensName, zoomText].compactMap { $0 }.joined(separator: " ")
+        } else {
+            cameraText = nil
+        }
+
+        if let date = latest?.session.createdAt {
+            var style = Date.FormatStyle(
+                date: .abbreviated,
+                time: .shortened,
+                locale: locale,
+                calendar: .current,
+                timeZone: timeZone
+            )
+            style = style.weekday(.wide)
+            lastCaptureText = date.formatted(style).uppercased(with: locale)
+        } else {
+            lastCaptureText = nil
+        }
+    }
+}
+
 struct ProjectListRow: View {
     let project: CameraProject
     let theme: ProjectListTheme
     private let layout = ProjectListRowLayout(containerWidth: 361)
+    private let presentation: ProjectListCardPresentation
+
+    init(project: CameraProject, theme: ProjectListTheme) {
+        self.project = project
+        self.theme = theme
+        presentation = .init(
+            summaries: TimelapseSessionStore(project: project).sessionSummaries(),
+            fallbackHardware: project.captureProfile?.hardware
+        )
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -482,31 +562,32 @@ struct ProjectListRow: View {
                 project: project,
                 height: layout.thumbnailSize.height,
                 theme: theme
-            ) {
+            ) { EmptyView() }
+
+            HStack(alignment: .center, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(presentation.captureTypesText)
+                        .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                        .foregroundStyle(theme.accent)
+                        .lineLimit(1)
+                    if let camera = presentation.cameraText {
+                        Text(camera)
+                            .font(.custom("Outfit-SemiBold", size: 11, relativeTo: .caption))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                    }
+                    if let date = presentation.lastCaptureText {
+                        Text(date)
+                            .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 4)
                 Image(systemName: "chevron.right")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 42, height: 42)
-                    .background(.black.opacity(0.55), in: Circle())
-                    .padding(10)
-            }
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text(
-                    project.captureProfile?.projectSummary
-                        ?? ProjectRowSummary(project: project).subtitle.uppercased()
-                )
-                    .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-                    .foregroundStyle(theme.accent)
-                    .lineLimit(1)
-                Text(ProjectRowSummary(project: project).subtitle)
-                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
-                    .lineLimit(1)
-                Text(project.updatedAt.formatted(date: .abbreviated, time: .shortened))
-                    .font(.custom("DMMono-Regular", size: 8, relativeTo: .caption2))
-                    .foregroundStyle(theme.muted)
-                    .lineLimit(1)
+                    .accessibilityHidden(true)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
