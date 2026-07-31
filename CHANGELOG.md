@@ -13,7 +13,8 @@ test distributions do not require an entry here.
 
 | Version | Apple status | Public availability | Last updated |
 | --- | --- | --- | --- |
-| `9.1.0` | In Review | Not yet available | 2026-07-30 |
+| `9.3.0` | Waiting for Review | Not yet available | 2026-07-31 |
+| `9.1.0` | Withdrawn; superseded by 9.3.0 | Not available | 2026-07-31 |
 | `8.5.1` | Approved | Available on the App Store | 2026-07-30 |
 
 ## [Unreleased]
@@ -26,7 +27,7 @@ test distributions do not require an entry here.
 
 ## [9.3.0] - 2026-07-30
 
-**Status:** Production candidate
+**Status:** Submitted to App Store review (build 33)
 **Areas:** Repeatable Spatial Guidance, project organization, tutorials, canonical Figma/SwiftUI, App Store gallery
 
 ### Added
@@ -141,7 +142,7 @@ test distributions do not require an entry here.
 
 **Internal status:** Release candidate
 
-**App Store status:** In Review; not yet publicly available
+**App Store status:** Withdrawn before review and superseded by 9.3.0; not publicly available
 **Areas:** Repeatable, single-photo capture, contour alignment, catalog, Figma
 
 ### Added
