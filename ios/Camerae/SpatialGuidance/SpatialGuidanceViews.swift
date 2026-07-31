@@ -221,17 +221,15 @@ struct SpatialGuidanceProjectTab: View {
     private var tripodActions: some View {
         CameraeNextCard(theme: theme) {
             VStack(alignment: .leading, spacing: 10) {
-                Text(reference == nil ? "NÃO CONFIGURADO" : "POSIÇÃO SALVA")
+                Text(projectStatusPresentation.status)
                     .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
                     .tracking(1.2)
                     .foregroundStyle(theme.accent)
-                Text(tripodTitle)
+                Text(projectStatusPresentation.title)
                     .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
                     .foregroundStyle(theme.text)
                 if reference != nil, availability != .available {
-                    Text(
-                        "A referência continua salva. Use um iPhone compatível ou prossiga sem o guia."
-                    )
+                    Text(projectStatusPresentation.detail)
                     .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
                     CameraeNextActionButton(
@@ -273,11 +271,11 @@ struct SpatialGuidanceProjectTab: View {
         }
     }
 
-    private var tripodTitle: String {
-        if reference != nil, availability != .available {
-            return "Este iPhone não pode usar o guia"
-        }
-        return reference == nil ? "Mapeamento espacial" : "Tripé de referência"
+    private var projectStatusPresentation: SpatialGuidanceProjectStatusPresentation {
+        SpatialGuidanceProjectStatusPresentation(
+            availability: availability,
+            hasReference: reference != nil
+        )
     }
 
     private var referencePreviewImage: UIImage? {

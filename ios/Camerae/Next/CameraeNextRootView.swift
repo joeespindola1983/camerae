@@ -242,9 +242,11 @@ struct CameraeNextProjectRuntimeView: View {
     @State private var referenceRefreshID = 0
     @State private var hasSpatialReference = false
     @State private var projectCaptureCount = 0
+    @State private var spatialGuidanceThermalRevision = 0
 
     private var spatialGuidanceAvailability: SpatialGuidanceAvailability {
-        SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
+        _ = spatialGuidanceThermalRevision
+        return SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
     }
 
     private var repeatableWorkspacePresentation: CameraeNextProjectWorkspacePresentation {
@@ -308,6 +310,13 @@ struct CameraeNextProjectRuntimeView: View {
         .navigationTitle(repeatableWorkspacePresentation.projectTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: refreshProjectTabIndicators)
+        .onReceive(
+            NotificationCenter.default.publisher(
+                for: ProcessInfo.thermalStateDidChangeNotification
+            )
+        ) { _ in
+            spatialGuidanceThermalRevision += 1
+        }
         .task { await projectStore.markOpened(project) }
         .fullScreenCover(isPresented: $isPresentingCapture, onDismiss: {
             CameraeCaptureDiagnostics.event("R72 captureCover.dismissed")

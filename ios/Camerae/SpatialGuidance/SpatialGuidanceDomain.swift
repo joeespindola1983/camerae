@@ -50,6 +50,39 @@ enum SpatialGuidanceAvailabilityPolicy {
     }
 }
 
+struct SpatialGuidanceProjectStatusPresentation: Equatable, Sendable {
+    let status: String
+    let title: String
+    let detail: String
+
+    init(availability: SpatialGuidanceAvailability, hasReference: Bool) {
+        switch availability {
+        case .available:
+            status = hasReference ? "POSIÇÃO SALVA" : "NÃO CONFIGURADO"
+            title = hasReference ? "Tripé de referência" : "Mapeamento espacial"
+            detail = hasReference
+                ? "Navegue pela cena para reencontrar a base e a direção da câmera."
+                : "Mapeie o local, marque o centro da base e indique a direção da câmera."
+        case .temporarilyUnavailable:
+            status = "PAUSA TEMPORÁRIA"
+            title = "Aguarde o iPhone esfriar"
+            detail = hasReference
+                ? "A referência continua salva. A navegação será liberada quando o iPhone esfriar."
+                : "O mapeamento será liberado quando o iPhone esfriar."
+        case .hardwareUnavailable, .performanceUnavailable:
+            status = "INCOMPATÍVEL"
+            title = "Este iPhone não pode usar o guia"
+            detail = hasReference
+                ? "A referência continua salva. Use um iPhone compatível ou prossiga sem o guia."
+                : "O timelapse continua disponível sem orientação espacial."
+        case .moduleUnavailable:
+            status = "INDISPONÍVEL"
+            title = "Orientação espacial indisponível"
+            detail = "Por enquanto, este recurso está disponível somente no Repeatable."
+        }
+    }
+}
+
 enum SpatialMappingRequirement: String, CaseIterable, Equatable, Sendable {
     case duration
     case tracking

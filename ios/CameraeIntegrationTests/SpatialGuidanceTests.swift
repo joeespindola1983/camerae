@@ -48,6 +48,25 @@ struct SpatialGuidanceTests {
         )
     }
 
+    @Test("temporary thermal pressure is never presented as incompatible hardware")
+    func temporaryAvailabilityPresentation() {
+        let temporary = SpatialGuidanceProjectStatusPresentation(
+            availability: .temporarilyUnavailable,
+            hasReference: true
+        )
+        let incompatible = SpatialGuidanceProjectStatusPresentation(
+            availability: .hardwareUnavailable,
+            hasReference: true
+        )
+
+        #expect(temporary.title == "Aguarde o iPhone esfriar")
+        #expect(temporary.status == "PAUSA TEMPORÁRIA")
+        #expect(temporary.detail.contains("continua salva"))
+        #expect(!temporary.title.localizedCaseInsensitiveContains("não pode"))
+        #expect(incompatible.title == "Este iPhone não pode usar o guia")
+        #expect(incompatible.status == "INCOMPATÍVEL")
+    }
+
     @Test("spatial appearance is restricted to black or white and three opacity levels")
     func restrictedAppearance() {
         #expect(SpatialGuidanceAppearance.default.mesh == .white(opacity: 0.5))

@@ -25,6 +25,10 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Corrected Spatial Guidance after a successful field mapping so temporary
+  thermal pressure is shown as a cooling pause instead of falsely reporting an
+  incompatible iPhone; availability now refreshes automatically after cooling.
+
 ## [9.3.0] - 2026-07-30
 
 **Status:** Submitted to App Store review (build 33)
