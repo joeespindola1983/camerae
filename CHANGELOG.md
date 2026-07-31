@@ -22,6 +22,8 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Documented and enforced the canonical Firebase App Distribution QA group as `testers`, removing reliance on local release configuration.
+
 ### Fixed
 
 ## [9.3.0] - 2026-07-30

@@ -74,7 +74,6 @@ Distribuição após configurar `Config/Release.local.env`:
 
 ```sh
 # Execute a partir da branch qa sincronizada.
-FIREBASE_GROUPS=testers \
 RELEASE_NOTES_FILE=/caminho/absoluto/firebase-release-notes.txt \
 scripts/release-gate.sh firebase --publish
 
@@ -83,6 +82,10 @@ scripts/release-gate.sh appstore --publish
 ```
 
 Toda publicação Firebase exige exatamente uma fonte de notas detalhadas: `RELEASE_NOTES` ou `RELEASE_NOTES_FILE`. Texto ausente, vazio, contendo apenas espaços ou a definição simultânea das duas opções bloqueia o gate antes do archive.
+
+O destino canônico de QA é o grupo Firebase `testers`. O script já usa esse
+grupo por padrão; não é necessário defini-lo no ambiente local. Sobrescreva
+`FIREBASE_GROUPS` somente durante uma migração intencional e documentada.
 
 O gate valida Git, versão, assinatura local, release notes, arquitetura, testes Swift/C++, build e somente então publica. Workflows GitHub permanecem manuais e não disparam em pushes.
 
