@@ -20,6 +20,7 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added authentic Repeatable day/night and changing-condition App Store screenshot candidates for iPhone and iPad, plus reproducible alignment diagnostics for all three video pairs.
 - Added a reusable, versioned video-tutorial pattern with captions, first-use
   completion, contextual replay, and textual fallback while media is not
   packaged; Spatial Guidance is its first consumer.
