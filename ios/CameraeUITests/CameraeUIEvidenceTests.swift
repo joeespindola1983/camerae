@@ -37,7 +37,7 @@ final class CameraeUIEvidenceTests: XCTestCase {
         element("camerae.segment.video", app: app).tap()
         try capture("06-repeatable-configuracao-video", title: "Repeatable · Configuração Vídeo", app: app)
 
-        element(localizedTitle(ptBR: "Capturas", es: "Capturas", en: "Captures", fr: "Captures", de: "Aufnahmen", ru: "Съёмки"), app: app).tap()
+        element("camerae.project.tab.captures", app: app).tap()
         XCTAssertTrue(
             element(
                 localizedTitle(
@@ -104,17 +104,7 @@ final class CameraeUIEvidenceTests: XCTestCase {
         openNewProject(app: app)
         createProject(app: app)
         XCTAssertTrue(
-            element(
-                localizedTitle(
-                    ptBR: "Capturas",
-                    es: "Capturas",
-                    en: "Captures",
-                    fr: "Captures",
-                    de: "Aufnahmen",
-                    ru: "Съёмки"
-                ),
-                app: app
-            ).waitForExistence(timeout: 8)
+            element("camerae.project.tab.captures", app: app).waitForExistence(timeout: 8)
         )
         try capture("repeatable-configuration", title: "Repeatable · Projeto aberto", app: app)
 

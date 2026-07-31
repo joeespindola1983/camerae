@@ -74,6 +74,12 @@ test distributions do not require an entry here.
 - Shows Repeatable groups before ungrouped projects and subgroups before projects directly assigned to a group.
 - Extends the typed interface-capability contract so Repeatable project cards always retain Move, Archive or Unarchive, and Delete actions.
 
+### Fixed
+
+- Added a locale-independent accessibility identifier to the canonical project
+  tabs so the complete iPhone and iPad QA evidence matrix remains reachable
+  after the workspace refactor.
+
 ## [9.2.1] - 2026-07-29
 
 **Status:** Approved

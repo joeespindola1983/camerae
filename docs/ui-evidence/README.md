@@ -2,6 +2,18 @@
 
 Galerias versionadas das telas principais, geradas pelo release gate no iOS Simulator.
 
+- [v9.3.0-33-ru](v9.3.0-33-ru/index.html)
+- [v9.3.0-33-ipad-ru](v9.3.0-33-ipad-ru/index.html)
+- [v9.3.0-33-ipad-fr](v9.3.0-33-ipad-fr/index.html)
+- [v9.3.0-33-ipad-es](v9.3.0-33-ipad-es/index.html)
+- [v9.3.0-33-ipad-en](v9.3.0-33-ipad-en/index.html)
+- [v9.3.0-33-ipad-de](v9.3.0-33-ipad-de/index.html)
+- [v9.3.0-33-ipad](v9.3.0-33-ipad/index.html)
+- [v9.3.0-33-fr](v9.3.0-33-fr/index.html)
+- [v9.3.0-33-es](v9.3.0-33-es/index.html)
+- [v9.3.0-33-en](v9.3.0-33-en/index.html)
+- [v9.3.0-33-de](v9.3.0-33-de/index.html)
+- [v9.3.0-33](v9.3.0-33/index.html)
 - [v9.2.0-30-ru](v9.2.0-30-ru/index.html)
 - [v9.2.0-30-ipad-ru](v9.2.0-30-ipad-ru/index.html)
 - [v9.2.0-30-ipad-fr](v9.2.0-30-ipad-fr/index.html)

@@ -269,6 +269,7 @@ struct CameraeNextProjectTabs: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .accessibilityIdentifier("camerae.project.tab.\(presentation.section.rawValue)")
                 .accessibilityAddTraits(selection == presentation.section ? .isSelected : [])
             }
         }
