@@ -20,7 +20,7 @@ Environment overrides:
   FIREBASE_APP_ID           Defaults to the Camerae QA Firebase app.
   FIREBASE_PROJECT_NUMBER   Defaults to 413701042509.
   FIREBASE_PROJECT_ID       Defaults to camerae-59c4b.
-  FIREBASE_GROUPS           Same as --groups.
+  FIREBASE_GROUPS           Same as --groups. Defaults to the canonical QA group: testers.
   FIREBASE_TESTERS          Same as --testers.
   RELEASE_NOTES             Same as --release-notes.
   RELEASE_NOTES_FILE        Same as --release-notes-file.
@@ -36,7 +36,7 @@ Environment overrides:
   CONFIGURATION             Same as --configuration.
 
 Examples:
-  scripts/distribute-firebase.sh --groups internal --release-notes "Build de teste"
+  scripts/distribute-firebase.sh --release-notes "Build de teste"
   FIREBASE_TESTERS="ana@example.com,bia@example.com" scripts/distribute-firebase.sh
 USAGE
 }
@@ -53,7 +53,7 @@ FIREBASE_PROJECT_NUMBER="${FIREBASE_PROJECT_NUMBER:-413701042509}"
 FIREBASE_PROJECT_ID="${FIREBASE_PROJECT_ID:-camerae-59c4b}"
 FIREBASE_APP_ID="${FIREBASE_APP_ID:-1:413701042509:ios:74c9e8eb4ed40d45d20704}"
 EXPECTED_BUNDLE_ID="${EXPECTED_BUNDLE_ID:-com.espindola.camerae.qa}"
-FIREBASE_GROUPS="${FIREBASE_GROUPS:-}"
+FIREBASE_GROUPS="${FIREBASE_GROUPS:-testers}"
 FIREBASE_TESTERS="${FIREBASE_TESTERS:-}"
 RELEASE_NOTES="${RELEASE_NOTES:-}"
 RELEASE_NOTES_FILE="${RELEASE_NOTES_FILE:-}"

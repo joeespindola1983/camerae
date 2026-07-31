@@ -161,6 +161,15 @@ struct CameraeNextProjectCatalogModel: Equatable {
     var remainingProjects: [CameraProject] { Array(visibleProjects.dropFirst()) }
 }
 
+struct CameraeNextProjectCatalogContentPolicy: Equatable {
+    let hasGroups: Bool
+    let hasUngroupedProjects: Bool
+
+    var showsFirstProjectOnboarding: Bool { !hasGroups && !hasUngroupedProjects }
+    var showsProjectSection: Bool { !hasGroups || hasUngroupedProjects }
+    var showsProjectFilters: Bool { hasUngroupedProjects }
+}
+
 struct CameraeNextProjectOrganizationModel: Equatable {
     let projects: [CameraProject]
     let module: CameraModule
@@ -203,6 +212,14 @@ struct CameraeNextProjectOrganizationModel: Equatable {
         visibleNodes.filter { $0.parentID == nil }
     }
 
+    var hasGroups: Bool {
+        organization.nodes.contains { $0.module == module.coreValue }
+    }
+
+    var hasUngroupedProjects: Bool {
+        moduleProjects.contains { organization.nodeID(for: $0.id) == nil }
+    }
+
     var ungroupedProjects: [CameraProject] {
         visibleProjects.filter { organization.nodeID(for: $0.id) == nil }
     }
@@ -231,7 +248,16 @@ struct CameraeNextProjectOrganizationModel: Equatable {
     }
 
     func descendantProjects(in nodeID: UUID) -> [CameraProject] {
-        directProjects(in: nodeID) + childNodes(of: nodeID).flatMap { directProjects(in: $0.id) }
+        var visited = Set<UUID>()
+
+        func collect(from currentNodeID: UUID) -> [CameraProject] {
+            guard visited.insert(currentNodeID).inserted else { return [] }
+            return directProjects(in: currentNodeID) + childNodes(of: currentNodeID).flatMap {
+                collect(from: $0.id)
+            }
+        }
+
+        return collect(from: nodeID)
     }
 
     func mosaicProjects(in nodeID: UUID) -> [CameraProject] {
@@ -334,6 +360,18 @@ struct CameraeNextProjectCatalogView: View {
             sort: sort
         )
     }
+    private var contentPolicy: CameraeNextProjectCatalogContentPolicy {
+        if module == .repeatable {
+            return .init(
+                hasGroups: organizationModel.hasGroups,
+                hasUngroupedProjects: organizationModel.hasUngroupedProjects
+            )
+        }
+        return .init(
+            hasGroups: false,
+            hasUngroupedProjects: projectStore.projects.contains { $0.module == module }
+        )
+    }
 
     var body: some View {
         ZStack {
@@ -371,68 +409,72 @@ struct CameraeNextProjectCatalogView: View {
                                 .padding(12)
                         }
                         .padding(.top, 12)
-                    } else {
+                    } else if contentPolicy.showsFirstProjectOnboarding {
                         ProjectListEmptyHero(theme: theme, createAction: beginCreatingProject)
                             .padding(.top, 12)
                     }
 
-                    HStack {
-                        Text(CameraeL10n.projectsSection)
-                            .tracking(1.6)
-                        Spacer()
-                        Text("\(catalog.projectCount)")
-                            .foregroundStyle(theme.accent)
-                    }
-                    .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
-                    .foregroundStyle(theme.muted)
-                    .frame(height: 28)
-                    .padding(.top, 20)
+                    if contentPolicy.showsProjectSection {
+                        HStack {
+                            Text(CameraeL10n.projectsSection)
+                                .tracking(1.6)
+                            Spacer()
+                            Text("\(catalog.projectCount)")
+                                .foregroundStyle(theme.accent)
+                        }
+                        .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
+                        .foregroundStyle(theme.muted)
+                        .frame(height: 28)
+                        .padding(.top, 20)
 
-                    filterBar
-                        .padding(.top, 4)
+                        if contentPolicy.showsProjectFilters {
+                            filterBar
+                                .padding(.top, 4)
+                        }
 
-                    if catalog.remainingProjects.isEmpty {
-                        emptyFilteredState
-                            .padding(.top, 26)
-                    } else {
-                        LazyVStack(spacing: 8) {
-                            ForEach(catalog.remainingProjects) { project in
-                                ZStack(alignment: .trailing) {
-                                    NavigationLink(value: project) {
-                                        ProjectListRow(project: project, theme: theme)
+                        if catalog.remainingProjects.isEmpty {
+                            emptyFilteredState
+                                .padding(.top, 26)
+                        } else {
+                            LazyVStack(spacing: 8) {
+                                ForEach(catalog.remainingProjects) { project in
+                                    ZStack(alignment: .trailing) {
+                                        NavigationLink(value: project) {
+                                            ProjectListRow(project: project, theme: theme)
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        projectActionsMenu(project)
+                                            .padding(.trailing, 12)
                                     }
-                                    .buttonStyle(.plain)
+                                    .swipeActions(edge: .trailing) {
+                                        Button {
+                                            projectForStorageManagement = project
+                                        } label: {
+                                            Label("Armazenamento", systemImage: "externaldrive")
+                                        }
+                                        .tint(theme.accent)
 
-                                    projectActionsMenu(project)
-                                        .padding(.trailing, 12)
-                                }
-                                .swipeActions(edge: .trailing) {
-                                    Button {
-                                        projectForStorageManagement = project
-                                    } label: {
-                                        Label("Armazenamento", systemImage: "externaldrive")
-                                    }
-                                    .tint(theme.accent)
+                                        Button(role: .destructive) {
+                                            projectToDelete = project
+                                        } label: {
+                                            Label("Excluir", systemImage: "trash")
+                                        }
 
-                                    Button(role: .destructive) {
-                                        projectToDelete = project
-                                    } label: {
-                                        Label("Excluir", systemImage: "trash")
+                                        Button {
+                                            setArchived(project, !project.isArchived)
+                                        } label: {
+                                            Label(
+                                                project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
+                                                systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
+                                            )
+                                        }
+                                        .tint(theme.accent)
                                     }
-
-                                    Button {
-                                        setArchived(project, !project.isArchived)
-                                    } label: {
-                                        Label(
-                                            project.isArchived ? CameraeL10n.unarchive : CameraeL10n.archive,
-                                            systemImage: project.isArchived ? "archivebox.fill" : "archivebox"
-                                        )
-                                    }
-                                    .tint(theme.accent)
                                 }
                             }
+                            .padding(.top, 10)
                         }
-                        .padding(.top, 10)
                     }
 
                     Text(theme.caption)

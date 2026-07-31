@@ -26,7 +26,7 @@ test distributions do not require an entry here.
 
 ## [9.3.0] - 2026-07-30
 
-**Status:** QA candidate
+**Status:** Production candidate
 **Areas:** Repeatable Spatial Guidance, project organization, tutorials, canonical Figma/SwiftUI, App Store gallery
 
 ### Added
@@ -61,6 +61,8 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Documented and enforced the canonical Firebase App Distribution QA group as `testers`, removing reliance on local release configuration.
+
 - Canonicalized the Repeatable project workspace across Figma and SwiftUI so
   the project title, conditional Tripod tab, saved-guide status, and capture
   count share one tested presentation and capability contract.
@@ -79,6 +81,8 @@ test distributions do not require an entry here.
 - Added a locale-independent accessibility identifier to the canonical project
   tabs so the complete iPhone and iPad QA evidence matrix remains reachable
   after the workspace refactor.
+- Fixed Repeatable group-only catalogs so existing groups no longer trigger first-project onboarding or empty project filter controls.
+- Fixed group preview mosaics to show up to four recursive project thumbnails with equal-sized divisions.
 
 ## [9.2.1] - 2026-07-29
 
