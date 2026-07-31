@@ -26,11 +26,12 @@ test distributions do not require an entry here.
 
 ## [9.3.0] - 2026-07-30
 
-**Status:** Release candidate approved for stabilization
-**Areas:** Repeatable Spatial Guidance, project organization, tutorials, Figma governance
+**Status:** QA candidate
+**Areas:** Repeatable Spatial Guidance, project organization, tutorials, canonical Figma/SwiftUI, App Store gallery
 
 ### Added
 
+- Added authentic Repeatable day/night and changing-condition App Store screenshot candidates for iPhone and iPad, plus reproducible alignment diagnostics for all three video pairs.
 - Added a reusable, versioned video-tutorial pattern with captions, first-use
   completion, contextual replay, and textual fallback while media is not
   packaged; Spatial Guidance is its first consumer.
@@ -60,6 +61,12 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Canonicalized the Repeatable project workspace across Figma and SwiftUI so
+  the project title, conditional Tripod tab, saved-guide status, and capture
+  count share one tested presentation and capability contract.
+- Canonicalized project and group catalogs across Figma and SwiftUI, including
+  current project-card geometry, native catalog toolbars, empty-state recovery,
+  and tested filter, sort, group-creation, and project-creation capabilities.
 - Organized the canonical Figma file into stable design-system, workflow, domain, application, and website pages, and documented the corresponding design governance and Spatial Guidance handoff.
 - Reconciled the canonical Spatial Guidance page with the validated
   center-and-direction flow and retained the earlier numeric pose-delta concept

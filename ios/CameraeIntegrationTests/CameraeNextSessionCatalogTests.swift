@@ -60,6 +60,41 @@ struct CameraeNextSessionCatalogTests {
         )
     }
 
+    @Test func repeatableWorkspaceCapabilitiesRemainReachableIndependentOfLayout() {
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .available,
+                hasSpatialReference: false
+            ) == [.configure, .openTripod, .openCaptures]
+        )
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: false
+            ) == [.configure, .openCaptures]
+        )
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .hardwareUnavailable,
+                hasSpatialReference: true
+            ) == [.configure, .openTripod, .openCaptures]
+        )
+    }
+
+    @Test func workspacePresentationKeepsProjectTitleAndCanonicalTabOrder() {
+        let presentation = CameraeNextProjectWorkspacePresentation(
+            projectTitle: "Projeto Aurora",
+            spatialGuidanceAvailability: .available,
+            hasSpatialReference: true,
+            captureCount: 3
+        )
+
+        #expect(presentation.projectTitle == "Projeto Aurora")
+        #expect(presentation.tabs.map(\.section) == [.configuration, .tripod, .captures])
+        #expect(presentation.tabs.map(\.title) == ["Configurar", "Tripé", "Capturas (3)"])
+        #expect(presentation.tabs[1].systemImage == "checkmark.circle.fill")
+    }
+
     @Test func completedRepeatableCaptureReturnsToCatalogWhileFinalizingInline() {
         var state = CameraeNextRepeatableProjectWorkspaceState()
 
