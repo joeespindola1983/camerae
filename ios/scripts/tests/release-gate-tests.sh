@@ -63,6 +63,10 @@ if ! rg -q 'validate-firebase-release-notes\.sh' "$IOS_DIR/scripts/distribute-fi
   echo "Firebase distribution must validate mandatory release notes before archiving" >&2
   exit 1
 fi
+if ! rg -Fq 'FIREBASE_GROUPS="${FIREBASE_GROUPS:-testers}"' "$IOS_DIR/scripts/distribute-firebase.sh"; then
+  echo "Firebase distribution must default to the canonical testers group" >&2
+  exit 1
+fi
 if ! rg -q 'ALLOW_PROVISIONING_UPDATES="\$\{ALLOW_PROVISIONING_UPDATES:-0\}"' "$IOS_DIR/scripts/upload-appstore.sh"; then
   echo "App Store upload must disable provisioning updates by default" >&2
   exit 1

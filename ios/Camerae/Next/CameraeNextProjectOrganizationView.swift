@@ -94,6 +94,37 @@ struct CameraeNextProjectGroupCard: View {
     }
 }
 
+struct CameraeNextProjectGroupMosaicLayout {
+    static func frames(count: Int, size: CGSize, gap: CGFloat = 2) -> [CGRect] {
+        let itemCount = min(max(count, 0), 4)
+        guard itemCount > 0 else { return [] }
+        guard itemCount > 1 else { return [CGRect(origin: .zero, size: size)] }
+
+        if itemCount < 4 {
+            let width = (size.width - gap * CGFloat(itemCount - 1)) / CGFloat(itemCount)
+            return (0..<itemCount).map { index in
+                CGRect(
+                    x: CGFloat(index) * (width + gap),
+                    y: 0,
+                    width: width,
+                    height: size.height
+                )
+            }
+        }
+
+        let width = (size.width - gap) / 2
+        let height = (size.height - gap) / 2
+        return (0..<itemCount).map { index in
+            CGRect(
+                x: CGFloat(index % 2) * (width + gap),
+                y: CGFloat(index / 2) * (height + gap),
+                width: width,
+                height: height
+            )
+        }
+    }
+}
+
 private struct CameraeNextProjectGroupMosaic: View {
     let projects: [CameraProject]
     let overflowCount: Int
@@ -113,15 +144,16 @@ private struct CameraeNextProjectGroupMosaic: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(theme.surface)
             } else {
+                let frames = CameraeNextProjectGroupMosaicLayout.frames(
+                    count: projects.count,
+                    size: proxy.size
+                )
                 ForEach(Array(projects.prefix(4).enumerated()), id: \.element.id) { index, project in
                     mosaicImage(project)
-                        .frame(
-                            width: frame(for: index, count: min(projects.count, 4), size: proxy.size).width,
-                            height: frame(for: index, count: min(projects.count, 4), size: proxy.size).height
-                        )
+                        .frame(width: frames[index].width, height: frames[index].height)
                         .position(
-                            x: frame(for: index, count: min(projects.count, 4), size: proxy.size).midX,
-                            y: frame(for: index, count: min(projects.count, 4), size: proxy.size).midY
+                            x: frames[index].midX,
+                            y: frames[index].midY
                         )
                         .overlay(alignment: .center) {
                             if index == 3, overflowCount > 0 {
@@ -164,34 +196,6 @@ private struct CameraeNextProjectGroupMosaic: View {
             }
     }
 
-    private func frame(for index: Int, count: Int, size: CGSize) -> CGRect {
-        let gap: CGFloat = 2
-        let halfWidth = (size.width - gap) / 2
-        let halfHeight = (size.height - gap) / 2
-        switch count {
-        case 1:
-            return CGRect(origin: .zero, size: size)
-        case 2:
-            return CGRect(x: CGFloat(index) * (halfWidth + gap), y: 0, width: halfWidth, height: size.height)
-        case 3:
-            if index == 0 {
-                return CGRect(x: 0, y: 0, width: halfWidth, height: size.height)
-            }
-            return CGRect(
-                x: halfWidth + gap,
-                y: CGFloat(index - 1) * (halfHeight + gap),
-                width: halfWidth,
-                height: halfHeight
-            )
-        default:
-            return CGRect(
-                x: CGFloat(index % 2) * (halfWidth + gap),
-                y: CGFloat(index / 2) * (halfHeight + gap),
-                width: halfWidth,
-                height: halfHeight
-            )
-        }
-    }
 }
 
 struct CameraeNextOrganizationEditorSheet: View {

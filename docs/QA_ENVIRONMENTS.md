@@ -16,6 +16,11 @@ production icon.
 
 ## Firebase configuration
 
+The canonical Firebase App Distribution group for Camerae QA is `testers`.
+`ios/scripts/distribute-firebase.sh` uses it by default, and the manual GitHub
+workflow declares it explicitly. Override `FIREBASE_GROUPS` only for an
+intentional, documented distribution migration.
+
 The repository stores the public Firebase client configuration for each
 registered iOS application:
 

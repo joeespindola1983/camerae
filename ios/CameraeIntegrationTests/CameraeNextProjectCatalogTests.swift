@@ -143,6 +143,34 @@ struct CameraeNextProjectCatalogTests {
         #expect(!groups.message.isEmpty)
     }
 
+    @Test("group-only catalogs hide project onboarding and project-only controls")
+    func groupOnlyCatalogPresentation() {
+        let empty = CameraeNextProjectCatalogContentPolicy(
+            hasGroups: false,
+            hasUngroupedProjects: false
+        )
+        let groupsOnly = CameraeNextProjectCatalogContentPolicy(
+            hasGroups: true,
+            hasUngroupedProjects: false
+        )
+        let mixed = CameraeNextProjectCatalogContentPolicy(
+            hasGroups: true,
+            hasUngroupedProjects: true
+        )
+
+        #expect(empty.showsFirstProjectOnboarding)
+        #expect(empty.showsProjectSection)
+        #expect(!empty.showsProjectFilters)
+
+        #expect(!groupsOnly.showsFirstProjectOnboarding)
+        #expect(!groupsOnly.showsProjectSection)
+        #expect(!groupsOnly.showsProjectFilters)
+
+        #expect(!mixed.showsFirstProjectOnboarding)
+        #expect(mixed.showsProjectSection)
+        #expect(mixed.showsProjectFilters)
+    }
+
     @Test("organization catalogs present root groups, subgroups, then direct projects")
     func organizationHierarchy() {
         let rootID = UUID()
@@ -173,11 +201,58 @@ struct CameraeNextProjectCatalogTests {
         )
 
         #expect(model.rootNodes.map(\.name) == ["Catedral"])
+        #expect(model.hasGroups)
+        #expect(model.hasUngroupedProjects)
         #expect(model.childNodes(of: rootID).map(\.name) == ["Detalhes"])
         #expect(model.directProjects(in: rootID).map(\.name) == ["Fachada"])
         #expect(model.directProjects(in: subgroupID).map(\.name) == ["Escultura"])
         #expect(model.ungroupedProjects.map(\.name) == ["Praça"])
         #expect(model.descendantProjects(in: rootID).map(\.name) == ["Fachada", "Escultura"])
+    }
+
+    @Test("group mosaics give every preview equal area and keep all four quadrants")
+    func organizationMosaicLayout() {
+        let size = CGSize(width: 360, height: 160)
+        let three = CameraeNextProjectGroupMosaicLayout.frames(count: 3, size: size)
+        let four = CameraeNextProjectGroupMosaicLayout.frames(count: 4, size: size)
+
+        #expect(three.count == 3)
+        #expect(Set(three.map { $0.width * $0.height }).count == 1)
+        #expect(three.allSatisfy { $0.minX >= 0 && $0.maxX <= size.width })
+
+        #expect(four.count == 4)
+        #expect(Set(four.map { $0.width * $0.height }).count == 1)
+        #expect(Set(four.map { $0.origin }).count == 4)
+        #expect(four.allSatisfy { $0.minX >= 0 && $0.maxX <= size.width })
+        #expect(four.allSatisfy { $0.minY >= 0 && $0.maxY <= size.height })
+    }
+
+    @Test("group mosaics include projects from nested descendant groups")
+    func nestedOrganizationMosaicProjects() {
+        let rootID = UUID()
+        let childID = UUID()
+        let grandchildID = UUID()
+        let direct = makeProject(name: "Direto", module: .repeatable, day: 4)
+        let nested = makeProject(name: "Aninhado", module: .repeatable, day: 3)
+        let model = CameraeNextProjectOrganizationModel(
+            projects: [direct, nested],
+            module: .repeatable,
+            organization: .init(
+                nodes: [
+                    makeOrganizationNode(id: rootID, parentID: nil, name: "Catedral", day: 4),
+                    makeOrganizationNode(id: childID, parentID: rootID, name: "Interior", day: 3),
+                    makeOrganizationNode(id: grandchildID, parentID: childID, name: "Capela", day: 2)
+                ],
+                memberships: [
+                    .init(projectID: direct.id, nodeID: childID),
+                    .init(projectID: nested.id, nodeID: grandchildID)
+                ]
+            ),
+            filter: .recent
+        )
+
+        #expect(model.descendantProjects(in: rootID).map(\.name) == ["Direto", "Aninhado"])
+        #expect(model.mosaicProjects(in: rootID).count == 2)
     }
 
     @Test("group cards expose rename, archive, and delete-with-preservation capabilities")
