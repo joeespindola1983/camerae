@@ -228,10 +228,10 @@ struct SpatialGuidanceProjectTab: View {
                 Text(projectStatusPresentation.title)
                     .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
                     .foregroundStyle(theme.text)
-                if reference != nil, availability != .available {
+                if availability != .available {
                     Text(projectStatusPresentation.detail)
-                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
-                    .foregroundStyle(theme.muted)
+                        .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                        .foregroundStyle(theme.muted)
                     CameraeNextActionButton(
                         title: "Continuar sem guia",
                         systemImage: nil,
@@ -361,6 +361,10 @@ struct SpatialGuidanceFlowView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
+            if showsTripodTargetReticle {
+                tripodTargetReticle
+            }
+
             VStack(spacing: 12) {
                 topBar
                 if showsCreationContrastToggle {
@@ -443,6 +447,26 @@ struct SpatialGuidanceFlowView: View {
         return model.phase.showsLiveCamera
             && model.phase != .saving
             && model.phase != .saved
+    }
+
+    private var showsTripodTargetReticle: Bool {
+        model.phase == .mapping || model.phase == .insufficientCoverage
+    }
+
+    private var tripodTargetReticle: some View {
+        ZStack {
+            Circle()
+                .stroke(CameraeColor.captureForeground.opacity(0.9), lineWidth: 1.5)
+                .frame(width: 54, height: 54)
+            Rectangle()
+                .fill(CameraeColor.captureForeground)
+                .frame(width: 18, height: 1.5)
+            Rectangle()
+                .fill(CameraeColor.captureForeground)
+                .frame(width: 1.5, height: 18)
+        }
+        .accessibilityHidden(true)
+        .allowsHitTesting(false)
     }
 
     private var creationContrastToggle: some View {
@@ -682,7 +706,7 @@ struct SpatialGuidanceFlowView: View {
                 progress: model.mappingQuality.progress,
                 tone: model.mappingQuality.canDefineScene ? .success : .accent
             )
-            Text("Ao atingir o mínimo confiável, a captura termina automaticamente e você marca a posição do tripé.")
+            Text("Mantenha o centro do tripé dentro da mira enquanto circula. Ao atingir o mínimo confiável, posicionamos o ponto automaticamente.")
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Reiniciar local", style: .secondary) {
@@ -700,7 +724,9 @@ struct SpatialGuidanceFlowView: View {
             Text(hasSelection ? "Confira o centro" : "Toque no centro do tripé")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
             Text(
-                hasSelection
+                model.tripodAlignmentWasSuggested
+                    ? "Estimamos o centro pelo percurso e validamos com a malha disponível. Arraste para corrigir se necessário."
+                    : hasSelection
                     ? "Arraste o marcador laranja sobre o chão para corrigir. Ele deve ficar no centro entre as pernas."
                     : "Toque no chão, no centro entre as pernas do tripé. Depois você poderá arrastar para ajustar."
             )

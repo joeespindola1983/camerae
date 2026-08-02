@@ -4,11 +4,18 @@ import CameraeMedia
 import CoreVideo
 import Foundation
 
+enum VideoClipAlignmentSamplingPolicy {
+    static let maximumDimension = 1_720
+}
+
 actor AVAssetVideoClipAlignmentFrameExtractor: VideoClipAlignmentFrameExtracting {
-    func frames(
+    func frame(
         for source: VideoClipAlignmentSource,
-        fractions: [Double]
-    ) async throws -> [VideoClipAlignmentFrame] {
+        fraction: Double
+    ) async throws -> VideoClipAlignmentFrame {
+        guard fraction.isFinite, (0...1).contains(fraction) else {
+            throw VideoClipAlignmentAdapterError.invalidSampleFraction
+        }
         let asset = AVURLAsset(url: source.url)
         guard try await !asset.loadTracks(withMediaType: .video).isEmpty else {
             throw VideoClipAlignmentAdapterError.missingVideoTrack(source.itemID)
@@ -17,23 +24,31 @@ actor AVAssetVideoClipAlignmentFrameExtractor: VideoClipAlignmentFrameExtracting
         generator.appliesPreferredTrackTransform = true
         generator.requestedTimeToleranceBefore = CMTime(value: 1, timescale: 30)
         generator.requestedTimeToleranceAfter = CMTime(value: 1, timescale: 30)
+        generator.maximumSize = CGSize(
+            width: VideoClipAlignmentSamplingPolicy.maximumDimension,
+            height: VideoClipAlignmentSamplingPolicy.maximumDimension
+        )
 
-        var output: [VideoClipAlignmentFrame] = []
-        output.reserveCapacity(fractions.count)
-        for fraction in fractions {
-            try Task.checkCancellation()
-            guard fraction.isFinite, (0...1).contains(fraction) else {
-                throw VideoClipAlignmentAdapterError.invalidSampleFraction
-            }
-            let time = CMTime(
-                seconds: source.duration * fraction,
-                preferredTimescale: 600
+        try Task.checkCancellation()
+        let time = CMTime(
+            seconds: source.duration * fraction,
+            preferredTimescale: 600
+        )
+        CameraeAlignmentDiagnostics.event(
+            "analysis.sample.extract.started",
+            "fraction=\(fraction)"
+        )
+        let image = try await generator.image(at: time).image
+        let frame = try autoreleasepool {
+            VideoClipAlignmentFrame(
+                pixelBuffer: try CameraeVisionPixelBufferFactory.makeBGRA(from: image)
             )
-            let image = try await generator.image(at: time).image
-            let buffer = try CameraeVisionPixelBufferFactory.makeBGRA(from: image)
-            output.append(VideoClipAlignmentFrame(pixelBuffer: buffer))
         }
-        return output
+        CameraeAlignmentDiagnostics.event(
+            "analysis.sample.extract.completed",
+            "fraction=\(fraction) dimensions=\(CVPixelBufferGetWidth(frame.pixelBuffer))x\(CVPixelBufferGetHeight(frame.pixelBuffer))"
+        )
+        return frame
     }
 }
 

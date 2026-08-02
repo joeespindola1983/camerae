@@ -36,6 +36,21 @@ struct CameraeNextSessionCatalogTests {
         )
     }
 
+    @Test func tripodTabRemainsDiscoverableDuringTemporaryThermalPressure() {
+        #expect(
+            CameraeNextProjectSection.visibleSections(
+                spatialGuidanceAvailability: .temporarilyUnavailable,
+                hasSpatialReference: false
+            ).map(\.title) == ["Configurar", "Tripé", "Capturas"]
+        )
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .temporarilyUnavailable,
+                hasSpatialReference: false
+            ) == [.configure, .openTripod, .openCaptures]
+        )
+    }
+
     @Test func projectTabLabelsExposeTripodStatusAndCaptureCount() {
         #expect(
             CameraeNextProjectTabPresentation(
@@ -345,6 +360,55 @@ struct CameraeNextSessionCatalogTests {
             catalogReferenceURL: catalog.referenceFrameURL,
             geometricReferenceURL: catalog.alignmentReferenceFrameURL
         ) == firstVideoFrameURL)
+    }
+
+    @Test func singleVideoRemainsAlignableWhenPhotosAndTimelapsesPrecedeIt() {
+        let firstPhotoURL = URL(fileURLWithPath: "/tmp/first-photo.jpg")
+        let videoFrameURL = URL(fileURLWithPath: "/tmp/only-video-frame.jpg")
+        let firstPhoto = fixture(
+            frameCount: 1,
+            captureKind: .photo,
+            referenceFrameURL: firstPhotoURL,
+            createdAt: Date(timeIntervalSince1970: 100)
+        )
+        let timelapse = fixture(
+            frameCount: 120,
+            captureKind: .timelapse,
+            referenceFrameURL: URL(fileURLWithPath: "/tmp/timelapse-frame.jpg"),
+            createdAt: Date(timeIntervalSince1970: 200)
+        )
+        let laterPhoto = fixture(
+            frameCount: 1,
+            captureKind: .photo,
+            referenceFrameURL: URL(fileURLWithPath: "/tmp/later-photo.jpg"),
+            createdAt: Date(timeIntervalSince1970: 300)
+        )
+        let onlyVideo = fixture(
+            frameCount: 1,
+            videoClipURL: URL(fileURLWithPath: "/tmp/only-video.mov"),
+            captureKind: .video,
+            referenceFrameURL: videoFrameURL,
+            createdAt: Date(timeIntervalSince1970: 400)
+        )
+
+        let catalog = CameraeNextSessionCatalogModel(
+            summaries: [onlyVideo, laterPhoto, timelapse, firstPhoto]
+        )
+        let resolvedReference = CameraeNextSessionAlignmentReference.resolve(
+            projectReferenceURL: nil,
+            catalogReferenceURL: catalog.referenceFrameURL,
+            geometricReferenceURL: catalog.alignmentReferenceFrameURL
+        )
+
+        #expect(catalog.referenceFrameURL == laterPhoto.referenceFrameURL)
+        #expect(catalog.alignmentReferenceFrameURL == nil)
+        #expect(catalog.alignmentReferenceSessionID == nil)
+        #expect(resolvedReference == laterPhoto.referenceFrameURL)
+        #expect(CameraeNextSessionAlignmentAvailability(
+            summary: onlyVideo,
+            projectReferenceURL: resolvedReference,
+            referenceSessionID: catalog.alignmentReferenceSessionID
+        ) == .available)
     }
 
     @Test func legacyVideoWithoutAReferenceFrameNeverBecomesTheAlignmentReference() {
