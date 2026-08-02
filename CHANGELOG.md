@@ -13,7 +13,7 @@ test distributions do not require an entry here.
 
 | Version | Apple status | Public availability | Last updated |
 | --- | --- | --- | --- |
-| `9.3.0` | Waiting for Review | Not yet available | 2026-07-31 |
+| `9.3.0` | Withdrawal requested before review | Not available | 2026-07-31 |
 | `9.1.0` | Withdrawn; superseded by 9.3.0 | Not available | 2026-07-31 |
 | `8.5.1` | Approved | Available on the App Store | 2026-07-30 |
 
@@ -55,6 +55,25 @@ test distributions do not require an entry here.
   treating the video as its own reference clip.
 - Reduced video-alignment memory pressure by extracting and evaluating one
   bounded-resolution sample at a time instead of retaining five 4K BGRA frames.
+- Separated the project-open affordance from the options menu in grouped
+  project lists so their controls no longer overlap.
+- Corrected Spatial Guidance after a successful field mapping so temporary
+  thermal pressure is shown as a cooling pause instead of falsely reporting an
+  incompatible iPhone; availability now refreshes automatically after cooling.
+
+## [9.3.1] - 2026-07-31
+
+**Status:** QA candidate (build 34)
+**Areas:** Repeatable Spatial Guidance, project cards, grouped project catalog
+
+### Changed
+
+- Updated canonical project cards in Figma and SwiftUI to show only capture
+  types that exist with per-type session counts, emphasize the camera used on
+  its own line, and show the weekday, date, and time of the latest capture.
+
+### Fixed
+
 - Separated the project-open affordance from the options menu in grouped
   project lists so their controls no longer overlap.
 - Corrected Spatial Guidance after a successful field mapping so temporary
