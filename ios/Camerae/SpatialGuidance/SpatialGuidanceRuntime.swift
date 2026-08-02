@@ -72,12 +72,14 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
     @Published private(set) var tripodFootPoints: [SpatialVector3]?
     @Published private(set) var appearance = SpatialGuidanceAppearance.default
+    @Published private(set) var tripodAlignmentWasSuggested = false
 
     let sceneView: ARSCNView
 
     private var machine = SpatialGuidanceStateMachine()
     private var mappingStartedAt: Date?
     private var observedCameraPositions: [SIMD3<Float>] = []
+    private var tripodObservationRays: [SpatialObservationRay] = []
     private var keyframes: [Data] = []
     private var lastKeyframeAt: Date?
     private var reference: SpatialReferenceBundle?
@@ -85,6 +87,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     private var sceneMeshIsFrozen = false
     private var meshAnchors: [UUID: ARMeshAnchor] = [:]
     private var meshNodes: [UUID: SCNNode] = [:]
+    private var horizontalPlaneAnchors: [UUID: ARPlaneAnchor] = [:]
 
     override init() {
         sceneView = ARSCNView(frame: .zero)
@@ -112,16 +115,19 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     func beginSceneCapture() {
         guard phase == .readyToStartMapping else { return }
         observedCameraPositions = []
+        tripodObservationRays = []
         keyframes = []
         lastKeyframeAt = nil
         mappingQuality = .insufficient
         meshAnchors = [:]
         meshNodes = [:]
+        horizontalPlaneAnchors = [:]
         tripodBaseCenter = nil
         tripodDirectionPoint = nil
         tripodHeightMeters = SpatialStandardTripod.heightMeters
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
         tripodFootPoints = nil
+        tripodAlignmentWasSuggested = false
         sceneMeshIsFrozen = false
         sceneView.scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         mappingStartedAt = .now
@@ -299,6 +305,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         sceneMeshIsFrozen = true
         try? machine.send(.freezeScene)
         phase = machine.phase
+        applyAutomaticTripodDetection()
+        updateWireframeVisibility()
     }
 
     func selectTripodBase(at point: CGPoint) {
@@ -312,6 +320,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             y: Double(transform.columns.3.y),
             z: Double(transform.columns.3.z)
         )
+        tripodAlignmentWasSuggested = false
         showTripodBaseMarker(at: transform)
         try? machine.send(.tripodBaseSelected)
         phase = machine.phase
@@ -392,20 +401,22 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
 
     func confirmTripodBase() {
         guard let base = tripodBaseCenter, phase == .tripodBaseSelected else { return }
-        let meshPoints = reconstructedMeshPoints()
-        tripodHeightMeters = SpatialTripodHeightEstimator.estimate(
-            base: base,
-            points: meshPoints
-        ) ?? SpatialStandardTripod.heightMeters
-        tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
-        tripodFootPoints = SpatialTripodFootEstimator.estimate(
-            base: base,
-            points: meshPoints
-        )
-        if let tripodFootPoints {
-            tripodLegRadiusMeters = tripodFootPoints
-                .map { hypot($0.x - base.x, $0.z - base.z) }
-                .reduce(0, +) / Double(tripodFootPoints.count)
+        if !tripodAlignmentWasSuggested {
+            let meshPoints = reconstructedMeshPoints()
+            tripodHeightMeters = SpatialTripodHeightEstimator.estimate(
+                base: base,
+                points: meshPoints
+            ) ?? SpatialStandardTripod.heightMeters
+            tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
+            tripodFootPoints = SpatialTripodFootEstimator.estimate(
+                base: base,
+                points: meshPoints
+            )
+            if let tripodFootPoints {
+                tripodLegRadiusMeters = tripodFootPoints
+                    .map { hypot($0.x - base.x, $0.z - base.z) }
+                    .reduce(0, +) / Double(tripodFootPoints.count)
+            }
         }
         try? machine.send(.confirmTripodBase)
         phase = machine.phase
@@ -435,6 +446,145 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         phase = machine.phase
     }
 
+    private func applyAutomaticTripodDetection() {
+        guard phase == .selectingTripodBase else { return }
+        let points = reconstructedMeshPoints()
+        let traversalCenter = mappedTraversalCenter()
+        guard let floorY = mappedFloorHeight(points: points, near: traversalCenter) else {
+            return
+        }
+        let rayEstimate = SpatialTripodCenterEstimator.estimate(
+            rays: tripodObservationRays,
+            floorY: floorY
+        )
+        let searchCenter = rayEstimate?.center ?? traversalCenter
+        let detectedMesh = SpatialTripodDetector.detect(
+            points: points,
+            floorY: floorY,
+            searchCenter: searchCenter
+        )
+        let validatedMesh = detectedMesh.flatMap { detection -> SpatialTripodDetection? in
+            guard let rayEstimate else { return detection }
+            return hypot(
+                detection.center.x - rayEstimate.center.x,
+                detection.center.z - rayEstimate.center.z
+            ) <= 0.40 ? detection : nil
+        }
+        guard let suggestion = SpatialTripodCenterResolver.resolve(
+            meshDetection: validatedMesh,
+            rayEstimate: rayEstimate,
+            traversalCenter: traversalCenter,
+            floorY: floorY
+        ) else {
+            return
+        }
+        tripodBaseCenter = suggestion.center
+        tripodFootPoints = suggestion.feet
+        tripodHeightMeters = suggestion.heightMeters
+        if let feet = suggestion.feet, !feet.isEmpty {
+            tripodLegRadiusMeters = feet
+                .map { hypot($0.x - suggestion.center.x, $0.z - suggestion.center.z) }
+                .reduce(0, +) / Double(feet.count)
+        } else {
+            tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
+        }
+        tripodAlignmentWasSuggested = true
+
+        var transform = matrix_identity_float4x4
+        transform.columns.3 = SIMD4<Float>(
+            Float(suggestion.center.x),
+            Float(suggestion.center.y),
+            Float(suggestion.center.z),
+            1
+        )
+        showTripodBaseMarker(at: transform)
+        try? machine.send(.tripodBaseSelected)
+        phase = machine.phase
+    }
+
+    private func captureTripodObservation(frame: ARFrame) {
+        let transform = frame.camera.transform
+        let horizontalLength = hypot(transform.columns.2.x, transform.columns.2.z)
+        guard horizontalLength > 0.05 else { return }
+        let ray = SpatialObservationRay(
+            origin: .init(
+                x: Double(transform.columns.3.x),
+                y: Double(transform.columns.3.y),
+                z: Double(transform.columns.3.z)
+            ),
+            direction: .init(
+                x: Double(-transform.columns.2.x / horizontalLength),
+                y: 0,
+                z: Double(-transform.columns.2.z / horizontalLength)
+            )
+        )
+        if let previous = tripodObservationRays.last {
+            let movement = hypot(
+                ray.origin.x - previous.origin.x,
+                ray.origin.z - previous.origin.z
+            )
+            let directionDot = ray.direction.x * previous.direction.x
+                + ray.direction.z * previous.direction.z
+            guard movement >= 0.07 || directionDot <= cos(4 * Double.pi / 180) else {
+                return
+            }
+        }
+        tripodObservationRays.append(ray)
+        if tripodObservationRays.count > 160 {
+            tripodObservationRays.removeFirst(tripodObservationRays.count - 160)
+        }
+    }
+
+    private func mappedTraversalCenter() -> SpatialVector3? {
+        guard !observedCameraPositions.isEmpty else { return nil }
+        let xs = observedCameraPositions.map(\.x)
+        let zs = observedCameraPositions.map(\.z)
+        return SpatialVector3(
+            x: Double(((xs.min() ?? 0) + (xs.max() ?? 0)) / 2),
+            y: 0,
+            z: Double(((zs.min() ?? 0) + (zs.max() ?? 0)) / 2)
+        )
+    }
+
+    private func mappedFloorHeight(
+        points: [SpatialVector3],
+        near searchCenter: SpatialVector3?
+    ) -> Double? {
+        let nearbyPlanes = horizontalPlaneAnchors.values.filter { plane in
+            guard plane.alignment == .horizontal, let searchCenter else { return true }
+            return hypot(
+                Double(plane.transform.columns.3.x) - searchCenter.x,
+                Double(plane.transform.columns.3.z) - searchCenter.z
+            ) <= 1.6
+        }
+        let classifiedFloor = nearbyPlanes
+            .filter { $0.classification == .floor }
+            .max {
+                $0.planeExtent.width * $0.planeExtent.height
+                    < $1.planeExtent.width * $1.planeExtent.height
+            }
+        let largestPlane = nearbyPlanes
+            .max {
+                $0.planeExtent.width * $0.planeExtent.height
+                    < $1.planeExtent.width * $1.planeExtent.height
+            }
+        if let plane = classifiedFloor ?? largestPlane {
+            return Double(plane.transform.columns.3.y)
+        }
+
+        let localPoints = points.filter { point in
+            guard let searchCenter else { return true }
+            return hypot(point.x - searchCenter.x, point.z - searchCenter.z) <= 1.5
+        }.map(\.y).sorted()
+        guard !localPoints.isEmpty else { return nil }
+        return localPoints[min(localPoints.count - 1, localPoints.count / 20)]
+    }
+
+    private func updateWireframeVisibility() {
+        let isVisible = SpatialMeshVisibilityPolicy.showsWireframe(during: phase)
+        meshNodes.values.forEach { $0.isHidden = !isVisible }
+    }
+
     private func makeConfiguration() -> ARWorldTrackingConfiguration {
         let configuration = ARWorldTrackingConfiguration()
         configuration.worldAlignment = .gravity
@@ -460,6 +610,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         errorMessage = nil
         mappingStartedAt = nil
         observedCameraPositions = []
+        tripodObservationRays = []
         keyframes = []
         lastKeyframeAt = nil
         reference = nil
@@ -470,9 +621,11 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         tripodHeightMeters = SpatialStandardTripod.heightMeters
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
         tripodFootPoints = nil
+        tripodAlignmentWasSuggested = false
         appearance = .default
         meshAnchors = [:]
         meshNodes = [:]
+        horizontalPlaneAnchors = [:]
         sceneView.delegate = self
         sceneView.session.delegate = self
     }
@@ -487,6 +640,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         if observedCameraPositions.count > 600 {
             observedCameraPositions.removeFirst(observedCameraPositions.count - 600)
         }
+        captureTripodObservation(frame: frame)
         let xs = observedCameraPositions.map(\.x)
         let zs = observedCameraPositions.map(\.z)
         let width = Double((xs.max() ?? position.x) - (xs.min() ?? position.x))
@@ -730,33 +884,21 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             root.addChildNode(arrow)
         }
         sceneView.scene.rootNode.addChildNode(root)
-        showStandardTripod(
+        showTripodAxis(
             base: base,
-            direction: direction,
-            height: reference?.manifest.tripodHeightMeters ?? tripodHeightMeters,
-            legRadius: reference?.manifest.tripodLegRadiusMeters ?? tripodLegRadiusMeters,
-            detectedFeet: reference?.manifest.tripodFootPoints ?? tripodFootPoints
+            height: reference?.manifest.tripodHeightMeters ?? tripodHeightMeters
         )
     }
 
-    private func showStandardTripod(
+    private func showTripodAxis(
         base: SpatialVector3,
-        direction: SpatialVector3,
-        height: Double,
-        legRadius: Double,
-        detectedFeet: [SpatialVector3]?
+        height: Double
     ) {
         sceneView.scene.rootNode.childNode(
             withName: spatialGuidanceStandardTripodNodeName,
             recursively: true
         )?.removeFromParentNode()
-        guard let feet = detectedFeet ?? SpatialStandardTripod.footPoints(
-            base: base,
-            direction: direction,
-            legRadius: legRadius
-        ) else {
-            return
-        }
+        guard SpatialTripodVisualizationPolicy.visibleComponents.contains(.axis) else { return }
 
         let material = SCNMaterial()
         let tripodColor = UIColor(appearance.tripod)
@@ -769,11 +911,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         let root = SCNNode()
         root.name = spatialGuidanceStandardTripodNodeName
         let ground = SIMD3<Float>(Float(base.x), Float(base.y), Float(base.z))
-        let hubHeight = min(
-            SpatialStandardTripod.legHubHeightMeters,
-            height * 0.62
-        )
-        let hub = ground + SIMD3<Float>(0, Float(hubHeight), 0)
         let top = ground + SIMD3<Float>(0, Float(height), 0)
 
         let column = makeTripodCylinder(
@@ -783,39 +920,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             material: material
         )
         root.addChildNode(column)
-
-        for foot in feet {
-            let footPoint = SIMD3<Float>(Float(foot.x), Float(foot.y + 0.015), Float(foot.z))
-            root.addChildNode(
-                makeTripodCylinder(
-                    from: hub,
-                    to: footPoint,
-                    radius: 0.014,
-                    material: material
-                )
-            )
-        }
-
-        let heading = SIMD3<Float>(
-            Float(direction.x - base.x),
-            0,
-            Float(direction.z - base.z)
-        )
-        let head = SCNNode(geometry: SCNBox(width: 0.12, height: 0.06, length: 0.08, chamferRadius: 0.012))
-        let cameraMaterial = SCNMaterial()
-        let cameraColor = UIColor(appearance.camera)
-        cameraMaterial.diffuse.contents = cameraColor
-        cameraMaterial.emission.contents = cameraColor.withAlphaComponent(appearance.camera.opacity * 0.32)
-        cameraMaterial.writesToDepthBuffer = false
-        head.geometry?.materials = [cameraMaterial]
-        head.simdPosition = top + SIMD3<Float>(0, 0.03, 0)
-        if simd_length(heading) > 0 {
-            head.simdOrientation = simd_quatf(
-                from: SIMD3<Float>(0, 0, -1),
-                to: simd_normalize(heading)
-            )
-        }
-        root.addChildNode(head)
         sceneView.scene.rootNode.addChildNode(root)
     }
 
@@ -847,6 +951,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             node.geometry = nil
             return
         }
+        node.isHidden = !SpatialMeshVisibilityPolicy.showsWireframe(during: phase)
         guard !sceneMeshIsFrozen else { return }
         node.name = spatialGuidanceMeshNodeName
         node.geometry = SCNGeometry.spatialWireframe(
@@ -901,6 +1006,10 @@ extension SpatialGuidanceSessionModel: ARSCNViewDelegate {
     ) {
         Task { @MainActor [weak self] in
             guard let self else { return }
+            if let plane = anchor as? ARPlaneAnchor {
+                horizontalPlaneAnchors[plane.identifier] = plane
+                return
+            }
             if let mesh = anchor as? ARMeshAnchor {
                 updateSceneMesh(node: node, anchor: mesh)
                 return
@@ -927,6 +1036,12 @@ extension SpatialGuidanceSessionModel: ARSCNViewDelegate {
         didUpdate node: SCNNode,
         for anchor: ARAnchor
     ) {
+        if let plane = anchor as? ARPlaneAnchor {
+            Task { @MainActor [weak self] in
+                self?.horizontalPlaneAnchors[plane.identifier] = plane
+            }
+            return
+        }
         guard let mesh = anchor as? ARMeshAnchor else { return }
         Task { @MainActor [weak self] in
             self?.updateSceneMesh(node: node, anchor: mesh)

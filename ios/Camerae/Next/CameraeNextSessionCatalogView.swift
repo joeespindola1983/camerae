@@ -18,7 +18,9 @@ enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
         spatialGuidanceAvailability: SpatialGuidanceAvailability,
         hasSpatialReference: Bool
     ) -> [Self] {
-        spatialGuidanceAvailability == .available || hasSpatialReference
+        spatialGuidanceAvailability == .available
+            || spatialGuidanceAvailability == .temporarilyUnavailable
+            || hasSpatialReference
             ? [.configuration, .tripod, .captures]
             : [.configuration, .captures]
     }
@@ -326,14 +328,16 @@ struct CameraeNextSessionCatalogModel: Equatable {
             .first
 
         referenceFrameURL = explicitReference ?? automaticReference
-        let alignmentReference = populated
-            .filter {
-                $0.captureKind == .video &&
-                    ($0.videoClipURL != nil || $0.videoURL != nil) &&
-                    $0.referenceFrameURL != nil
-            }
-            .sorted { $0.session.createdAt < $1.session.createdAt }
-            .first
+        let videoSessions = populated.filter {
+            $0.captureKind == .video &&
+                ($0.videoClipURL != nil || $0.videoURL != nil)
+        }
+        let alignmentReference = videoSessions.count > 1
+            ? videoSessions
+                .filter { $0.referenceFrameURL != nil }
+                .sorted { $0.session.createdAt < $1.session.createdAt }
+                .first
+            : nil
         alignmentReferenceFrameURL = alignmentReference?.referenceFrameURL
         alignmentReferenceSessionID = alignmentReference?.id
         sessions = populated
