@@ -25,6 +25,42 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+## [9.4.0] - 2026-08-02
+
+**Status:** QA candidate (build 35)
+**Areas:** Repeatable Spatial Guidance, tripod detection, video alignment, project catalog
+
+### Added
+
+- Added automatic draggable tripod-center suggestions by triangulating the
+  camera's viewing rays, validating nearby mesh geometry when available, and
+  falling back to the mapped camera path when thin tripod parts are absent.
+
+### Changed
+
+- Spatial Guidance now hides the reconstructed wireframe after scene mapping
+  so tripod definition and review focus only on the placement guides.
+- Simplified Spatial Guidance to show only the tripod's vertical axis instead
+  of reconstructing a complete three-dimensional tripod.
+- Updated canonical project cards in Figma and SwiftUI to show only capture
+  types that exist with per-type session counts, emphasize the camera used on
+  its own line, and show the weekday, date, and time of the latest capture.
+
+### Fixed
+
+- Kept the Tripod tab visible during temporary thermal pressure, where it now
+  explains that the iPhone must cool down and blocks only Spatial Guidance.
+- Kept a project's only recorded video eligible for alignment when photos or
+  timelapses precede it, using the existing project reference instead of
+  treating the video as its own reference clip.
+- Reduced video-alignment memory pressure by extracting and evaluating one
+  bounded-resolution sample at a time instead of retaining five 4K BGRA frames.
+- Separated the project-open affordance from the options menu in grouped
+  project lists so their controls no longer overlap.
+- Corrected Spatial Guidance after a successful field mapping so temporary
+  thermal pressure is shown as a cooling pause instead of falsely reporting an
+  incompatible iPhone; availability now refreshes automatically after cooling.
+
 ## [9.3.1] - 2026-07-31
 
 **Status:** QA candidate (build 34)

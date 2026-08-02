@@ -5,6 +5,11 @@ import CameraeMedia
 
 @Suite("Video clip alignment analyzer")
 struct VideoClipAlignmentAnalyzerTests {
+    @Test("alignment samples are bounded to the shared analysis resolution")
+    func boundedSampleResolution() {
+        #expect(VideoClipAlignmentSamplingPolicy.maximumDimension == 1_720)
+    }
+
     @Test("video reference images use the midpoint validated by the alignment lab")
     func midpointReferenceFramePolicy() {
         #expect(CameraeVideoReferenceFramePolicy.sampleTime(duration: 8) == 4)
@@ -36,7 +41,7 @@ struct VideoClipAlignmentAnalyzerTests {
 
         #expect(plan.decision == .apply)
         #expect(abs((plan.corrections[movingID]?.transform.tx ?? 0) + 0.04) < 0.000_001)
-        #expect(await extractor.requestedFractions == [0.1, 0.3, 0.5, 0.7, 0.9, 0.1, 0.3, 0.5, 0.7, 0.9])
+        #expect(await extractor.requestedFractions == [0.1, 0.1, 0.3, 0.3, 0.5, 0.5, 0.7, 0.7, 0.9, 0.9])
         #expect(await evaluator.evaluatedPairs == 5)
     }
 
@@ -321,9 +326,17 @@ private actor ClipFrameExtractorStub: VideoClipAlignmentFrameExtracting {
         self.framesByURL = framesByURL
     }
 
-    func frames(for source: VideoClipAlignmentSource, fractions: [Double]) async throws -> [VideoClipAlignmentFrame] {
-        requestedFractions.append(contentsOf: fractions)
-        return Array((framesByURL[source.url] ?? []).prefix(fractions.count))
+    func frame(
+        for source: VideoClipAlignmentSource,
+        fraction: Double
+    ) async throws -> VideoClipAlignmentFrame {
+        requestedFractions.append(fraction)
+        guard let index = VideoClipAlignmentAnalyzer.sampleFractions.firstIndex(of: fraction),
+              let frames = framesByURL[source.url],
+              frames.indices.contains(index) else {
+            throw VideoClipAlignmentAnalysisError.insufficientReferenceSamples
+        }
+        return frames[index]
     }
 }
 

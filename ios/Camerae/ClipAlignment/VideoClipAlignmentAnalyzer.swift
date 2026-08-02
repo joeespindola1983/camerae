@@ -42,10 +42,10 @@ struct VideoClipAlignmentMeasurement: Equatable, Sendable {
 }
 
 protocol VideoClipAlignmentFrameExtracting: Sendable {
-    func frames(
+    func frame(
         for source: VideoClipAlignmentSource,
-        fractions: [Double]
-    ) async throws -> [VideoClipAlignmentFrame]
+        fraction: Double
+    ) async throws -> VideoClipAlignmentFrame
 }
 
 protocol VideoClipAlignmentPairEvaluating: Sendable {
@@ -108,35 +108,24 @@ actor VideoClipAlignmentAnalyzer {
             throw VideoClipAlignmentAnalysisError.invalidDuration
         }
 
-        let referenceFrames = try await extractor.frames(
-            for: referenceSource,
-            fractions: Self.sampleFractions
-        )
-        var sampledFrameCount = referenceFrames.count
+        var sampledFrameCount = 0
         var evaluatedPairCount = 0
-        guard referenceFrames.count == Self.sampleFractions.count else {
-            throw VideoClipAlignmentAnalysisError.insufficientReferenceSamples
-        }
 
         var candidates: [ClipAlignmentCandidate] = [.identity(itemID: referenceSource.itemID)]
         for source in sources.dropFirst() {
             try Task.checkCancellation()
-            let movingFrames = try await extractor.frames(for: source, fractions: Self.sampleFractions)
-            sampledFrameCount += movingFrames.count
-            guard movingFrames.count == referenceFrames.count else {
-                candidates.append(rejectedCandidate(itemID: source.itemID, reason: "insufficientSamples"))
-                continue
-            }
-
             var measurements: [VideoClipAlignmentMeasurement] = []
-            for (index, pair) in zip(referenceFrames, movingFrames).enumerated() {
+            measurements.reserveCapacity(Self.sampleFractions.count)
+            for (index, fraction) in Self.sampleFractions.enumerated() {
                 try Task.checkCancellation()
-                let measurement = try await evaluator.evaluate(
-                    reference: pair.0,
-                    moving: pair.1
+                let measurement = try await evaluateSample(
+                    referenceSource: referenceSource,
+                    movingSource: source,
+                    fraction: fraction
                 )
                 measurements.append(measurement)
                 logSample(measurement, fraction: Self.sampleFractions[index], sourceIndex: candidates.count)
+                sampledFrameCount += 2
                 evaluatedPairCount += 1
             }
             candidates.append(consensus(itemID: source.itemID, measurements: measurements))
@@ -174,25 +163,19 @@ actor VideoClipAlignmentAnalyzer {
             return cached
         }
 
-        let movingFrames = try await extractor.frames(
-            for: source,
-            fractions: Self.sampleFractions
-        )
-        guard movingFrames.count == Self.sampleFractions.count else {
-            throw VideoClipAlignmentAnalysisError.insufficientReferenceSamples
-        }
         try Task.checkCancellation()
         CameraeAlignmentDiagnostics.event(
             "analysis.mode",
             "fixedReferenceTemporalConsensus fractions=\(Self.sampleFractions)"
         )
         var measurements: [VideoClipAlignmentMeasurement] = []
-        measurements.reserveCapacity(movingFrames.count)
-        for (index, movingFrame) in movingFrames.enumerated() {
+        measurements.reserveCapacity(Self.sampleFractions.count)
+        for (index, fraction) in Self.sampleFractions.enumerated() {
             try Task.checkCancellation()
-            let measurement = try await evaluator.evaluate(
+            let measurement = try await evaluateSample(
                 reference: referenceFrame,
-                moving: movingFrame
+                movingSource: source,
+                fraction: fraction
             )
             measurements.append(measurement)
             logSample(
@@ -208,11 +191,30 @@ actor VideoClipAlignmentAnalyzer {
         )
         lastDiagnostics = .init(
             cacheHit: false,
-            sampledFrameCount: movingFrames.count + 1,
+            sampledFrameCount: Self.sampleFractions.count + 1,
             evaluatedPairCount: measurements.count
         )
         cache(plan, for: cacheKey)
         return plan
+    }
+
+    private func evaluateSample(
+        referenceSource: VideoClipAlignmentSource,
+        movingSource: VideoClipAlignmentSource,
+        fraction: Double
+    ) async throws -> VideoClipAlignmentMeasurement {
+        let referenceFrame = try await extractor.frame(for: referenceSource, fraction: fraction)
+        let movingFrame = try await extractor.frame(for: movingSource, fraction: fraction)
+        return try await evaluator.evaluate(reference: referenceFrame, moving: movingFrame)
+    }
+
+    private func evaluateSample(
+        reference: VideoClipAlignmentFrame,
+        movingSource: VideoClipAlignmentSource,
+        fraction: Double
+    ) async throws -> VideoClipAlignmentMeasurement {
+        let movingFrame = try await extractor.frame(for: movingSource, fraction: fraction)
+        return try await evaluator.evaluate(reference: reference, moving: movingFrame)
     }
 
     private func cache(_ plan: EditSpatialAlignmentPlan, for sources: [VideoClipAlignmentSource]) {

@@ -4,6 +4,11 @@ import Testing
 
 @Suite("Repeatable spatial guidance")
 struct SpatialGuidanceTests {
+    @Test("tripod visualization contains only its vertical axis")
+    func axisOnlyTripodVisualization() {
+        #expect(SpatialTripodVisualizationPolicy.visibleComponents == [.axis])
+    }
+
     @Test("availability requires Repeatable plus LiDAR-class tracking and sufficient processing")
     func capabilityPolicy() {
         let capable = SpatialGuidanceDeviceCapabilities(
@@ -388,6 +393,160 @@ struct SpatialGuidanceTests {
                 }
             )
         }
+    }
+
+    @Test("tripod visualization hides the captured wireframe after scene definition")
+    func tripodVisualizationHidesWireframe() {
+        #expect(SpatialMeshVisibilityPolicy.showsWireframe(during: .mapping))
+        #expect(SpatialMeshVisibilityPolicy.showsWireframe(during: .reviewingScene))
+        #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .selectingTripodBase))
+        #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .tripodBaseSelected))
+        #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .selectingTripodDirection))
+        #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .positioning))
+    }
+
+    @Test("three feet around a vertical column produce the tripod center despite scene clutter")
+    func automaticTripodDetection() throws {
+        let expectedCenter = SpatialVector3(x: 0.72, y: 0, z: -1.08)
+        let expectedFeet = [
+            SpatialVector3(x: 0.72, y: 0, z: -1.43),
+            SpatialVector3(x: 1.02, y: 0, z: -0.90),
+            SpatialVector3(x: 0.42, y: 0, z: -0.90),
+        ]
+        let footPoints = expectedFeet.flatMap { foot in
+            (0..<14).map { index in
+                SpatialVector3(
+                    x: foot.x + Double(index % 4 - 2) * 0.007,
+                    y: 0.035 + Double(index % 3) * 0.018,
+                    z: foot.z + Double(index % 5 - 2) * 0.006
+                )
+            }
+        }
+        let column = (0..<34).flatMap { level in
+            (0..<4).map { side in
+                SpatialVector3(
+                    x: expectedCenter.x + (side.isMultiple(of: 2) ? 0.025 : -0.025),
+                    y: 0.10 + Double(level) * 0.032,
+                    z: expectedCenter.z + (side < 2 ? 0.022 : -0.022)
+                )
+            }
+        }
+        let floor = (0..<80).map { index in
+            SpatialVector3(
+                x: -0.4 + Double(index % 10) * 0.18,
+                y: 0,
+                z: -1.9 + Double(index / 10) * 0.22
+            )
+        }
+        let clutter = (0..<50).map { index in
+            SpatialVector3(
+                x: 2.2 + Double(index % 5) * 0.02,
+                y: 0.04 + Double(index % 8) * 0.12,
+                z: 0.8 + Double(index / 5) * 0.02
+            )
+        }
+
+        let detection = try #require(
+            SpatialTripodDetector.detect(
+                points: footPoints + column + floor + clutter,
+                floorY: 0,
+                searchCenter: .init(x: 0.76, y: 1.1, z: -1.02)
+            )
+        )
+
+        #expect(hypot(detection.center.x - expectedCenter.x, detection.center.z - expectedCenter.z) < 0.07)
+        #expect(detection.feet.count == 3)
+        #expect(detection.heightMeters > 0.9)
+        #expect(detection.confidence >= 0.72)
+    }
+
+    @Test("tripod detection rejects three low clusters without a central column")
+    func automaticTripodDetectionRejectsSceneObjects() {
+        let clusters = [
+            SpatialVector3(x: -0.3, y: 0.05, z: 0),
+            SpatialVector3(x: 0.15, y: 0.05, z: 0.26),
+            SpatialVector3(x: 0.15, y: 0.05, z: -0.26),
+        ].flatMap { center in
+            (0..<12).map { index in
+                SpatialVector3(
+                    x: center.x + Double(index % 3) * 0.006,
+                    y: center.y,
+                    z: center.z + Double(index % 4) * 0.006
+                )
+            }
+        }
+
+        #expect(
+            SpatialTripodDetector.detect(
+                points: clusters,
+                floorY: 0,
+                searchCenter: .zero
+            ) == nil
+        )
+    }
+
+    @Test("camera viewing rays triangulate the tripod center despite outliers")
+    func viewingRayTriangulation() throws {
+        let expected = SpatialVector3(x: 0.7, y: 0, z: -1.1)
+        var rays = (0..<14).map { index in
+            let angle = Double(index) * 2 * .pi / 14
+            let origin = SpatialVector3(
+                x: expected.x + cos(angle) * 1.25,
+                y: 1.2,
+                z: expected.z + sin(angle) * 1.25
+            )
+            let noise = Double(index % 3 - 1) * 0.008
+            return SpatialObservationRay(
+                origin: origin,
+                direction: .init(
+                    x: expected.x - origin.x + noise,
+                    y: 0,
+                    z: expected.z - origin.z - noise
+                )
+            )
+        }
+        rays.append(contentsOf: [
+            .init(origin: .init(x: -1, y: 1.2, z: -1), direction: .init(x: -1, y: 0, z: 0)),
+            .init(origin: .init(x: 2, y: 1.2, z: 1), direction: .init(x: 0, y: 0, z: 1)),
+        ])
+
+        let estimate = try #require(
+            SpatialTripodCenterEstimator.estimate(rays: rays, floorY: 0)
+        )
+
+        #expect(hypot(estimate.center.x - expected.x, estimate.center.z - expected.z) < 0.05)
+        #expect(estimate.supportingRayCount >= 12)
+        #expect(estimate.confidence >= 0.75)
+    }
+
+    @Test("automatic center always falls back from mesh to viewing rays then camera path")
+    func automaticTripodCenterFallbacks() throws {
+        let rayEstimate = SpatialTripodCenterEstimate(
+            center: .init(x: 0.4, y: 0, z: -0.8),
+            confidence: 0.82,
+            supportingRayCount: 11
+        )
+        let fromRay = try #require(
+            SpatialTripodCenterResolver.resolve(
+                meshDetection: nil,
+                rayEstimate: rayEstimate,
+                traversalCenter: .init(x: 2, y: 0, z: 2),
+                floorY: 0.1
+            )
+        )
+        let fromPath = try #require(
+            SpatialTripodCenterResolver.resolve(
+                meshDetection: nil,
+                rayEstimate: nil,
+                traversalCenter: .init(x: 0.6, y: 1.2, z: -1),
+                floorY: 0.1
+            )
+        )
+
+        #expect(fromRay.evidence == .viewingRays)
+        #expect(fromRay.center == .init(x: 0.4, y: 0.1, z: -0.8))
+        #expect(fromPath.evidence == .cameraPath)
+        #expect(fromPath.center == .init(x: 0.6, y: 0.1, z: -1))
     }
 
     @Test("saving a replacement archives the complete previous reference")
