@@ -21,6 +21,17 @@ test distributions do not require an entry here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [9.4.0] - 2026-08-02
+
+**Status:** QA candidate (build 35)
+**Areas:** Repeatable Spatial Guidance, tripod detection, video alignment, project catalog
+
+### Added
+
 - Added automatic draggable tripod-center suggestions by triangulating the
   camera's viewing rays, validating nearby mesh geometry when available, and
   falling back to the mapped camera path when thin tripod parts are absent.
