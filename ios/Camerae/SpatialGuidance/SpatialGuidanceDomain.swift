@@ -212,6 +212,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     case tripodBaseSelected
     case selectingTripodDirection
     case tripodDirectionSelected
+    case capturingReferencePhotos
     case readyToMount
     case saving
     case saved
@@ -233,6 +234,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
         case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene,
              .selectingTripodBase, .tripodBaseSelected, .readyToMount,
              .selectingTripodDirection, .tripodDirectionSelected,
+             .capturingReferencePhotos,
              .relocalizing, .positioning, .aligned:
             true
         default:
@@ -260,6 +262,8 @@ enum SpatialGuidancePhase: Equatable, Sendable {
             .selectingTripodDirection
         case .tripodDirectionSelected:
             .tripodDirectionSelected
+        case .capturingReferencePhotos:
+            .capturingReferencePhotos
         case .readyToMount, .saving:
             .readyToMount
         case .saved:
@@ -288,6 +292,8 @@ enum SpatialGuidanceEvent: Equatable, Sendable {
     case confirmTripodBase
     case tripodDirectionSelected
     case confirmTripodDirection
+    case referencePhotoCaptured
+    case referencePhotoRemoved
     case beginSaving
     case referenceSaved
     case startRelocalization
@@ -325,7 +331,10 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
         case (.tripodBaseSelected, .confirmTripodBase): .selectingTripodDirection
         case (.selectingTripodDirection, .tripodDirectionSelected),
              (.tripodDirectionSelected, .tripodDirectionSelected): .tripodDirectionSelected
-        case (.tripodDirectionSelected, .confirmTripodDirection): .readyToMount
+        case (.tripodDirectionSelected, .confirmTripodDirection): .capturingReferencePhotos
+        case (.capturingReferencePhotos, .referencePhotoCaptured),
+             (.readyToMount, .referencePhotoCaptured): .readyToMount
+        case (.readyToMount, .referencePhotoRemoved): .capturingReferencePhotos
         case (.readyToMount, .beginSaving): .saving
         case (.readyToMount, .referenceSaved), (.saving, .referenceSaved): .saved
         case (.idle, .startRelocalization),
@@ -582,7 +591,8 @@ enum SpatialTripodFootEstimator {
 enum SpatialMeshVisibilityPolicy {
     static func showsWireframe(during phase: SpatialGuidancePhase) -> Bool {
         switch phase {
-        case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene:
+        case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene,
+             .capturingReferencePhotos, .readyToMount:
             true
         default:
             false
@@ -1136,6 +1146,7 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
     case tripodBaseSelected
     case selectingTripodDirection
     case tripodDirectionSelected
+    case capturingReferencePhotos
     case readyToMount
     case relocalizing
     case positioning
@@ -1163,6 +1174,8 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case selectTripodDirection
     case adjustTripodDirection
     case confirmTripodDirection
+    case captureReferencePhoto
+    case retakeReferencePhoto
     case openCamera
     case completeNavigation
     case cancel
@@ -1191,8 +1204,10 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
             [.selectTripodDirection, .cancel]
         case .tripodDirectionSelected:
             [.adjustTripodDirection, .confirmTripodDirection, .cancel]
+        case .capturingReferencePhotos:
+            [.captureReferencePhoto, .cancel]
         case .readyToMount:
-            [.saveReference, .cancel]
+            [.captureReferencePhoto, .retakeReferencePhoto, .saveReference, .cancel]
         case .relocalizing:
             [.cancel]
         case .positioning:
@@ -1205,6 +1220,34 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
             [.remapReference, .continueWithoutReference]
         case .confirmRemap:
             [.remapReference, .cancel]
+        }
+    }
+}
+
+enum SpatialReferencePhotoCapabilityPolicy {
+    static let maximumPhotoCount = 2
+
+    static func actions(photoCount: Int) -> [SpatialGuidanceAction] {
+        guard photoCount > 0 else { return [.captureReferencePhoto, .cancel] }
+        var actions: [SpatialGuidanceAction] = []
+        if photoCount < maximumPhotoCount { actions.append(.captureReferencePhoto) }
+        actions.append(.retakeReferencePhoto)
+        actions.append(.saveReference)
+        actions.append(.cancel)
+        return actions
+    }
+}
+
+enum SpatialReferenceThumbnailLayout: Equatable, Sendable {
+    case unavailable
+    case singleHero
+    case verticalPair
+
+    init(photoCount: Int) {
+        switch photoCount {
+        case ...0: self = .unavailable
+        case 1: self = .singleHero
+        default: self = .verticalPair
         }
     }
 }

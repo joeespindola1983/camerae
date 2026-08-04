@@ -4,6 +4,21 @@ struct SpatialReferenceBundle: Equatable, Sendable {
     let manifest: SpatialReferenceManifest
     let worldMapData: Data
     let keyframes: [Data]
+    let thumbnailImages: [Data]
+
+    init(
+        manifest: SpatialReferenceManifest,
+        worldMapData: Data,
+        keyframes: [Data],
+        thumbnailImages: [Data] = []
+    ) {
+        self.manifest = manifest
+        self.worldMapData = worldMapData
+        self.keyframes = keyframes
+        self.thumbnailImages = Array(
+            thumbnailImages.prefix(SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount)
+        )
+    }
 }
 
 struct SpatialReferenceReuseCandidate: Equatable {
@@ -93,7 +108,8 @@ struct SpatialReferenceStore {
     func save(
         manifest: SpatialReferenceManifest,
         worldMapData: Data,
-        keyframes: [Data]
+        keyframes: [Data],
+        thumbnailImages: [Data] = []
     ) throws {
         try fileManager.createDirectory(
             at: projectDirectory,
@@ -116,6 +132,7 @@ struct SpatialReferenceStore {
             manifest: manifest,
             worldMapData: worldMapData,
             keyframes: keyframes,
+            thumbnailImages: thumbnailImages,
             to: staging
         )
         _ = try loadBundle(at: staging)
@@ -157,12 +174,14 @@ struct SpatialReferenceStore {
                 cameraZoomFactor: cameraZoomFactor
             ),
             worldMapData: bundle.worldMapData,
-            keyframes: bundle.keyframes
+            keyframes: bundle.keyframes,
+            thumbnailImages: bundle.thumbnailImages
         )
         try save(
             manifest: imported.manifest,
             worldMapData: imported.worldMapData,
-            keyframes: imported.keyframes
+            keyframes: imported.keyframes,
+            thumbnailImages: imported.thumbnailImages
         )
         return imported
     }
@@ -184,6 +203,7 @@ struct SpatialReferenceStore {
         manifest: SpatialReferenceManifest,
         worldMapData: Data,
         keyframes: [Data],
+        thumbnailImages: [Data],
         to directory: URL
     ) throws {
         guard manifest.schemaVersion == SpatialReferenceManifest.currentSchemaVersion else {
@@ -213,6 +233,26 @@ struct SpatialReferenceStore {
                 options: .atomic
             )
         }
+        if !thumbnailImages.isEmpty {
+            let thumbnailsDirectory = directory.appendingPathComponent(
+                "thumbnails",
+                isDirectory: true
+            )
+            try fileManager.createDirectory(
+                at: thumbnailsDirectory,
+                withIntermediateDirectories: true
+            )
+            for (index, data) in thumbnailImages
+                .prefix(SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount)
+                .enumerated() {
+                try data.write(
+                    to: thumbnailsDirectory.appendingPathComponent(
+                        String(format: "thumbnail-%02d.jpg", index + 1)
+                    ),
+                    options: .atomic
+                )
+            }
+        }
     }
 
     private func loadBundle(at directory: URL) throws -> SpatialReferenceBundle? {
@@ -229,10 +269,26 @@ struct SpatialReferenceStore {
             }
             return try Data(contentsOf: url)
         }
+        let thumbnailsDirectory = directory.appendingPathComponent("thumbnails", isDirectory: true)
+        let thumbnailImages: [Data]
+        if fileManager.fileExists(atPath: thumbnailsDirectory.path) {
+            thumbnailImages = try fileManager.contentsOfDirectory(
+                at: thumbnailsDirectory,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            .filter { $0.pathExtension.lowercased() == "jpg" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+            .prefix(SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount)
+            .map { try Data(contentsOf: $0) }
+        } else {
+            thumbnailImages = []
+        }
         return SpatialReferenceBundle(
             manifest: manifest,
             worldMapData: try Data(contentsOf: worldMapURL),
-            keyframes: keyframes
+            keyframes: keyframes,
+            thumbnailImages: thumbnailImages
         )
     }
 

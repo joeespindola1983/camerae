@@ -73,6 +73,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
     @Published private(set) var tripodFootPoints: [SpatialVector3]?
     @Published private(set) var appearance = SpatialGuidanceAppearance.default
     @Published private(set) var tripodAlignmentWasSuggested = false
+    @Published private(set) var referencePhotos: [Data] = []
 
     let sceneView: ARSCNView
 
@@ -128,6 +129,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
         tripodFootPoints = nil
         tripodAlignmentWasSuggested = false
+        referencePhotos = []
         sceneMeshIsFrozen = false
         sceneView.scene.rootNode.childNodes.forEach { $0.removeFromParentNode() }
         mappingStartedAt = .now
@@ -175,7 +177,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         guard mappingQuality.canDefineScene,
               sceneMeshIsFrozen,
               let tripodBaseCenter,
-              let tripodDirectionPoint else {
+              let tripodDirectionPoint,
+              !referencePhotos.isEmpty else {
             throw SpatialGuidanceRuntimeError.mappingNotReady
         }
         isBusy = true
@@ -212,9 +215,6 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
             withRootObject: worldMap,
             requiringSecureCoding: true
         )
-        if let snapshot = snapshotJPEG(hidingSceneMesh: true), !keyframes.contains(snapshot) {
-            keyframes.append(snapshot)
-        }
         let names = keyframes.indices.map { index in
             String(format: "guide-%04d.jpg", index + 1)
         }
@@ -239,7 +239,8 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         try store.save(
             manifest: manifest,
             worldMapData: mapData,
-            keyframes: keyframes
+            keyframes: keyframes,
+            thumbnailImages: referencePhotos
         )
         try machine.send(.referenceSaved)
         phase = machine.phase
@@ -444,6 +445,30 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         guard tripodDirectionPoint != nil, phase == .tripodDirectionSelected else { return }
         try? machine.send(.confirmTripodDirection)
         phase = machine.phase
+        updateWireframeVisibility()
+    }
+
+    func captureReferencePhoto() {
+        guard phase == .capturingReferencePhotos || phase == .readyToMount,
+              referencePhotos.count < SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount,
+              let photo = snapshotJPEG(showingSceneMesh: true) else {
+            return
+        }
+        referencePhotos.append(photo)
+        try? machine.send(.referencePhotoCaptured)
+        phase = machine.phase
+        updateWireframeVisibility()
+    }
+
+    func removeLastReferencePhoto() {
+        guard !referencePhotos.isEmpty,
+              phase == .readyToMount else { return }
+        referencePhotos.removeLast()
+        if referencePhotos.isEmpty {
+            try? machine.send(.referencePhotoRemoved)
+            phase = machine.phase
+        }
+        updateWireframeVisibility()
     }
 
     private func applyAutomaticTripodDetection() {
@@ -622,6 +647,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         tripodLegRadiusMeters = SpatialStandardTripod.legRadiusMeters
         tripodFootPoints = nil
         tripodAlignmentWasSuggested = false
+        referencePhotos = []
         appearance = .default
         meshAnchors = [:]
         meshNodes = [:]
@@ -707,16 +733,24 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         }
     }
 
-    private func snapshotJPEG(hidingSceneMesh: Bool = false) -> Data? {
+    private func snapshotJPEG(
+        hidingSceneMesh: Bool = false,
+        showingSceneMesh: Bool = false
+    ) -> Data? {
         let meshNodes = sceneView.scene.rootNode.childNodes(passingTest: { node, _ in
             node.name == spatialGuidanceMeshNodeName
         })
+        let previousVisibility = meshNodes.map(\.isHidden)
         if hidingSceneMesh {
             meshNodes.forEach { $0.isHidden = true }
+        } else if showingSceneMesh {
+            meshNodes.forEach { $0.isHidden = false }
         }
         defer {
-            if hidingSceneMesh {
-                meshNodes.forEach { $0.isHidden = false }
+            if hidingSceneMesh || showingSceneMesh {
+                for (node, wasHidden) in zip(meshNodes, previousVisibility) {
+                    node.isHidden = wasHidden
+                }
             }
         }
         let image = sceneView.snapshot().resizedForSpatialGuide(maxLongEdge: 1_920)
