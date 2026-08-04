@@ -59,6 +59,8 @@ struct RepeatableCameraView: View {
     @State private var customVideoSeconds = 90
     @State private var customTimelapseMinutes = 45
     @State private var sourceFormat = CaptureSourceFormat.heic
+    @State private var pendingCaptureAfterFocus = false
+    @State private var bypassFocusPreflightOnce = false
 
     init(
         project: CameraProject,
@@ -371,12 +373,28 @@ struct RepeatableCameraView: View {
                 Color.black
                     .ignoresSafeArea()
 
-                CameraPreview(session: camera.session)
+                CameraPreview(
+                    session: camera.session,
+                    onTapToFocus: handleFocusTap
+                )
                     .frame(width: proxy.size.width, height: proxy.size.height)
                     .clipped()
                     .ignoresSafeArea()
 
                 cameraLifecycleOverlay
+
+                if camera.focusPreflightState == .needsUserFocus {
+                    CameraFocusRecoveryOverlay(
+                        retryAutomaticFocus: {
+                            Task { await resolveFocusAndContinue(at: nil) }
+                        },
+                        captureAnyway: captureWithUnverifiedFocus
+                    )
+                    .zIndex(4)
+                } else if camera.focusPreflightState == .checking {
+                    CameraFocusCheckingOverlay()
+                        .zIndex(4)
+                }
 
                 if let referenceImage {
                     ReferenceOverlayImage(
@@ -517,6 +535,12 @@ struct RepeatableCameraView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     .padding(.leading, 12)
                 }
+
+                captureCountdownOverlays(
+                    at: Date(),
+                    safeTop: safeTop
+                )
+                .zIndex(5)
             }
             .onAppear {
                 alignmentDisplaySize = proxy.size
@@ -991,10 +1015,6 @@ struct RepeatableCameraView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if let startedAt = camera.videoRecordingStartedAt {
-                recordingCountdown(startedAt: startedAt)
-            }
-
             Spacer()
         }
     }
@@ -1349,29 +1369,14 @@ struct RepeatableCameraView: View {
         }
     }
 
-    @ViewBuilder
-    private func recordingCountdown(startedAt: Date) -> some View {
-        TimelineView(.periodic(from: startedAt, by: 1)) { context in
-            let remaining = RepeatableRecordingCountdown.remainingSeconds(
-                startedAt: startedAt,
-                plannedDuration: plannedDuration,
-                now: context.date
-            )
-            Label(
-                RepeatableRecordingCountdown.label(seconds: remaining),
-                systemImage: "timer"
-            )
-                .font(.system(.body, design: .monospaced, weight: .semibold))
-                .foregroundStyle(.red)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-                .accessibilityLabel("Tempo restante do clipe")
-                .accessibilityValue(RepeatableRecordingCountdown.label(seconds: remaining))
-        }
-    }
-
     private func performPrimaryCaptureAction() async {
+        guard !camera.isCaptureStarting else { return }
+        if !isCaptureActive, !bypassFocusPreflightOnce {
+            pendingCaptureAfterFocus = true
+            guard await verifyFocus(at: nil) else { return }
+            pendingCaptureAfterFocus = false
+        }
+        bypassFocusPreflightOnce = false
         let captureOrientation = CaptureDisplayOrientation.activeInterfaceOrientation(
             fallbackDisplaySize: alignmentDisplaySize
         )
@@ -1414,7 +1419,73 @@ struct RepeatableCameraView: View {
     }
 
     private var isCaptureActive: Bool {
-        camera.isTimelapseRunning || camera.isVideoRecording || camera.isSinglePhotoCaptureRunning
+        camera.isTimelapseRunning
+            || camera.isVideoRecording
+            || camera.isSinglePhotoCaptureRunning
+            || camera.isCaptureStarting
+    }
+
+    private func handleFocusTap(_ point: CGPoint) {
+        guard camera.focusPreflightState == .needsUserFocus else { return }
+        Task { await resolveFocusAndContinue(at: point) }
+    }
+
+    private func resolveFocusAndContinue(at point: CGPoint?) async {
+        guard pendingCaptureAfterFocus else { return }
+        if await verifyFocus(at: point) {
+            pendingCaptureAfterFocus = false
+            bypassFocusPreflightOnce = true
+            await performPrimaryCaptureAction()
+        }
+    }
+
+    private func verifyFocus(at point: CGPoint?) async -> Bool {
+        if selectedCaptureKind == .video,
+           let plan = planning.result?.resolvedPlan {
+            return await camera.prepareFocusForCapture(
+                at: point,
+                videoPlan: plan,
+                videoSettings: videoSettings
+            )
+        }
+        return await camera.prepareFocusForCapture(at: point)
+    }
+
+    private func captureWithUnverifiedFocus() {
+        guard pendingCaptureAfterFocus else { return }
+        camera.acceptUnverifiedFocus()
+        pendingCaptureAfterFocus = false
+        bypassFocusPreflightOnce = true
+        Task { await performPrimaryCaptureAction() }
+    }
+
+    private func captureCountdownOverlays(
+        at date: Date,
+        safeTop: CGFloat
+    ) -> some View {
+        TimelineView(.periodic(from: date, by: 1)) { context in
+            let remainingLabel: String? = selectedCaptureKind == .photo
+                ? nil
+                : remainingCaptureLabel(at: context.date)
+            let presentation = CameraeCaptureCountdownPresentation(
+                startSeconds: camera.countdownSecondsRemaining,
+                isCaptureRunning: camera.isTimelapseRunning || camera.isVideoRecording,
+                isInformationVisible: isTimelapseInfoVisible,
+                remainingLabel: remainingLabel
+            )
+            ZStack {
+                if let seconds = presentation.centeredStartSeconds {
+                    CameraeCaptureStartCountdownOverlay(seconds: seconds)
+                }
+                if let label = presentation.cornerRemainingLabel {
+                    CameraeCaptureRemainingCountdownOverlay(label: label)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(.top, safeTop + 64)
+                        .padding(.trailing, 12)
+                }
+            }
+            .allowsHitTesting(false)
+        }
     }
 
     private var plannedDuration: TimeInterval {

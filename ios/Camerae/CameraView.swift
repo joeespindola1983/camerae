@@ -34,6 +34,8 @@ struct CameraView: View {
     @State private var selectedGridStyle = CameraeNextGridPreference.current()
     @State private var isShowingGridPicker = false
     @State private var captureDisplaySize = CGSize.zero
+    @State private var pendingCaptureAfterFocus = false
+    @State private var bypassFocusPreflightOnce = false
 
     init(
         project: CameraProject,
@@ -227,7 +229,10 @@ struct CameraView: View {
 
     private var captureView: some View {
         ZStack {
-            CameraPreview(session: camera.session)
+            CameraPreview(
+                session: camera.session,
+                onTapToFocus: handleFocusTap
+            )
                 .ignoresSafeArea()
 
             if usesNextInterface, isGridVisible {
@@ -237,18 +242,38 @@ struct CameraView: View {
             }
 
             GeometryReader { proxy in
-                VStack(spacing: 0) {
-                    topBar
-                    Spacer()
-                    if isControlsVisible {
-                        controls(for: proxy.size)
-                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                ZStack {
+                    VStack(spacing: 0) {
+                        topBar
+                        Spacer()
+                        if isControlsVisible {
+                            controls(for: proxy.size)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 12)
+
+                    captureCountdownOverlays(
+                        at: Date(),
+                        safeTop: proxy.safeAreaInsets.top
+                    )
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
                 .onAppear { captureDisplaySize = proxy.size }
                 .onChange(of: proxy.size) { _, size in captureDisplaySize = size }
+            }
+
+            if camera.focusPreflightState == .needsUserFocus {
+                CameraFocusRecoveryOverlay(
+                    retryAutomaticFocus: {
+                        Task { await resolveFocusAndContinue(at: nil) }
+                    },
+                    captureAnyway: captureWithUnverifiedFocus
+                )
+                .zIndex(4)
+            } else if camera.focusPreflightState == .checking {
+                CameraFocusCheckingOverlay()
+                    .zIndex(4)
             }
 
             if isExportingOriginalFrames {
@@ -403,9 +428,11 @@ struct CameraView: View {
         let orientation = size.width > size.height
             ? CameraeCapturePanelOrientation.landscape
             : .portrait
-        let isRunning = captureKind == .video
-            ? camera.isVideoRecording
-            : camera.isTimelapseRunning
+        let isRunning = camera.isCaptureStarting || (
+            captureKind == .video
+                ? camera.isVideoRecording
+                : camera.isTimelapseRunning
+        )
         let presentation = CameraeNextCaptureSessionPresentation.astro(
             originalCount: camera.frameCount,
             acceptedCount: camera.astroCompositeFrameCount,
@@ -437,6 +464,14 @@ struct CameraView: View {
 
     @MainActor
     private func toggleAstroCapture() async {
+        guard !camera.isCaptureStarting else { return }
+        let isRunning = camera.isTimelapseRunning || camera.isVideoRecording
+        if !isRunning, !bypassFocusPreflightOnce {
+            pendingCaptureAfterFocus = true
+            guard await verifyFocus(at: nil) else { return }
+            pendingCaptureAfterFocus = false
+        }
+        bypassFocusPreflightOnce = false
         guard let plan = planning.result?.resolvedPlan else { return }
         let captureOrientation = CaptureDisplayOrientation.activeInterfaceOrientation(
             fallbackDisplaySize: captureDisplaySize
@@ -474,6 +509,79 @@ struct CameraView: View {
             await camera.setExposureBias(exposureBias)
             await camera.toggleVideoRecording(plan: plan, settings: videoSettings)
         }
+    }
+
+    private func handleFocusTap(_ point: CGPoint) {
+        guard camera.focusPreflightState == .needsUserFocus else { return }
+        Task { await resolveFocusAndContinue(at: point) }
+    }
+
+    private func resolveFocusAndContinue(at point: CGPoint?) async {
+        guard pendingCaptureAfterFocus else { return }
+        if await verifyFocus(at: point) {
+            pendingCaptureAfterFocus = false
+            bypassFocusPreflightOnce = true
+            await toggleAstroCapture()
+        }
+    }
+
+    private func verifyFocus(at point: CGPoint?) async -> Bool {
+        if captureKind == .video,
+           let plan = planning.result?.resolvedPlan {
+            return await camera.prepareFocusForCapture(
+                at: point,
+                videoPlan: plan,
+                videoSettings: videoSettings
+            )
+        }
+        return await camera.prepareFocusForCapture(at: point)
+    }
+
+    private func captureWithUnverifiedFocus() {
+        guard pendingCaptureAfterFocus else { return }
+        camera.acceptUnverifiedFocus()
+        pendingCaptureAfterFocus = false
+        bypassFocusPreflightOnce = true
+        Task { await toggleAstroCapture() }
+    }
+
+    private func captureCountdownOverlays(
+        at date: Date,
+        safeTop: CGFloat
+    ) -> some View {
+        TimelineView(.periodic(from: date, by: 1)) { context in
+            let startedAt = captureKind == .video
+                ? camera.videoRecordingStartedAt
+                : camera.timelapseStartedAt
+            let remainingLabel = startedAt.map {
+                RepeatableRecordingCountdown.label(
+                    seconds: RepeatableRecordingCountdown.remainingSeconds(
+                        startedAt: $0,
+                        plannedDuration: plannedDuration,
+                        now: context.date
+                    )
+                )
+            }
+            let presentation = CameraeCaptureCountdownPresentation(
+                startSeconds: camera.countdownSecondsRemaining,
+                isCaptureRunning: camera.isTimelapseRunning || camera.isVideoRecording,
+                isInformationVisible: isControlsVisible,
+                remainingLabel: remainingLabel
+            )
+            ZStack {
+                if let seconds = presentation.centeredStartSeconds {
+                    CameraeCaptureStartCountdownOverlay(seconds: seconds)
+                }
+                if let label = presentation.cornerRemainingLabel {
+                    CameraeCaptureRemainingCountdownOverlay(label: label)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .padding(.top, safeTop + 64)
+                        .padding(.trailing, 12)
+                }
+            }
+            .allowsHitTesting(false)
+        }
+        .zIndex(5)
     }
 
     private var plannedDuration: TimeInterval {

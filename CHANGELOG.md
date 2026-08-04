@@ -28,6 +28,12 @@ test distributions do not require an entry here.
 - Added an explicit option to reuse the newest compatible tripod position from
   another Repeatable project, with source identification and relocalization
   before use.
+- Added a sharpness-aware focus check before every capture, with automatic
+  center focus, tap-to-focus recovery, and an explicit manual override when
+  the app cannot confirm focus in difficult light.
+- Added a clear three-second start countdown to photo, video, timelapse, and
+  Astro captures, plus a top-right remaining-time indicator whenever the
+  in-progress information panel is hidden.
 
 ### Changed
 
