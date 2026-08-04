@@ -14,10 +14,11 @@ struct ProjectManifestCompatibilityTests {
         #expect(document.project.module == .repeatable)
         #expect(document.project.name == "Legacy project")
         #expect(document.project.isArchived == false)
+        #expect(document.project.sequenceNumber == nil)
         #expect(document.summary == nil)
     }
 
-    @Test("v3 manifest upgrades to v5 while preserving its summary")
+    @Test("v3 manifest upgrades to v6 while preserving its summary and stable number")
     func v3RoundTrip() throws {
         let project = ProjectRecord(
             id: UUID(uuidString: "22222222-2222-2222-2222-222222222222")!,
@@ -27,7 +28,8 @@ struct ProjectManifestCompatibilityTests {
             createdAt: Date(timeIntervalSince1970: 1_700_000_000),
             updatedAt: Date(timeIntervalSince1970: 1_700_000_100),
             lastOpenedAt: nil,
-            isArchived: false
+            isArchived: false,
+            sequenceNumber: 7
         )
         let summary = ProjectSummary(
             sessionCount: 4,
@@ -43,7 +45,7 @@ struct ProjectManifestCompatibilityTests {
         let data = try codec.encode(ProjectManifestDocument(project: project, summary: summary))
         let decoded = try codec.decode(data, directoryURL: project.directoryURL)
 
-        #expect(decoded.schemaVersion == 5)
+        #expect(decoded.schemaVersion == 6)
         #expect(decoded.project == project)
         #expect(decoded.summary == summary)
     }
@@ -94,6 +96,29 @@ struct ProjectCatalogComponentTests {
         #expect(snapshot.projects == [created])
         #expect(snapshot.summary(for: created.id) == .empty)
         #expect(FileManager.default.fileExists(atPath: created.directoryURL.appendingPathComponent("project.json").path))
+    }
+
+    @Test("project numbers remain stable after opening and deleting older projects")
+    func stableProjectNumbers() async throws {
+        let library = try TemporaryLibrary()
+        defer { library.remove() }
+        let ids = FixedIDProvider([
+            UUID(uuidString: "33333333-3333-3333-3333-333333333331")!,
+            UUID(uuidString: "33333333-3333-3333-3333-333333333332")!,
+            UUID(uuidString: "33333333-3333-3333-3333-333333333333")!,
+        ])
+        let catalog = ProjectCatalog(rootDirectory: library.url, idProvider: ids)
+
+        let first = try await catalog.createProject(module: .repeatable, name: "First")
+        let second = try await catalog.createProject(module: .repeatable, name: "Second")
+        _ = try await catalog.markOpened(first.id)
+        _ = try await catalog.deleteProject(first.id)
+        let third = try await catalog.createProject(module: .repeatable, name: "Third")
+
+        #expect(first.sequenceNumber == 1)
+        #expect(second.sequenceNumber == 2)
+        #expect(third.sequenceNumber == 3)
+        #expect(try await catalog.load().projects.map(\.sequenceNumber) == [3, 2])
     }
 
     @Test("updated summaries survive the derived index and manifest")
@@ -165,6 +190,59 @@ struct ProjectCatalogComponentTests {
         #expect(Set(rebuilt.projects.map(\.id)) == Set([repeatable.id, astro.id]))
         #expect(Set(rebuilt.projects.map(\.module)) == Set([.repeatable, .astrophotography]))
         #expect(rebuilt.source == .rebuilt)
+    }
+
+    @Test("legacy projects receive deterministic numbers in one idempotent migration")
+    func legacyNumberMigration() async throws {
+        let library = try TemporaryLibrary()
+        defer { library.remove() }
+        let moduleDirectory = library.url
+            .appendingPathComponent("Camerae Projects/repeatable", isDirectory: true)
+        let olderDirectory = moduleDirectory.appendingPathComponent("older", isDirectory: true)
+        let newerDirectory = moduleDirectory.appendingPathComponent("newer", isDirectory: true)
+        try FileManager.default.createDirectory(at: olderDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: newerDirectory, withIntermediateDirectories: true)
+        try legacyProjectJSON(
+            id: "44444444-4444-4444-4444-444444444441",
+            name: "Older",
+            createdAt: "2025-01-01T12:00:00Z"
+        ).write(to: olderDirectory.appendingPathComponent("project.json"), options: .atomic)
+        try legacyProjectJSON(
+            id: "44444444-4444-4444-4444-444444444442",
+            name: "Newer",
+            createdAt: "2025-01-02T12:00:00Z"
+        ).write(to: newerDirectory.appendingPathComponent("project.json"), options: .atomic)
+
+        let catalog = ProjectCatalog(rootDirectory: library.url)
+        let migrated = try await catalog.load()
+        let firstMigrationData = try Data(
+            contentsOf: olderDirectory.appendingPathComponent("project.json")
+        )
+        _ = try await catalog.rebuild()
+        let secondMigrationData = try Data(
+            contentsOf: olderDirectory.appendingPathComponent("project.json")
+        )
+
+        #expect(migrated.projects.map(\.sequenceNumber) == [2, 1])
+        #expect(firstMigrationData == secondMigrationData)
+        #expect(try ProjectManifestCodec().decode(firstMigrationData).schemaVersion == 6)
+    }
+
+    private func legacyProjectJSON(
+        id: String,
+        name: String,
+        createdAt: String
+    ) -> Data {
+        Data("""
+        {
+          "id": "\(id)",
+          "module": "repeatable",
+          "name": "\(name)",
+          "createdAt": "\(createdAt)",
+          "updatedAt": "\(createdAt)",
+          "isArchived": false
+        }
+        """.utf8)
     }
 }
 

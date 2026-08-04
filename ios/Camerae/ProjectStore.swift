@@ -50,7 +50,12 @@ struct CameraProject: Identifiable, Equatable, Hashable {
     let updatedAt: Date
     let lastOpenedAt: Date?
     let isArchived: Bool
+    let sequenceNumber: Int?
     let summary: ProjectSummary?
+
+    var shotNumberLabel: String {
+        sequenceNumber.map { "#\($0)" } ?? "#—"
+    }
 
     var referenceFrameURL: URL? {
         guard let key = summary?.referenceThumbnailKey else { return nil }
@@ -83,6 +88,7 @@ struct CameraProject: Identifiable, Equatable, Hashable {
         updatedAt = record.updatedAt
         lastOpenedAt = record.lastOpenedAt
         isArchived = record.isArchived
+        sequenceNumber = record.sequenceNumber
         self.summary = summary
     }
 
@@ -95,7 +101,8 @@ struct CameraProject: Identifiable, Equatable, Hashable {
             createdAt: createdAt,
             updatedAt: updatedAt,
             lastOpenedAt: lastOpenedAt,
-            isArchived: isArchived
+            isArchived: isArchived,
+            sequenceNumber: sequenceNumber
         )
     }
 }
@@ -337,9 +344,14 @@ final class ProjectStore: ObservableObject {
     }
 
     private func projectSort(_ left: CameraProject, _ right: CameraProject) -> Bool {
-        let leftDate = left.lastOpenedAt ?? left.updatedAt
-        let rightDate = right.lastOpenedAt ?? right.updatedAt
-        return leftDate == rightDate ? left.createdAt > right.createdAt : leftDate > rightDate
+        if let leftNumber = left.sequenceNumber,
+           let rightNumber = right.sequenceNumber,
+           leftNumber != rightNumber {
+            return leftNumber > rightNumber
+        }
+        return left.createdAt == right.createdAt
+            ? left.id.uuidString < right.id.uuidString
+            : left.createdAt > right.createdAt
     }
 
     private static let displayDateFormatter: DateFormatter = {

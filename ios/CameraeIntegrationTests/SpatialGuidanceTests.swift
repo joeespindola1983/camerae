@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import CameraeCore
 @testable import Camerae
 
 @Suite("Repeatable spatial guidance")
@@ -585,6 +586,53 @@ struct SpatialGuidanceTests {
         #expect(previous.keyframes == [Data("first-frame".utf8)])
     }
 
+    @Test("recent tripod reference selects the newest compatible project and imports a distinct copy")
+    func recentReferenceReuse() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeSpatialReuse-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let current = makeProject(name: "Current", directory: root.appendingPathComponent("current"))
+        let older = makeProject(name: "Older", directory: root.appendingPathComponent("older"))
+        let newest = makeProject(name: "Newest", directory: root.appendingPathComponent("newest"))
+        let incompatible = makeProject(name: "Other iPhone", directory: root.appendingPathComponent("other"))
+
+        try SpatialReferenceStore(projectDirectory: older.directoryURL).save(
+            manifest: makeManifest(id: UUID(), createdAt: Date(timeIntervalSince1970: 1)),
+            worldMapData: Data("older-map".utf8),
+            keyframes: [Data("older-frame".utf8)]
+        )
+        try SpatialReferenceStore(projectDirectory: newest.directoryURL).save(
+            manifest: makeManifest(id: UUID(), createdAt: Date(timeIntervalSince1970: 2)),
+            worldMapData: Data("newest-map".utf8),
+            keyframes: [Data("newest-frame".utf8)]
+        )
+        try SpatialReferenceStore(projectDirectory: incompatible.directoryURL).save(
+            manifest: makeManifest(
+                id: UUID(),
+                createdAt: Date(timeIntervalSince1970: 3),
+                deviceModelIdentifier: "Different-iPhone"
+            ),
+            worldMapData: Data("other-map".utf8),
+            keyframes: [Data("other-frame".utf8)]
+        )
+
+        let candidate = try #require(
+            SpatialReferenceReuseResolver.latest(
+                projects: [older, newest, incompatible, current],
+                excluding: current.id,
+                deviceModelIdentifier: "iPhone-Test"
+            )
+        )
+        let imported = try SpatialReferenceStore(projectDirectory: current.directoryURL)
+            .importReference(candidate.bundle, id: UUID(), createdAt: Date(timeIntervalSince1970: 4))
+
+        #expect(candidate.sourceProject.name == "Newest")
+        #expect(imported.manifest.id != candidate.bundle.manifest.id)
+        #expect(imported.manifest.createdAt == Date(timeIntervalSince1970: 4))
+        #expect(imported.worldMapData == Data("newest-map".utf8))
+        #expect(try SpatialReferenceStore(projectDirectory: current.directoryURL).load() == imported)
+    }
+
     @Test("current, legacy, empty, and unsupported-newer documents are explicit")
     func storeCompatibility() throws {
         let directory = FileManager.default.temporaryDirectory
@@ -658,12 +706,41 @@ struct SpatialGuidanceTests {
         )
     }
 
-    private func makeManifest(id: UUID, createdAt: Date) -> SpatialReferenceManifest {
+    @Test("tripod setup exposes recent-position reuse only when it can replace initial mapping")
+    func projectTabCapabilityContract() {
+        #expect(
+            SpatialGuidanceProjectCapabilityPolicy.actions(
+                availability: .available,
+                hasReference: false,
+                hasReusableReference: true
+            ) == [.createReference, .reuseRecentReference, .watchTutorial]
+        )
+        #expect(
+            SpatialGuidanceProjectCapabilityPolicy.actions(
+                availability: .available,
+                hasReference: true,
+                hasReusableReference: true
+            ) == [.navigateScene, .watchTutorial, .remapReference]
+        )
+        #expect(
+            SpatialGuidanceProjectCapabilityPolicy.actions(
+                availability: .hardwareUnavailable,
+                hasReference: false,
+                hasReusableReference: true
+            ) == [.continueWithoutGuide]
+        )
+    }
+
+    private func makeManifest(
+        id: UUID,
+        createdAt: Date,
+        deviceModelIdentifier: String = "iPhone-Test"
+    ) -> SpatialReferenceManifest {
         SpatialReferenceManifest(
             id: id,
             createdAt: createdAt,
             module: .repeatable,
-            deviceModelIdentifier: "iPhone-Test",
+            deviceModelIdentifier: deviceModelIdentifier,
             cameraLens: .wide,
             cameraZoomFactor: 1,
             orientation: .portrait,
@@ -680,6 +757,24 @@ struct SpatialGuidanceTests {
             targetPose: nil,
             worldMapFileName: "world_map.bin",
             keyframeFileNames: ["guide-0001.jpg"]
+        )
+    }
+
+
+    private func makeProject(name: String, directory: URL) -> CameraProject {
+        CameraProject(
+            record: ProjectRecord(
+                id: UUID(),
+                module: .repeatable,
+                name: name,
+                directoryURL: directory,
+                createdAt: .distantPast,
+                updatedAt: .distantPast,
+                lastOpenedAt: nil,
+                isArchived: false,
+                sequenceNumber: 1
+            ),
+            summary: nil
         )
     }
 }

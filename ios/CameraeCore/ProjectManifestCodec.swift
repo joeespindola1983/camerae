@@ -10,7 +10,7 @@ public struct ProjectManifestCodec: Sendable {
         let decoder = Self.decoder()
         let payload = try decoder.decode(Payload.self, from: data)
         let schemaVersion = payload.schemaVersion ?? CameraeSchema.legacyUnversioned
-        guard (CameraeSchema.legacyUnversioned...CameraeSchema.current).contains(schemaVersion) else {
+        guard (CameraeSchema.legacyUnversioned...CameraeSchema.currentProject).contains(schemaVersion) else {
             throw ManifestCompatibilityError.unsupportedProjectSchema(schemaVersion)
         }
         let project = ProjectRecord(
@@ -21,7 +21,8 @@ public struct ProjectManifestCodec: Sendable {
             createdAt: payload.createdAt,
             updatedAt: payload.updatedAt,
             lastOpenedAt: payload.lastOpenedAt,
-            isArchived: payload.isArchived ?? false
+            isArchived: payload.isArchived ?? false,
+            sequenceNumber: payload.sequenceNumber
         )
         return ProjectManifestDocument(
             project: project,
@@ -33,7 +34,7 @@ public struct ProjectManifestCodec: Sendable {
     public func encode(_ document: ProjectManifestDocument) throws -> Data {
         let project = document.project
         let payload = Payload(
-            schemaVersion: CameraeSchema.current,
+            schemaVersion: CameraeSchema.currentProject,
             id: project.id,
             module: project.module,
             name: project.name,
@@ -41,6 +42,7 @@ public struct ProjectManifestCodec: Sendable {
             updatedAt: project.updatedAt,
             lastOpenedAt: project.lastOpenedAt,
             isArchived: project.isArchived,
+            sequenceNumber: project.sequenceNumber,
             summary: document.summary
         )
         return try Self.encoder().encode(payload)
@@ -68,6 +70,7 @@ public struct ProjectManifestCodec: Sendable {
         let updatedAt: Date
         let lastOpenedAt: Date?
         let isArchived: Bool?
+        let sequenceNumber: Int?
         let summary: ProjectSummary?
     }
 }

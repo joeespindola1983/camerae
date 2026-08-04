@@ -112,6 +112,7 @@ struct SpatialGuidanceConfigurationCard: View {
 
 struct SpatialGuidanceProjectTab: View {
     let project: CameraProject
+    let projects: [CameraProject]
     let availability: SpatialGuidanceAvailability
     let onReferenceChanged: (Bool) -> Void
     let onContinueWithoutGuide: () -> Void
@@ -120,6 +121,8 @@ struct SpatialGuidanceProjectTab: View {
     @State private var mode: SpatialGuidanceFlowMode?
     @State private var showsTutorial = false
     @State private var tutorialContinuation: SpatialGuidanceFlowMode?
+    @State private var reuseCandidate: SpatialReferenceReuseCandidate?
+    @State private var errorMessage: String?
 
     private let store: SpatialReferenceStore
     private let tutorialProgressStore: CameraeTutorialProgressStore
@@ -128,11 +131,13 @@ struct SpatialGuidanceProjectTab: View {
 
     init(
         project: CameraProject,
+        projects: [CameraProject] = [],
         availability: SpatialGuidanceAvailability,
         onReferenceChanged: @escaping (Bool) -> Void = { _ in },
         onContinueWithoutGuide: @escaping () -> Void = {}
     ) {
         self.project = project
+        self.projects = projects
         self.availability = availability
         self.onReferenceChanged = onReferenceChanged
         self.onContinueWithoutGuide = onContinueWithoutGuide
@@ -145,6 +150,11 @@ struct SpatialGuidanceProjectTab: View {
         tutorialProgressStore = CameraeTutorialProgressStore()
         configuration = profile?.selectedConfiguration ?? .repeatableDefault
         _reference = State(initialValue: try? store.load())
+        _reuseCandidate = State(initialValue: SpatialReferenceReuseResolver.latest(
+            projects: projects,
+            excluding: project.id,
+            deviceModelIdentifier: SpatialGuidanceSessionModel.deviceModelIdentifier
+        ))
     }
 
     var body: some View {
@@ -188,6 +198,11 @@ struct SpatialGuidanceProjectTab: View {
         .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             onReferenceChanged(reference != nil)
+            reuseCandidate = SpatialReferenceReuseResolver.latest(
+                projects: projects,
+                excluding: project.id,
+                deviceModelIdentifier: SpatialGuidanceSessionModel.deviceModelIdentifier
+            )
         }
         .fullScreenCover(item: $mode) { activeMode in
             SpatialGuidanceFlowView(
@@ -215,6 +230,14 @@ struct SpatialGuidanceProjectTab: View {
                 onContinue: continueFromTutorial,
                 onClose: { showsTutorial = false }
             )
+        }
+        .alert("Não foi possível reutilizar a posição", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
@@ -247,6 +270,32 @@ struct SpatialGuidanceProjectTab: View {
                         style: reference == nil ? .primary : .secondary,
                         action: openGuide
                     )
+                    if reference == nil, let reuseCandidate {
+                        Text("POSIÇÃO RECENTE · \(reuseCandidate.sourceProject.shotNumberLabel)")
+                            .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                            .tracking(0.8)
+                            .foregroundStyle(theme.accent)
+                        Text(
+                            reuseCandidate.sourceProject.name + " · "
+                            + reuseCandidate.bundle.manifest.createdAt.formatted(
+                                date: .abbreviated,
+                                time: .shortened
+                            )
+                        )
+                            .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                            .foregroundStyle(theme.muted)
+                            .lineLimit(1)
+                        Text("A posição do tripé será copiada. A câmera e o enquadramento continuam sendo os deste projeto.")
+                            .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                            .foregroundStyle(theme.muted)
+                        CameraeNextActionButton(
+                            title: "Reutilizar posição recente",
+                            systemImage: "arrow.clockwise",
+                            theme: theme,
+                            style: .secondary,
+                            action: reuseRecentReference
+                        )
+                    }
                     CameraeNextActionButton(
                         title: "Assistir tutorial",
                         systemImage: "play.rectangle",
@@ -309,6 +358,22 @@ struct SpatialGuidanceProjectTab: View {
         self.tutorialContinuation = nil
         DispatchQueue.main.async {
             mode = tutorialContinuation
+        }
+    }
+
+    private func reuseRecentReference() {
+        guard let reuseCandidate else { return }
+        do {
+            let imported = try store.importReference(
+                reuseCandidate.bundle,
+                cameraLens: configuration.cameraLens,
+                cameraZoomFactor: configuration.cameraZoomFactor
+            )
+            reference = imported
+            onReferenceChanged(true)
+            mode = .relocalize(imported)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 }

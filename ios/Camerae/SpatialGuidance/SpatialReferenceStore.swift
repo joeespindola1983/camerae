@@ -6,6 +6,40 @@ struct SpatialReferenceBundle: Equatable, Sendable {
     let keyframes: [Data]
 }
 
+struct SpatialReferenceReuseCandidate: Equatable {
+    let sourceProject: CameraProject
+    let bundle: SpatialReferenceBundle
+}
+
+enum SpatialReferenceReuseResolver {
+    static func latest(
+        projects: [CameraProject],
+        excluding projectID: UUID,
+        deviceModelIdentifier: String
+    ) -> SpatialReferenceReuseCandidate? {
+        let compatible = projects
+            .filter { $0.id != projectID && $0.module == .repeatable }
+            .compactMap { project -> (CameraProject, SpatialReferenceManifest)? in
+                guard let manifest = try? SpatialReferenceStore(
+                    projectDirectory: project.directoryURL
+                ).loadManifest(),
+                manifest.deviceModelIdentifier == deviceModelIdentifier else {
+                    return nil
+                }
+                return (project, manifest)
+            }
+            .sorted { $0.1.createdAt > $1.1.createdAt }
+        for candidate in compatible {
+            if let bundle = try? SpatialReferenceStore(
+                projectDirectory: candidate.0.directoryURL
+            ).load() {
+                return .init(sourceProject: candidate.0, bundle: bundle)
+            }
+        }
+        return nil
+    }
+}
+
 enum SpatialReferenceStoreError: Error, Equatable {
     case unsupportedSchema(Int)
     case missingWorldMap
@@ -31,6 +65,10 @@ struct SpatialReferenceStore {
 
     func load() throws -> SpatialReferenceBundle? {
         try loadBundle(at: referenceDirectory)
+    }
+
+    func loadManifest() throws -> SpatialReferenceManifest? {
+        try loadManifest(at: referenceDirectory)
     }
 
     func loadPrevious() throws -> SpatialReferenceBundle? {
@@ -103,6 +141,32 @@ struct SpatialReferenceStore {
         }
     }
 
+    @discardableResult
+    func importReference(
+        _ bundle: SpatialReferenceBundle,
+        id: UUID = UUID(),
+        createdAt: Date = Date(),
+        cameraLens: RepeatableCameraLens? = nil,
+        cameraZoomFactor: Double? = nil
+    ) throws -> SpatialReferenceBundle {
+        let imported = SpatialReferenceBundle(
+            manifest: bundle.manifest.reusedCopy(
+                id: id,
+                createdAt: createdAt,
+                cameraLens: cameraLens,
+                cameraZoomFactor: cameraZoomFactor
+            ),
+            worldMapData: bundle.worldMapData,
+            keyframes: bundle.keyframes
+        )
+        try save(
+            manifest: imported.manifest,
+            worldMapData: imported.worldMapData,
+            keyframes: imported.keyframes
+        )
+        return imported
+    }
+
     func removeCurrentReference() throws {
         guard fileManager.fileExists(atPath: referenceDirectory.path) else { return }
         try fileManager.removeItem(at: referenceDirectory)
@@ -152,6 +216,27 @@ struct SpatialReferenceStore {
     }
 
     private func loadBundle(at directory: URL) throws -> SpatialReferenceBundle? {
+        guard let manifest = try loadManifest(at: directory) else { return nil }
+        let worldMapURL = directory.appendingPathComponent(manifest.worldMapFileName)
+        guard fileManager.fileExists(atPath: worldMapURL.path) else {
+            throw SpatialReferenceStoreError.missingWorldMap
+        }
+        let keyframesDirectory = directory.appendingPathComponent("keyframes", isDirectory: true)
+        let keyframes = try manifest.keyframeFileNames.map { name -> Data in
+            let url = keyframesDirectory.appendingPathComponent(name)
+            guard fileManager.fileExists(atPath: url.path) else {
+                throw SpatialReferenceStoreError.missingKeyframe(name)
+            }
+            return try Data(contentsOf: url)
+        }
+        return SpatialReferenceBundle(
+            manifest: manifest,
+            worldMapData: try Data(contentsOf: worldMapURL),
+            keyframes: keyframes
+        )
+    }
+
+    private func loadManifest(at directory: URL) throws -> SpatialReferenceManifest? {
         guard fileManager.fileExists(atPath: directory.path) else { return nil }
         let manifestURL = directory.appendingPathComponent("manifest.json")
         guard fileManager.fileExists(atPath: manifestURL.path) else {
@@ -172,29 +257,11 @@ struct SpatialReferenceStore {
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let manifest: SpatialReferenceManifest
         do {
-            manifest = try decoder.decode(SpatialReferenceManifest.self, from: manifestData)
+            return try decoder.decode(SpatialReferenceManifest.self, from: manifestData)
         } catch {
             throw SpatialReferenceStoreError.invalidManifest
         }
-        let worldMapURL = directory.appendingPathComponent(manifest.worldMapFileName)
-        guard fileManager.fileExists(atPath: worldMapURL.path) else {
-            throw SpatialReferenceStoreError.missingWorldMap
-        }
-        let keyframesDirectory = directory.appendingPathComponent("keyframes", isDirectory: true)
-        let keyframes = try manifest.keyframeFileNames.map { name -> Data in
-            let url = keyframesDirectory.appendingPathComponent(name)
-            guard fileManager.fileExists(atPath: url.path) else {
-                throw SpatialReferenceStoreError.missingKeyframe(name)
-            }
-            return try Data(contentsOf: url)
-        }
-        return SpatialReferenceBundle(
-            manifest: manifest,
-            worldMapData: try Data(contentsOf: worldMapURL),
-            keyframes: keyframes
-        )
     }
 }
 

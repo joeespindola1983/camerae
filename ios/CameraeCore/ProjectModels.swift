@@ -20,6 +20,7 @@ public struct ProjectRecord: Identifiable, Codable, Equatable, Hashable, Sendabl
     public let updatedAt: Date
     public let lastOpenedAt: Date?
     public let isArchived: Bool
+    public let sequenceNumber: Int?
 
     public init(
         id: UUID,
@@ -29,7 +30,8 @@ public struct ProjectRecord: Identifiable, Codable, Equatable, Hashable, Sendabl
         createdAt: Date,
         updatedAt: Date,
         lastOpenedAt: Date?,
-        isArchived: Bool
+        isArchived: Bool,
+        sequenceNumber: Int? = nil
     ) {
         self.id = id
         self.module = module
@@ -39,6 +41,7 @@ public struct ProjectRecord: Identifiable, Codable, Equatable, Hashable, Sendabl
         self.updatedAt = updatedAt
         self.lastOpenedAt = lastOpenedAt
         self.isArchived = isArchived
+        self.sequenceNumber = sequenceNumber
     }
 }
 
@@ -85,7 +88,11 @@ public struct ProjectManifestDocument: Equatable, Sendable {
     public let project: ProjectRecord
     public let summary: ProjectSummary?
 
-    public init(project: ProjectRecord, summary: ProjectSummary?, schemaVersion: Int = 3) {
+    public init(
+        project: ProjectRecord,
+        summary: ProjectSummary?,
+        schemaVersion: Int = CameraeSchema.currentProject
+    ) {
         self.schemaVersion = schemaVersion
         self.project = project
         self.summary = summary

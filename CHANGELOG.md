@@ -23,11 +23,18 @@ test distributions do not require an entry here.
 
 - Added an in-preview physical-camera selector to the Repeatable alignment live
   view so available lenses can be compared before capture.
+- Added persistent shot numbers to project thumbnails so each timelapse keeps a
+  memorable identity independent of when it was last opened.
+- Added an explicit option to reuse the newest compatible tripod position from
+  another Repeatable project, with source identification and relocalization
+  before use.
 
 ### Changed
 
 - Repeatable project hardware now becomes immutable only after the first photo,
   frame, or clip is actually recorded; empty attempts keep lens selection open.
+- Project catalogs now default to stable creation/shot order instead of moving
+  the most recently opened project to the top.
 
 ### Fixed
 

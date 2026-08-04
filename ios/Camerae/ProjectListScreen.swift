@@ -15,7 +15,7 @@ struct ProjectListScreen: View {
     @Binding var path: NavigationPath
 
     @State private var filter = CameraeNextProjectCatalogFilter.recent
-    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
+    @State private var sort = CameraeNextProjectCatalogSort.createdNewest
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var errorMessage: String?
@@ -632,6 +632,18 @@ private struct ProjectListImageHeader<Accessory: View>: View {
                 .padding(.bottom, 12)
         }
         .frame(height: height)
+        .overlay(alignment: .topLeading) {
+            Text(project.shotNumberLabel)
+                .font(.custom("DMMono-Regular", size: 18, relativeTo: .headline).weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 11)
+                .frame(height: 34)
+                .background(.black.opacity(0.72), in: Capsule())
+                .padding(12)
+                .accessibilityLabel(
+                    project.sequenceNumber.map { "Tomada \($0)" } ?? "Tomada sem número"
+                )
+        }
         .overlay(alignment: .topTrailing) {
             accessory()
         }

@@ -8,4 +8,5 @@ public enum ManifestCompatibilityError: Error, Equatable, Sendable {
 public enum CameraeSchema {
     public static let legacyUnversioned = 2
     public static let current = 5
+    public static let currentProject = 6
 }

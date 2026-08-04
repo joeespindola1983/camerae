@@ -276,6 +276,7 @@ struct CameraeNextProjectRuntimeView: View {
                     case .tripod:
                         SpatialGuidanceProjectTab(
                             project: project,
+                            projects: projectStore.projects,
                             availability: spatialGuidanceAvailability,
                             onReferenceChanged: { hasReference in
                                 hasSpatialReference = hasReference
