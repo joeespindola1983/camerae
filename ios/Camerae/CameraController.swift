@@ -226,6 +226,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     nonisolated(unsafe) private var lastVisualAlignmentAnalysis = Date.distantPast
     nonisolated(unsafe) private var isAnalyzingVisualAlignment = false
     nonisolated(unsafe) private var isVisualFineAdjustmentActive = false
+    nonisolated(unsafe) private var alignmentDiagnosticSessionID: String?
+    nonisolated(unsafe) private var alignmentDiagnosticFrameCount: UInt64 = 0
+    nonisolated(unsafe) private var alignmentVisionFailureCount: UInt64 = 0
     nonisolated(unsafe) private var isSequenceFocusLocked = false
     nonisolated(unsafe) private var configured = false
     nonisolated(unsafe) private var isConfiguring = false
@@ -473,6 +476,44 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    func beginAlignmentDiagnostics(sessionID: String) {
+        visualAlignmentQueue.async {
+            self.alignmentDiagnosticSessionID = sessionID
+            self.alignmentDiagnosticFrameCount = 0
+            self.alignmentVisionFailureCount = 0
+            CameraeLiveAlignmentDiagnostics.event(
+                .screenEntered,
+                sessionID: sessionID,
+                "visionEnabled=\(self.cameraeVisionCoordinator.isEnabled)"
+            )
+        }
+    }
+
+    func endAlignmentDiagnostics() {
+        visualAlignmentQueue.async {
+            guard let sessionID = self.alignmentDiagnosticSessionID else { return }
+            let diagnostics = self.cameraeVisionCoordinator.diagnostics
+            CameraeLiveAlignmentDiagnostics.event(
+                .screenExited,
+                sessionID: sessionID,
+                "frames=\(self.alignmentDiagnosticFrameCount) admitted=\(diagnostics.admitted) analyzed=\(diagnostics.analyzed) failed=\(diagnostics.failed) replaced=\(diagnostics.replaced) stale=\(diagnostics.stale) backlog=\(diagnostics.maximumBacklog)"
+            )
+            self.alignmentDiagnosticSessionID = nil
+        }
+    }
+
+    func recordAlignmentMemoryWarning() {
+        visualAlignmentQueue.async {
+            guard let sessionID = self.alignmentDiagnosticSessionID else { return }
+            let diagnostics = self.cameraeVisionCoordinator.diagnostics
+            CameraeLiveAlignmentDiagnostics.error(
+                .memoryWarning,
+                sessionID: sessionID,
+                "frames=\(self.alignmentDiagnosticFrameCount) analyzed=\(diagnostics.analyzed) failed=\(diagnostics.failed) backlog=\(diagnostics.maximumBacklog) thermal=\(ProcessInfo.processInfo.thermalState.rawValue) lowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled)"
+            )
+        }
+    }
+
     func toggleTimelapse(interval: Double, plan: CapturePlan) async {
         if isTimelapseRunning {
             stopTimelapse()
@@ -702,6 +743,13 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     func setVisualReference(_ url: URL?) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             visualAlignmentQueue.async {
+                if let sessionID = self.alignmentDiagnosticSessionID {
+                    CameraeLiveAlignmentDiagnostics.event(
+                        .referenceLoading,
+                        sessionID: sessionID,
+                        "hasURL=\(url != nil)"
+                    )
+                }
                 guard let url,
                       let image = UIImage(contentsOfFile: url.path),
                       let cgImage = image.normalizedReferenceCGImage() else {
@@ -710,20 +758,36 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     Task { @MainActor in
                         self.visualAlignment = nil
                     }
+                    if let sessionID = self.alignmentDiagnosticSessionID {
+                        CameraeLiveAlignmentDiagnostics.error(
+                            .referenceUnavailable,
+                            sessionID: sessionID,
+                            "decodeOrNormalizationFailed=true"
+                        )
+                    }
                     continuation.resume()
                     return
                 }
 
                 self.referenceCGImage = cgImage
+                var backendReferenceReady = false
                 if self.cameraeVisionCoordinator.isEnabled,
                    let referenceBuffer = try? CameraeVisionPixelBufferFactory.makeBGRA(from: cgImage) {
                     self.cameraeVisionCoordinator.updateReference(referenceBuffer, orientation: .up)
+                    backendReferenceReady = true
                 } else if self.cameraeVisionCoordinator.isEnabled {
                     self.cameraeVisionCoordinator.updateReference(nil, orientation: .up)
                 }
                 self.lastVisualAlignmentAnalysis = .distantPast
                 Task { @MainActor in
                     self.visualAlignment = nil
+                }
+                if let sessionID = self.alignmentDiagnosticSessionID {
+                    CameraeLiveAlignmentDiagnostics.event(
+                        .referenceReady,
+                        sessionID: sessionID,
+                        "pixels=\(cgImage.width)x\(cgImage.height) backendReady=\(backendReferenceReady)"
+                    )
                 }
                 continuation.resume()
             }
@@ -974,6 +1038,23 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     nonisolated private func analyzeVisualAlignmentIfNeeded(sampleBuffer: CMSampleBuffer) {
+        alignmentDiagnosticFrameCount &+= 1
+        if let sessionID = alignmentDiagnosticSessionID,
+           alignmentDiagnosticFrameCount == 1 || alignmentDiagnosticFrameCount.isMultiple(of: 120) {
+            let diagnostics = cameraeVisionCoordinator.diagnostics
+            let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer)
+            let width = pixelBuffer.map(CVPixelBufferGetWidth) ?? 0
+            let height = pixelBuffer.map(CVPixelBufferGetHeight) ?? 0
+            let pixelFormat = pixelBuffer.map(CVPixelBufferGetPixelFormatType) ?? 0
+            let event: CameraeAlignmentDiagnosticEvent = alignmentDiagnosticFrameCount == 1
+                ? .firstFrame
+                : .visionCheckpoint
+            CameraeLiveAlignmentDiagnostics.event(
+                event,
+                sessionID: sessionID,
+                "frame=\(alignmentDiagnosticFrameCount) pixels=\(width)x\(height) format=0x\(String(pixelFormat, radix: 16)) valid=\(CMSampleBufferIsValid(sampleBuffer)) ready=\(CMSampleBufferDataIsReady(sampleBuffer)) analyzed=\(diagnostics.analyzed) failed=\(diagnostics.failed) replaced=\(diagnostics.replaced) backlog=\(diagnostics.maximumBacklog)"
+            )
+        }
         if cameraeVisionCoordinator.isEnabled,
            let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
             cameraeVisionCoordinator.submit(
@@ -1003,6 +1084,15 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             }
         } catch {
             isVisualFineAdjustmentActive = false
+            alignmentVisionFailureCount &+= 1
+            if let sessionID = alignmentDiagnosticSessionID,
+               alignmentVisionFailureCount == 1 || alignmentVisionFailureCount.isMultiple(of: 30) {
+                CameraeLiveAlignmentDiagnostics.error(
+                    .visionFailure,
+                    sessionID: sessionID,
+                    "count=\(alignmentVisionFailureCount) error=\(String(describing: error))"
+                )
+            }
             Task { @MainActor in
                 self.visualAlignment = VisualAlignmentEstimate(
                     scale: 1,

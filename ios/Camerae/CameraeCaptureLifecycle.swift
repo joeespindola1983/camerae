@@ -14,6 +14,42 @@ enum CameraeCaptureDiagnostics {
     }
 }
 
+struct CameraeAlignmentDiagnosticSession: Equatable, Sendable {
+    let id: String
+
+    init(id: String = String(UUID().uuidString.prefix(8))) {
+        self.id = id
+    }
+}
+
+enum CameraeLiveAlignmentDiagnostics {
+    private static let logger = Logger(
+        subsystem: "com.espindola.camerae",
+        category: "CameraeAlignment"
+    )
+
+    nonisolated static func event(
+        _ event: CameraeAlignmentDiagnosticEvent,
+        sessionID: String,
+        _ detail: String = ""
+    ) {
+        let suffix = detail.isEmpty ? "" : " | \(detail)"
+        logger.notice(
+            "[CameraeAlignment] session=\(sessionID, privacy: .public) | event=\(event.rawValue, privacy: .public)\(suffix, privacy: .public)"
+        )
+    }
+
+    nonisolated static func error(
+        _ event: CameraeAlignmentDiagnosticEvent,
+        sessionID: String,
+        _ detail: String
+    ) {
+        logger.error(
+            "[CameraeAlignment] session=\(sessionID, privacy: .public) | event=\(event.rawValue, privacy: .public) | \(detail, privacy: .public)"
+        )
+    }
+}
+
 enum CameraeCaptureLifecycleState: Equatable, Sendable {
     case idle
     case preparing

@@ -57,6 +57,20 @@ enum CameraeDiagnosticModule: String {
     }
 }
 
+enum CameraeAlignmentDiagnosticEvent: String, Sendable {
+    case screenEntered = "screen_entered"
+    case screenExited = "screen_exited"
+    case cameraReady = "camera_ready"
+    case referenceLoading = "reference_loading"
+    case referenceReady = "reference_ready"
+    case referenceUnavailable = "reference_unavailable"
+    case firstFrame = "first_frame"
+    case visionCheckpoint = "vision_checkpoint"
+    case visionFailure = "vision_failure"
+    case geometryChanged = "geometry_changed"
+    case memoryWarning = "memory_warning"
+}
+
 final class CameraeCrashReporter {
     static let shared = CameraeCrashReporter(backend: FirebaseCrashReportingBackend())
 
@@ -91,5 +105,16 @@ final class CameraeCrashReporter {
     func setCollectionEnabled(_ enabled: Bool) {
         isEnabled = enabled
         backend.setCollectionEnabled(enabled)
+    }
+
+    func recordAlignment(
+        event: CameraeAlignmentDiagnosticEvent,
+        sessionID: String,
+        state: String
+    ) {
+        guard isEnabled else { return }
+        backend.setValue(sessionID, forKey: "alignment_session")
+        backend.setValue(event.rawValue, forKey: "alignment_event")
+        backend.log("alignment.\(event.rawValue) | session=\(sessionID) | \(state)")
     }
 }

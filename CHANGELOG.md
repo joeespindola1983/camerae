@@ -21,6 +21,9 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added privacy-safe live-alignment diagnostics with a per-session identifier,
+  Xcode console milestones, throttled camera/Vision checkpoints, memory-pressure
+  context, and matching Crashlytics breadcrumbs when diagnostics consent is on.
 - Added automatic draggable tripod-center suggestions by triangulating the
   camera's viewing rays, validating nearby mesh geometry when available, and
   falling back to the mapped camera path when thin tripod parts are absent.
