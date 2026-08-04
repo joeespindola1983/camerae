@@ -21,12 +21,16 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added an in-preview physical-camera selector to the Repeatable alignment live
+  view so available lenses can be compared before capture.
 - Added automatic draggable tripod-center suggestions by triangulating the
   camera's viewing rays, validating nearby mesh geometry when available, and
   falling back to the mapped camera path when thin tripod parts are absent.
 
 ### Changed
 
+- Repeatable project hardware now becomes immutable only after the first photo,
+  frame, or clip is actually recorded; empty attempts keep lens selection open.
 - Spatial Guidance now hides the reconstructed wireframe after scene mapping
   so tripod definition and review focus only on the placement guides.
 - Simplified Spatial Guidance to show only the tripod's vertical axis instead
@@ -37,6 +41,8 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Empty timelapse attempts are now removed cleanly instead of leaving an unused
+  session behind.
 - Kept the Tripod tab visible during temporary thermal pressure, where it now
   explains that the iPhone must cool down and blocks only Spatial Guidance.
 - Kept a project's only recorded video eligible for alignment when photos or

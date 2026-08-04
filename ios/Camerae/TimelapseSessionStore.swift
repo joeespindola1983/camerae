@@ -982,6 +982,19 @@ final class TimelapseSessionStore {
         }
     }
 
+    @discardableResult
+    func discardSessionIfEmpty(_ session: TimelapseSession) throws -> Bool {
+        guard frameCount(in: session) == 0,
+              astroStackFrameURLs(in: session).isEmpty,
+              existingVideoURL(for: session) == nil,
+              existingVideoClipURL(for: session) == nil,
+              existingAlignedVideoURL(for: session) == nil else {
+            return false
+        }
+        try deleteSession(session)
+        return true
+    }
+
     func renderVideo(
         for session: TimelapseSession,
         settings: WorkflowVideoSettings = .repeatableDefault,

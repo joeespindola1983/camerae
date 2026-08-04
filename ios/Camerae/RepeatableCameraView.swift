@@ -15,6 +15,7 @@ struct RepeatableCameraView: View {
     private let explicitReferenceURL: URL?
     private let openedSession: TimelapseSession?
     private let usesNextInterface: Bool
+    private let projectCameraPolicy: CameraeNextProjectCameraPolicy
     @Binding private var videoSettings: WorkflowVideoSettings
 
     @State private var intervalSeconds = 5.0
@@ -82,6 +83,9 @@ struct RepeatableCameraView: View {
         self.explicitReferenceURL = referenceURL
         self.openedSession = openedSession
         self.usesNextInterface = nextConfiguration != nil
+        self.projectCameraPolicy = CameraeNextProjectCameraPolicy(
+            summaries: sessionStore.sessionSummaries()
+        )
         _videoSettings = videoSettings
         let referenceLens = nextConfiguration?.cameraLens
             ?? openedSession?.cameraLens
@@ -997,6 +1001,17 @@ struct RepeatableCameraView: View {
 
     private func alignmentBottomBar(for size: CGSize) -> some View {
         VStack(spacing: 12) {
+            if liveViewCapabilities.contains(.switchLens) {
+                RepeatableLiveLensSwitcher(
+                    lenses: camera.availableRepeatableLenses,
+                    selectedLens: camera.selectedRepeatableLens,
+                    captureLens: projectCameraPolicy.lockedLens,
+                    selectAction: { lens in
+                        Task { await selectLiveViewLens(lens) }
+                    }
+                )
+            }
+
             if usesNextInterface {
                 nextCapturePanel(for: size)
             } else if isTimelapseInfoVisible {
@@ -1424,7 +1439,25 @@ struct RepeatableCameraView: View {
 
     private var canStartCapture: Bool {
         guard let result = planning.result else { return false }
-        return CapturePreflightPresentation(storage: result.storage).canStart
+        return CapturePreflightPresentation(storage: result.storage).canStart &&
+            projectCameraPolicy.accepts(
+                lens: camera.selectedRepeatableLens,
+                zoomFactor: camera.selectedCameraZoomFactor
+            )
+    }
+
+    private var liveViewCapabilities: Set<RepeatableLiveViewCapability> {
+        RepeatableLiveViewCapabilityPolicy.actions(
+            isCaptureActive: isCaptureActive,
+            availableLensCount: camera.availableRepeatableLenses.count
+        )
+    }
+
+    private func selectLiveViewLens(_ lens: RepeatableCameraLens) async {
+        let zoomFactor = projectCameraPolicy.lockedLens == lens
+            ? projectCameraPolicy.lockedZoomFactor
+            : 1
+        await camera.selectRepeatableLens(lens, zoomFactor: zoomFactor)
     }
 
     private func refreshPreflight() async {
@@ -2061,6 +2094,66 @@ private extension CaptureDisplayOrientation {
         } else {
             self = .portrait
         }
+    }
+}
+
+private struct RepeatableLiveLensSwitcher: View {
+    let lenses: [RepeatableCameraLens]
+    let selectedLens: RepeatableCameraLens
+    let captureLens: RepeatableCameraLens?
+    let selectAction: (RepeatableCameraLens) -> Void
+
+    private var isPreviewingAnotherLens: Bool {
+        guard let captureLens else { return false }
+        return captureLens != selectedLens
+    }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            HStack(spacing: 8) {
+                ForEach(lenses) { lens in
+                    Button {
+                        selectAction(lens)
+                    } label: {
+                        Text(lens.shortTitle)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(selectedLens == lens ? Color.black : Color.white)
+                            .frame(minWidth: 44, minHeight: 36)
+                            .background(
+                                selectedLens == lens ? Color.white : Color.black.opacity(0.58),
+                                in: Capsule()
+                            )
+                            .overlay {
+                                Capsule()
+                                    .stroke(Color.white.opacity(selectedLens == lens ? 0 : 0.3), lineWidth: 1)
+                            }
+                            .overlay(alignment: .topTrailing) {
+                                if captureLens == lens {
+                                    Image(systemName: "lock.fill")
+                                        .font(.system(size: 7, weight: .bold))
+                                        .foregroundStyle(selectedLens == lens ? Color.black : Color.white)
+                                        .padding(4)
+                                }
+                            }
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Câmera \(lens.title), \(lens.shortTitle)")
+                    .accessibilityHint(captureLens == lens ? "Câmera definida para a captura" : "Usar no live view")
+                    .accessibilityAddTraits(selectedLens == lens ? .isSelected : [])
+                }
+            }
+
+            if isPreviewingAnotherLens, let captureLens {
+                Text("Somente visualização · capture com \(captureLens.shortTitle)")
+                    .font(.caption2.weight(.medium))
+                    .foregroundStyle(.white.opacity(0.82))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Câmeras do live view")
     }
 }
 

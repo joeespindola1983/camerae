@@ -635,7 +635,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
-    func selectRepeatableLens(_ lens: RepeatableCameraLens) async {
+    func selectRepeatableLens(
+        _ lens: RepeatableCameraLens,
+        zoomFactor: Double = 1
+    ) async {
         guard captureMode == .repeatable,
               availableRepeatableLenses.contains(lens),
               !isTimelapseRunning,
@@ -681,7 +684,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
                         self.session.addInput(newInput)
                         self.session.commitConfiguration()
-                        try Self.applyZoom(1, to: newDevice)
+                        try Self.applyZoom(zoomFactor, to: newDevice)
                         self.device = newDevice
                         _ = try self.prepareCapture(device: newDevice)
                         continuation.resume(returning: ())
@@ -692,7 +695,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             }
 
             selectedRepeatableLens = lens
-            selectedCameraZoomFactor = 1
+            selectedCameraZoomFactor = max(zoomFactor, 1)
             status = "Camera \(lens.shortTitle) selecionada"
         } catch {
             status = "Camera falhou: \(error.localizedDescription)"
@@ -1079,6 +1082,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             completedSession = currentSession
             status = "Timelapse concluido"
         } else {
+            discardCurrentSessionIfEmpty()
             status = "Timelapse parado"
         }
     }
@@ -1311,8 +1315,17 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 ? "Captura encerrada com segurança: espaço insuficiente"
                 : "Plano de captura concluído"
         } else {
+            discardCurrentSessionIfEmpty()
             status = "Plano encerrado sem frames"
         }
+    }
+
+    private func discardCurrentSessionIfEmpty() {
+        guard let currentSession,
+              (try? store.discardSessionIfEmpty(currentSession)) == true else {
+            return
+        }
+        self.currentSession = nil
     }
 
     private func shouldStopForStorage() async -> Bool {

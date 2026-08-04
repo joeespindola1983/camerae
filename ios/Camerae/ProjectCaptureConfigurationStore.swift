@@ -2,7 +2,7 @@ import CameraeCore
 import Foundation
 
 struct ProjectCaptureConfigurationStore {
-    private static let schemaVersion = 3
+    private static let schemaVersion = 4
     private let fileManager: FileManager
     private let fileURL: URL
 
@@ -24,7 +24,7 @@ struct ProjectCaptureConfigurationStore {
         guard (1...Self.schemaVersion).contains(envelope.schemaVersion) else {
             throw ProjectCaptureConfigurationError.unsupportedSchema(envelope.schemaVersion)
         }
-        if envelope.schemaVersion == Self.schemaVersion {
+        if envelope.schemaVersion >= 3 {
             return try Self.decoder.decode(
                 ProjectCaptureConfigurationDocument.self,
                 from: data
@@ -74,6 +74,7 @@ struct ProjectCaptureConfigurationStore {
         if var existing = try loadProfile(), existing.module == module {
             let storedVersion = try storedSchemaVersion()
             let original = existing
+            existing.confirmHardwareIfNeeded(from: summaries)
             existing.refreshVideoDefault(from: summaries)
             if storedVersion < Self.schemaVersion || existing != original {
                 try save(
@@ -91,7 +92,10 @@ struct ProjectCaptureConfigurationStore {
         ) else {
             return nil
         }
-        let profile = ProjectCaptureProfile(initialConfiguration: migrated)
+        let profile = ProjectCaptureProfile(
+            initialConfiguration: migrated,
+            isHardwareLocked: true
+        )
         try save(profile, origin: .migratedLegacy)
         return profile
     }
@@ -180,15 +184,20 @@ struct ProjectCapturePresets: Codable, Equatable, Hashable, Sendable {
 struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
     var module: CameraModule
     var hardware: ProjectCaptureHardware
+    private(set) var isHardwareLocked: Bool
     var selectedKind: RepeatableCaptureKind
     var presets: ProjectCapturePresets
 
-    init(initialConfiguration: CameraeNextCaptureConfiguration) {
+    init(
+        initialConfiguration: CameraeNextCaptureConfiguration,
+        isHardwareLocked: Bool = false
+    ) {
         module = initialConfiguration.module
         hardware = ProjectCaptureHardware(
             cameraLens: initialConfiguration.cameraLens,
             cameraZoomFactor: initialConfiguration.cameraZoomFactor
         )
+        self.isHardwareLocked = isHardwareLocked
         selectedKind = initialConfiguration.repeatableKind
         let photo = Self.defaultConfiguration(
             module: module,
@@ -221,11 +230,34 @@ struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
     mutating func updateDefaults(
         _ configuration: CameraeNextCaptureConfiguration
     ) -> CameraeNextCaptureConfiguration {
+        if !isHardwareLocked {
+            applyHardware(ProjectCaptureHardware(
+                cameraLens: configuration.cameraLens,
+                cameraZoomFactor: configuration.cameraZoomFactor
+            ))
+        }
         let kind = configuration.repeatableKind
         let value = normalized(configuration, for: kind)
         presets[kind] = value
         selectedKind = kind
         return value
+    }
+
+    mutating func confirmHardwareIfNeeded(from summaries: [TimelapseSessionSummary]) {
+        guard !isHardwareLocked,
+              let firstCapture = summaries
+                .filter({
+                    ($0.session.purpose == .capture || $0.session.cameraLens != nil) &&
+                        $0.containsCapturedMediaForMigration
+                })
+                .min(by: { $0.session.createdAt < $1.session.createdAt }) else {
+            return
+        }
+        applyHardware(ProjectCaptureHardware(
+            cameraLens: firstCapture.session.cameraLens ?? .wide,
+            cameraZoomFactor: firstCapture.session.cameraZoomFactor ?? 1
+        ))
+        isHardwareLocked = true
     }
 
     mutating func refreshVideoDefault(from summaries: [TimelapseSessionSummary]) {
@@ -259,6 +291,13 @@ struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
         return result
     }
 
+    private mutating func applyHardware(_ hardware: ProjectCaptureHardware) {
+        self.hardware = hardware
+        presets.photo = hardware.applying(to: presets.photo)
+        presets.timelapse = hardware.applying(to: presets.timelapse)
+        presets.video = hardware.applying(to: presets.video)
+    }
+
     private static func defaultConfiguration(
         module: CameraModule,
         kind: RepeatableCaptureKind,
@@ -269,6 +308,32 @@ struct ProjectCaptureProfile: Codable, Equatable, Hashable, Sendable {
             : CameraeNextCaptureConfiguration.repeatableDefault
         configuration.repeatableKind = kind
         return hardware.applying(to: configuration)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case module
+        case hardware
+        case isHardwareLocked
+        case selectedKind
+        case presets
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        module = try container.decode(CameraModule.self, forKey: .module)
+        hardware = try container.decode(ProjectCaptureHardware.self, forKey: .hardware)
+        isHardwareLocked = try container.decodeIfPresent(Bool.self, forKey: .isHardwareLocked) ?? false
+        selectedKind = try container.decode(RepeatableCaptureKind.self, forKey: .selectedKind)
+        presets = try container.decode(ProjectCapturePresets.self, forKey: .presets)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(module, forKey: .module)
+        try container.encode(hardware, forKey: .hardware)
+        try container.encode(isHardwareLocked, forKey: .isHardwareLocked)
+        try container.encode(selectedKind, forKey: .selectedKind)
+        try container.encode(presets, forKey: .presets)
     }
 }
 
