@@ -24,4 +24,103 @@ struct CameraeCaptureLifecycleTests {
         #expect(CameraeLocationAuthorizationPolicy.action(for: .denied) == .unavailable)
         #expect(CameraeLocationAuthorizationPolicy.action(for: .restricted) == .unavailable)
     }
+
+    @Test func focusPreflightWaitsForAutofocusAndBlocksAnUnsharpSettledFrame() {
+        let now = Date(timeIntervalSince1970: 100)
+        let adjusting = CameraFocusMeasurement(
+            sharpness: 0.01,
+            isAdjustingFocus: true,
+            capturedAt: now
+        )
+        let blurred = CameraFocusMeasurement(
+            sharpness: 0.01,
+            isAdjustingFocus: false,
+            capturedAt: now
+        )
+        let sharp = CameraFocusMeasurement(
+            sharpness: 0.12,
+            isAdjustingFocus: false,
+            capturedAt: now
+        )
+
+        #expect(CameraFocusPreflightPolicy.decision(measurement: adjusting, elapsed: 0.5, now: now) == .wait)
+        #expect(CameraFocusPreflightPolicy.decision(measurement: blurred, elapsed: 3, now: now) == .needsUserFocus)
+        #expect(CameraFocusPreflightPolicy.decision(measurement: sharp, elapsed: 0.5, now: now) == .ready)
+    }
+
+    @Test func focusSharpnessMetricSeparatesFlatAndDetailedLumaFrames() {
+        let flat = Array(repeating: UInt8(80), count: 64 * 64)
+        let detailed = (0..<(64 * 64)).map { index in
+            let x = index % 64
+            let y = index / 64
+            return UInt8(((x / 8) + (y / 8)).isMultiple(of: 2) ? 0 : 255)
+        }
+
+        let flatScore = CameraFocusSharpnessAnalyzer.score(
+            luma: flat,
+            width: 64,
+            height: 64,
+            bytesPerRow: 64
+        )
+        let detailedScore = CameraFocusSharpnessAnalyzer.score(
+            luma: detailed,
+            width: 64,
+            height: 64,
+            bytesPerRow: 64
+        )
+
+        #expect(flatScore == 0)
+        #expect(detailedScore > 0.1)
+
+        let detailedBGRA = detailed.flatMap { value in [value, value, value, UInt8(255)] }
+        let bgraScore = detailedBGRA.withUnsafeBufferPointer { buffer in
+            CameraFocusSharpnessAnalyzer.scoreBGRA(
+                pixels: buffer.baseAddress!,
+                width: 64,
+                height: 64,
+                bytesPerRow: 64 * 4
+            )
+        }
+        #expect(bgraScore > 0.1)
+    }
+
+    @Test func uncertainFocusKeepsEveryRecoveryActionReachable() {
+        #expect(
+            CameraFocusRecoveryCapabilityPolicy.actions(for: .needsUserFocus) ==
+                [.tapToFocus, .retryAutomaticFocus, .captureAnyway]
+        )
+        #expect(CameraFocusRecoveryCapabilityPolicy.actions(for: .checking) == [])
+        #expect(
+            RepeatableCaptureKind.captureOptions.allSatisfy {
+                CameraCaptureFocusRequirementPolicy.requiresPreflight(for: $0)
+            }
+        )
+    }
+
+    @Test func captureCountdownUsesCenterBeforeStartAndCornerWhileInformationIsHidden() {
+        let starting = CameraeCaptureCountdownPresentation(
+            startSeconds: 3,
+            isCaptureRunning: true,
+            isInformationVisible: false,
+            remainingLabel: "00:30"
+        )
+        let hiddenInformation = CameraeCaptureCountdownPresentation(
+            startSeconds: nil,
+            isCaptureRunning: true,
+            isInformationVisible: false,
+            remainingLabel: "00:27"
+        )
+        let visibleInformation = CameraeCaptureCountdownPresentation(
+            startSeconds: nil,
+            isCaptureRunning: true,
+            isInformationVisible: true,
+            remainingLabel: "00:27"
+        )
+
+        #expect(CameraeCaptureStartCountdown.seconds == [3, 2, 1])
+        #expect(starting.centeredStartSeconds == 3)
+        #expect(starting.cornerRemainingLabel == nil)
+        #expect(hiddenInformation.cornerRemainingLabel == "00:27")
+        #expect(visibleInformation.cornerRemainingLabel == nil)
+    }
 }

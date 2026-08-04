@@ -21,6 +21,12 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added a sharpness-aware focus check before every capture, with automatic
+  center focus, tap-to-focus recovery, and an explicit manual override when
+  the app cannot confirm focus in difficult light.
+- Added a clear three-second start countdown to photo, video, timelapse, and
+  Astro captures, plus a top-right remaining-time indicator whenever the
+  in-progress information panel is hidden.
 - Added automatic draggable tripod-center suggestions by triangulating the
   camera's viewing rays, validating nearby mesh geometry when available, and
   falling back to the mapped camera path when thin tripod parts are absent.

@@ -4,6 +4,19 @@ import UIKit
 
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    let onTapToFocus: ((CGPoint) -> Void)?
+
+    init(
+        session: AVCaptureSession,
+        onTapToFocus: ((CGPoint) -> Void)? = nil
+    ) {
+        self.session = session
+        self.onTapToFocus = onTapToFocus
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onTapToFocus: onTapToFocus)
+    }
 
     func makeUIView(context: Context) -> PreviewView {
         CameraeCaptureDiagnostics.event(
@@ -11,6 +24,13 @@ struct CameraPreview: UIViewRepresentable {
             "sessionRunning=\(session.isRunning) inputs=\(session.inputs.count) outputs=\(session.outputs.count)"
         )
         let view = PreviewView()
+        context.coordinator.previewView = view
+        view.addGestureRecognizer(
+            UITapGestureRecognizer(
+                target: context.coordinator,
+                action: #selector(Coordinator.handleFocusTap(_:))
+            )
+        )
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
         CameraeCaptureDiagnostics.event(
@@ -26,6 +46,24 @@ struct CameraPreview: UIViewRepresentable {
         }
         uiView.previewLayer.session = session
         uiView.updatePreviewOrientation()
+        context.coordinator.onTapToFocus = onTapToFocus
+    }
+
+    final class Coordinator: NSObject {
+        var onTapToFocus: ((CGPoint) -> Void)?
+        weak var previewView: PreviewView?
+
+        init(onTapToFocus: ((CGPoint) -> Void)?) {
+            self.onTapToFocus = onTapToFocus
+        }
+
+        @objc func handleFocusTap(_ recognizer: UITapGestureRecognizer) {
+            guard let previewView, let onTapToFocus else { return }
+            let layerPoint = recognizer.location(in: previewView)
+            onTapToFocus(
+                previewView.previewLayer.captureDevicePointConverted(fromLayerPoint: layerPoint)
+            )
+        }
     }
 }
 

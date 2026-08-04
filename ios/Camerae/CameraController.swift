@@ -176,6 +176,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     @Published private(set) var stackProgressLabel = "-"
     @Published private(set) var lastCapturedExposureLabel = "-"
     @Published private(set) var countdownLabel = "-"
+    @Published private(set) var countdownSecondsRemaining: Int?
+    @Published private(set) var isCaptureStarting = false
+    @Published private(set) var focusPreflightState = CameraFocusPreflightState.idle
     @Published private(set) var astroBatchProgressLabel = "-"
     @Published private(set) var astroExposurePhaseLabel = "-"
     @Published private(set) var astroStackingStartFrame: Int?
@@ -224,6 +227,9 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private var pendingReferenceOrientation: CaptureDisplayOrientation?
     nonisolated(unsafe) private var referenceCGImage: CGImage?
     nonisolated(unsafe) private var lastVisualAlignmentAnalysis = Date.distantPast
+    nonisolated(unsafe) private var lastFocusAnalysis = Date.distantPast
+    nonisolated(unsafe) private var latestFocusMeasurement: CameraFocusMeasurement?
+    nonisolated(unsafe) private var isFocusAnalysisRequested = false
     nonisolated(unsafe) private var isAnalyzingVisualAlignment = false
     nonisolated(unsafe) private var isVisualFineAdjustmentActive = false
     nonisolated(unsafe) private var isSequenceFocusLocked = false
@@ -462,6 +468,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         locationManager.stopUpdatingLocation()
         locationManager.stopUpdatingHeading()
         cameraeVisionCoordinator.pause(.lifecycle)
+        countdownSecondsRemaining = nil
+        isCaptureStarting = false
+        focusPreflightState = .idle
+        isFocusAnalysisRequested = false
         CameraeCaptureDiagnostics.event("C80 controller.stop.requested")
 
         captureQueue.async { [session] in
@@ -477,6 +487,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         if isTimelapseRunning {
             stopTimelapse()
         } else {
+            guard consumeConfirmedFocus() else { return }
             await startTimelapse(interval: interval, plan: plan)
         }
     }
@@ -491,6 +502,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         if isTimelapseRunning {
             stopTimelapse()
         } else {
+            guard consumeConfirmedFocus() else { return }
             await startAstroBatchCapture(
                 timelapseInterval: timelapseInterval,
                 astroInterval: astroInterval,
@@ -509,6 +521,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         if isTimelapseRunning {
             stopTimelapse()
         } else {
+            guard consumeConfirmedFocus() else { return }
             await startAstroPhotoStack(
                 stackCount: stackCount,
                 usesAutomaticExposure: usesAutomaticExposure,
@@ -519,8 +532,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
     func captureSinglePhoto(plan: CapturePlan) async {
         guard !isTimelapseRunning, !isSinglePhotoCaptureRunning else { return }
+        guard consumeConfirmedFocus() else { return }
         isSinglePhotoCaptureRunning = true
-        defer { isSinglePhotoCaptureRunning = false }
+        defer {
+            isSinglePhotoCaptureRunning = false
+            unlockFocusAfterCaptureSequence()
+        }
 
         do {
             currentSession = try store.createSession(
@@ -543,13 +560,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             lastExportURLs = []
             status = "Estabilizando tripe"
 
-            for second in stride(from: 3, through: 1, by: -1) {
-                countdownLabel = "\(second)s"
-                status = "Foto em \(second)s"
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-            }
-
-            countdownLabel = "-"
+            guard await performStartCountdown(statusPrefix: "Foto em") else { return }
+            await lockFocusForCaptureSequence()
             try await captureAndSaveFrame()
             completedSession = currentSession
             status = "Foto salva"
@@ -563,12 +575,106 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         if isVideoRecording {
             stopVideoRecording()
         } else {
+            guard consumeConfirmedFocus() else { return }
             await startVideoRecording(plan: plan, settings: settings)
         }
     }
 
     func setPendingReferenceOrientation(_ orientation: CaptureDisplayOrientation) {
         pendingReferenceOrientation = orientation
+    }
+
+    func prepareFocusForCapture(
+        at point: CGPoint? = nil,
+        videoPlan: CapturePlan? = nil,
+        videoSettings: WorkflowVideoSettings? = nil
+    ) async -> Bool {
+        guard lifecycleState == .running else { return false }
+        if let videoPlan, let videoSettings {
+            do {
+                activeRecordedVideoContract = try await configureVideoRecording(
+                    plan: videoPlan,
+                    settings: videoSettings
+                )
+            } catch {
+                status = "Não foi possível preparar o vídeo: \(error.localizedDescription)"
+                return false
+            }
+        }
+        focusPreflightState = .checking
+        status = "Verificando foco"
+        latestFocusMeasurement = nil
+        isFocusAnalysisRequested = true
+        await requestAutoFocus(at: point ?? CGPoint(x: 0.5, y: 0.5))
+
+        let startedAt = Date()
+        var sharpMeasurementCount = 0
+        var lastSharpMeasurementAt: Date?
+        while !Task.isCancelled {
+            let now = Date()
+            switch CameraFocusPreflightPolicy.decision(
+                measurement: latestFocusMeasurement,
+                elapsed: now.timeIntervalSince(startedAt),
+                now: now
+            ) {
+            case .wait:
+                if latestFocusMeasurement?.isAdjustingFocus == true
+                    || (latestFocusMeasurement?.sharpness ?? 0) < CameraFocusPreflightPolicy.minimumSharpness {
+                    sharpMeasurementCount = 0
+                    lastSharpMeasurementAt = nil
+                }
+                try? await Task.sleep(for: .milliseconds(100))
+            case .ready:
+                if latestFocusMeasurement?.capturedAt != lastSharpMeasurementAt {
+                    sharpMeasurementCount += 1
+                    lastSharpMeasurementAt = latestFocusMeasurement?.capturedAt
+                }
+                guard sharpMeasurementCount >= 3 else {
+                    try? await Task.sleep(for: .milliseconds(100))
+                    continue
+                }
+                isFocusAnalysisRequested = false
+                focusPreflightState = .ready
+                status = "Foco confirmado"
+                CameraeCaptureDiagnostics.event(
+                    "C22 focus.ready",
+                    "sharpness=\(latestFocusMeasurement?.sharpness ?? 0)"
+                )
+                return true
+            case .needsUserFocus:
+                isFocusAnalysisRequested = false
+                focusPreflightState = .needsUserFocus
+                status = "Não foi possível confirmar o foco"
+                CameraeCaptureDiagnostics.error(
+                    "C98 focus.unconfirmed",
+                    "sharpness=\(latestFocusMeasurement?.sharpness ?? 0)"
+                )
+                return false
+            }
+        }
+        focusPreflightState = .idle
+        isFocusAnalysisRequested = false
+        return false
+    }
+
+    func acceptUnverifiedFocus() {
+        isFocusAnalysisRequested = false
+        focusPreflightState = .ready
+        status = "Foco mantido pelo usuário"
+    }
+
+    func resetFocusPreflight() {
+        isFocusAnalysisRequested = false
+        focusPreflightState = .idle
+    }
+
+    private func consumeConfirmedFocus() -> Bool {
+        guard focusPreflightState == .ready else {
+            status = "Confirme o foco antes de capturar"
+            return false
+        }
+        focusPreflightState = .idle
+        return true
     }
 
     func setCaptureSourceFormat(_ format: CaptureSourceFormat) {
@@ -970,7 +1076,44 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         from connection: AVCaptureConnection
     ) {
         guard output === videoDataOutput else { return }
+        analyzeFocusIfNeeded(sampleBuffer: sampleBuffer)
         analyzeVisualAlignmentIfNeeded(sampleBuffer: sampleBuffer)
+    }
+
+    nonisolated private func analyzeFocusIfNeeded(sampleBuffer: CMSampleBuffer) {
+        let now = Date()
+        guard isFocusAnalysisRequested,
+              now.timeIntervalSince(lastFocusAnalysis) >= 0.15,
+              let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+            return
+        }
+        lastFocusAnalysis = now
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
+        let score: Double
+        if CVPixelBufferGetPlaneCount(pixelBuffer) > 0,
+           let baseAddress = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) {
+            score = CameraFocusSharpnessAnalyzer.score(
+                luma: baseAddress.assumingMemoryBound(to: UInt8.self),
+                width: CVPixelBufferGetWidthOfPlane(pixelBuffer, 0),
+                height: CVPixelBufferGetHeightOfPlane(pixelBuffer, 0),
+                bytesPerRow: CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
+            )
+        } else if let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) {
+            score = CameraFocusSharpnessAnalyzer.scoreBGRA(
+                pixels: baseAddress.assumingMemoryBound(to: UInt8.self),
+                width: CVPixelBufferGetWidth(pixelBuffer),
+                height: CVPixelBufferGetHeight(pixelBuffer),
+                bytesPerRow: CVPixelBufferGetBytesPerRow(pixelBuffer)
+            )
+        } else {
+            return
+        }
+        latestFocusMeasurement = CameraFocusMeasurement(
+            sharpness: score,
+            isAdjustingFocus: device?.isAdjustingFocus ?? false,
+            capturedAt: now
+        )
     }
 
     nonisolated private func analyzeVisualAlignmentIfNeeded(sampleBuffer: CMSampleBuffer) {
@@ -1073,6 +1216,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseStartedAt = nil
         unlockFocusAfterCaptureSequence()
         countdownLabel = "-"
+        countdownSecondsRemaining = nil
+        isCaptureStarting = false
         astroBatchProgressLabel = "-"
         astroExposurePhaseLabel = "-"
         if frameCount > 0 || astroCompositeFrameCount > 0 {
@@ -1083,19 +1228,32 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         }
     }
 
+    private func performStartCountdown(statusPrefix: String) async -> Bool {
+        isCaptureStarting = true
+        defer {
+            isCaptureStarting = false
+            countdownSecondsRemaining = nil
+            countdownLabel = "-"
+        }
+        for second in CameraeCaptureStartCountdown.seconds {
+            guard !Task.isCancelled else { return false }
+            countdownSecondsRemaining = second
+            countdownLabel = "\(second)s"
+            status = "\(statusPrefix) \(second)s"
+            do {
+                try await Task.sleep(for: .seconds(1))
+            } catch {
+                return false
+            }
+        }
+        return !Task.isCancelled
+    }
+
     private func runTimelapseWithCountdown(
         interval: Double,
         plannedDuration: TimeInterval
     ) async {
-        for second in stride(from: 3, through: 1, by: -1) {
-            guard !Task.isCancelled else { return }
-            countdownLabel = "\(second)s"
-            status = "Comecando em \(second)s"
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-        }
-
-        guard !Task.isCancelled else { return }
-        countdownLabel = "-"
+        guard await performStartCountdown(statusPrefix: "Começando em") else { return }
         timelapseStartedAt = Date()
         await lockFocusForCaptureSequence()
         guard !Task.isCancelled else { return }
@@ -1113,15 +1271,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         waitsForAstroExposure: Bool,
         plannedDuration: TimeInterval
     ) async {
-        for second in stride(from: 3, through: 1, by: -1) {
-            guard !Task.isCancelled else { return }
-            countdownLabel = "\(second)s"
-            status = "Comecando em \(second)s"
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-        }
-
-        guard !Task.isCancelled else { return }
-        countdownLabel = "-"
+        guard await performStartCountdown(statusPrefix: "Começando em") else { return }
+        timelapseStartedAt = Date()
         await lockFocusForCaptureSequence()
         guard !Task.isCancelled else { return }
         status = waitsForAstroExposure ? "Capturando por do sol" : "Capturando lote astro"
@@ -1140,15 +1291,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     private func runAstroPhotoStackWithCountdown(
         stackCount: AstroPhotoStackCount
     ) async {
-        for second in stride(from: 3, through: 1, by: -1) {
-            guard !Task.isCancelled else { return }
-            countdownLabel = "\(second)s"
-            status = "Foto em \(second)s"
-            try? await Task.sleep(nanoseconds: 1_000_000_000)
-        }
-
-        guard !Task.isCancelled else { return }
-        countdownLabel = "-"
+        guard await performStartCountdown(statusPrefix: "Foto em") else { return }
+        timelapseStartedAt = Date()
         await lockFocusForCaptureSequence()
         guard !Task.isCancelled else { return }
 
@@ -1303,6 +1447,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         timelapseStartedAt = nil
         unlockFocusAfterCaptureSequence()
         countdownLabel = "-"
+        countdownSecondsRemaining = nil
+        isCaptureStarting = false
         astroBatchProgressLabel = "-"
         astroExposurePhaseLabel = "-"
         if frameCount > 0 || astroCompositeFrameCount > 0 {
@@ -1348,10 +1494,12 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             stoppedForStorage = false
             try await configureIfNeeded()
             guard movieOutput.isRecording == false else { return }
-            activeRecordedVideoContract = try await configureVideoRecording(
-                plan: plan,
-                settings: settings
-            )
+            if activeRecordedVideoContract == nil {
+                activeRecordedVideoContract = try await configureVideoRecording(
+                    plan: plan,
+                    settings: settings
+                )
+            }
 
             let videoSession = try store.createSession(
                 captureKind: .video,
@@ -1371,6 +1519,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             frameCount = 0
             lastExportURL = nil
             lastExportURLs = []
+            guard await performStartCountdown(statusPrefix: "Vídeo em") else {
+                throw CancellationError()
+            }
+            await lockFocusForCaptureSequence()
             isVideoRecording = true
             cameraeVisionCoordinator.pause(.videoRecording)
             videoRecordingStartedAt = Date()
@@ -1411,6 +1563,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         } catch {
             activeRecordedVideoContract = nil
             isVideoRecording = false
+            unlockFocusAfterCaptureSequence()
             cameraeVisionCoordinator.resume(.videoRecording)
             status = "Video falhou: \(error.localizedDescription)"
         }
@@ -1543,6 +1696,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         videoStopTask?.cancel()
         videoStopTask = nil
         isVideoRecording = false
+        unlockFocusAfterCaptureSequence()
         cameraeVisionCoordinator.resume(.videoRecording)
         videoRecordingStartedAt = nil
         let recordedVideoContract = activeRecordedVideoContract
@@ -1930,6 +2084,40 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     }
                 }
 
+                continuation.resume()
+            }
+        }
+    }
+
+    private func requestAutoFocus(at point: CGPoint) async {
+        await withCheckedContinuation { continuation in
+            captureQueue.async {
+                guard let device = self.device else {
+                    continuation.resume()
+                    return
+                }
+                do {
+                    try device.lockForConfiguration()
+                    defer { device.unlockForConfiguration() }
+                    let normalizedPoint = CGPoint(
+                        x: min(max(point.x, 0), 1),
+                        y: min(max(point.y, 0), 1)
+                    )
+                    if device.isFocusPointOfInterestSupported {
+                        device.focusPointOfInterest = normalizedPoint
+                    }
+                    if device.isFocusModeSupported(.autoFocus) {
+                        device.focusMode = .autoFocus
+                    } else if device.isFocusModeSupported(.continuousAutoFocus) {
+                        device.focusMode = .continuousAutoFocus
+                    }
+                    device.isSubjectAreaChangeMonitoringEnabled = true
+                } catch {
+                    CameraeCaptureDiagnostics.error(
+                        "C98 focus.request.failed",
+                        error.localizedDescription
+                    )
+                }
                 continuation.resume()
             }
         }
