@@ -34,6 +34,9 @@ test distributions do not require an entry here.
 - Added a clear three-second start countdown to photo, video, timelapse, and
   Astro captures, plus a top-right remaining-time indicator whenever the
   in-progress information panel is hidden.
+- Added privacy-safe live-alignment diagnostics with a per-session identifier,
+  Xcode console milestones, throttled camera/Vision checkpoints, memory-pressure
+  context, and matching Crashlytics breadcrumbs when diagnostics consent is on.
 
 ### Changed
 

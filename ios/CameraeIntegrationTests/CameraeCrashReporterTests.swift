@@ -52,6 +52,35 @@ struct CameraeCrashReporterTests {
         #expect(backend.logs == ["camerae_started"])
     }
 
+    @Test func alignmentBreadcrumbsCarryOnlySessionAndFiniteState() {
+        let backend = CrashReportingBackendSpy()
+        let reporter = CameraeCrashReporter(backend: backend)
+        reporter.start(
+            configuration: .init(isEnabled: true, releaseChannel: "qa"),
+            appVersion: "9.3.0",
+            build: "33"
+        )
+
+        reporter.recordAlignment(
+            event: .referenceReady,
+            sessionID: "A1B2C3D4",
+            state: "pixels=1920x1080"
+        )
+
+        #expect(backend.values["alignment_session"] == "A1B2C3D4")
+        #expect(backend.values["alignment_event"] == "reference_ready")
+        #expect(backend.logs.last == "alignment.reference_ready | session=A1B2C3D4 | pixels=1920x1080")
+    }
+
+    @Test func disabledReportingDropsAlignmentBreadcrumbs() {
+        let backend = CrashReportingBackendSpy()
+        let reporter = CameraeCrashReporter(backend: backend)
+        reporter.recordAlignment(event: .screenEntered, sessionID: "SESSION", state: "align")
+
+        #expect(backend.values.isEmpty)
+        #expect(backend.logs.isEmpty)
+    }
+
     @Test func appModulesMapToFiniteDiagnosticValues() {
         #expect(CameraeDiagnosticModule(module: .repeatable) == .repeatable)
         #expect(CameraeDiagnosticModule(module: .astrophotography) == .astro)

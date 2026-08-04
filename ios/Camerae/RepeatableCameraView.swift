@@ -61,6 +61,7 @@ struct RepeatableCameraView: View {
     @State private var sourceFormat = CaptureSourceFormat.heic
     @State private var pendingCaptureAfterFocus = false
     @State private var bypassFocusPreflightOnce = false
+    @State private var alignmentDiagnosticSession = CameraeAlignmentDiagnosticSession()
 
     init(
         project: CameraProject,
@@ -143,6 +144,10 @@ struct RepeatableCameraView: View {
         .toolbar(capturePhase == .align ? .hidden : .visible, for: .navigationBar)
         .onAppear {
             CameraeCaptureDiagnostics.event("R02 repeatable.onAppear", "phase=\(capturePhase)")
+            camera.beginAlignmentDiagnostics(sessionID: alignmentDiagnosticSession.id)
+            if capturePhase == .align {
+                recordAlignment(.screenEntered, "source=initial phase=align")
+            }
             AppOrientationLock.shared.unlock()
         }
         .task {
@@ -155,6 +160,10 @@ struct RepeatableCameraView: View {
             }
             await camera.start()
             CameraeCaptureDiagnostics.event("R04 repeatable.camera.start.returned", "state=\(String(describing: camera.lifecycleState))")
+            recordAlignment(
+                .cameraReady,
+                "lifecycle=\(String(describing: camera.lifecycleState)) running=\(camera.session.isRunning) inputs=\(camera.session.inputs.count) outputs=\(camera.session.outputs.count)"
+            )
             await camera.setExposureBias(evBias)
             CameraeCaptureDiagnostics.event("R05 repeatable.exposure.applied", "ev=\(evBias)")
             loadReference()
@@ -170,8 +179,28 @@ struct RepeatableCameraView: View {
                 onCompletedTimelapse()
             }
         }
+        .onChange(of: capturePhase) { _, phase in
+            if phase == .align {
+                recordAlignment(
+                    .screenEntered,
+                    "source=phase_change reference=\(referenceImage != nil) motion=\(referenceMotion != nil) gps=\(referenceGeoPose != nil)"
+                )
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIApplication.didReceiveMemoryWarningNotification)) { _ in
+            recordAlignment(
+                .memoryWarning,
+                "thermal=\(ProcessInfo.processInfo.thermalState.rawValue) lowPower=\(ProcessInfo.processInfo.isLowPowerModeEnabled)"
+            )
+            camera.recordAlignmentMemoryWarning()
+        }
         .onDisappear {
             CameraeCaptureDiagnostics.event("R80 repeatable.onDisappear")
+            recordAlignment(
+                .screenExited,
+                "phase=\(capturePhase) running=\(camera.session.isRunning)"
+            )
+            camera.endAlignmentDiagnostics()
             stopReferenceBlinking()
             camera.stop()
             AppOrientationLock.shared.restorePortrait()
@@ -345,6 +374,10 @@ struct RepeatableCameraView: View {
             Section {
                 Button {
                     lockToReferenceOrientation()
+                    recordAlignment(
+                        .screenEntered,
+                        "source=open_button reference=\(referenceImage != nil) edge=\(alignmentOverlayStyle.isEdgeEnabled) magnifier=\(isMagnifierVisible)"
+                    )
                     capturePhase = .align
                     refreshReferenceOverlay()
                 } label: {
@@ -544,6 +577,11 @@ struct RepeatableCameraView: View {
             }
             .onAppear {
                 alignmentDisplaySize = proxy.size
+                recordAlignmentGeometry(
+                    size: proxy.size,
+                    safeInsets: proxy.safeAreaInsets,
+                    reason: "appear"
+                )
                 if isMagnifierVisible {
                     initializeMagnifierPositionIfNeeded(for: proxy.size)
                 }
@@ -551,6 +589,11 @@ struct RepeatableCameraView: View {
             }
             .onChange(of: proxy.size) { _, size in
                 alignmentDisplaySize = size
+                recordAlignmentGeometry(
+                    size: size,
+                    safeInsets: proxy.safeAreaInsets,
+                    reason: "resize"
+                )
                 if isMagnifierVisible {
                     clampMagnifierPosition(for: size)
                 }
@@ -1619,6 +1662,7 @@ struct RepeatableCameraView: View {
             Task {
                 await camera.setVisualReference(nil)
             }
+            recordAlignment(.referenceUnavailable, "source=project hasReferenceURL=\(activeReferenceURL != nil)")
             return
         }
 
@@ -1628,6 +1672,10 @@ struct RepeatableCameraView: View {
         referenceGeoPose = store.referenceGeoPose(forFrameURL: referenceURL)
         referenceOrientation = store.referenceOrientation(forFrameURL: referenceURL) ?? CaptureDisplayOrientation(image: image)
         referenceName = referenceURL.lastPathComponent.replacingOccurrences(of: "frame_", with: "")
+        recordAlignment(
+            .referenceLoading,
+            "uiPixels=\(Int(image.size.width * image.scale))x\(Int(image.size.height * image.scale)) orientation=\(referenceOrientation?.rawValue ?? "unknown") motion=\(referenceMotion != nil) gps=\(referenceGeoPose != nil)"
+        )
         Task {
             await camera.setVisualReference(referenceURL)
         }
@@ -1694,6 +1742,11 @@ struct RepeatableCameraView: View {
         let stroke = edgeOverlayStroke
         let inverted = isEdgeOverlayInverted
         edgeReferenceRenderID = renderID
+        CameraeLiveAlignmentDiagnostics.event(
+            .referenceLoading,
+            sessionID: alignmentDiagnosticSession.id,
+            "edgeRender=start pixels=\(Int(image.size.width * image.scale))x\(Int(image.size.height * image.scale))"
+        )
 
         Task.detached(priority: .userInitiated) {
             let rendered = EdgeOverlayRenderer.render(
@@ -1704,6 +1757,11 @@ struct RepeatableCameraView: View {
             await MainActor.run {
                 guard edgeReferenceRenderID == renderID else { return }
                 edgeReferenceImage = rendered
+                CameraeLiveAlignmentDiagnostics.event(
+                    .referenceReady,
+                    sessionID: alignmentDiagnosticSession.id,
+                    "edgeRender=finished success=\(rendered != nil)"
+                )
                 refreshReferenceOverlay()
             }
         }
@@ -1744,6 +1802,26 @@ struct RepeatableCameraView: View {
         magnifierCenter = magnifierCenter == .zero
             ? geometry.initialCenter
             : geometry.clampedCenter(magnifierCenter)
+    }
+
+    private func recordAlignment(_ event: CameraeAlignmentDiagnosticEvent, _ state: String) {
+        CameraeLiveAlignmentDiagnostics.event(event, sessionID: alignmentDiagnosticSession.id, state)
+        CameraeCrashReporter.shared.recordAlignment(
+            event: event,
+            sessionID: alignmentDiagnosticSession.id,
+            state: state
+        )
+    }
+
+    private func recordAlignmentGeometry(
+        size: CGSize,
+        safeInsets: EdgeInsets,
+        reason: String
+    ) {
+        recordAlignment(
+            .geometryChanged,
+            "reason=\(reason) size=\(Int(size.width))x\(Int(size.height)) safe=\(Int(safeInsets.top)),\(Int(safeInsets.leading)),\(Int(safeInsets.bottom)),\(Int(safeInsets.trailing)) orientation=\(currentAlignmentOrientation.rawValue) nextUI=\(usesNextInterface) grid=\(isGridVisible) motionHUD=\(isMotionHUDVisible) positionHUD=\(isPositionHUDVisible) scaleHUD=\(isScaleHUDVisible) magnifier=\(isMagnifierVisible)"
+        )
     }
 
     private func deleteOpenedTimelapse() {
