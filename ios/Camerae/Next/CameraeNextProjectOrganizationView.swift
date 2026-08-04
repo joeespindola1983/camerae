@@ -314,7 +314,7 @@ private struct CameraeNextProjectOrganizationDetailView: View {
     let node: ProjectOrganizationNode
     @Binding var path: NavigationPath
 
-    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
+    @State private var sort = CameraeNextProjectCatalogSort.createdNewest
     @State private var isCreatingSubgroup = false
     @State private var subgroupName = ""
     @State private var isCreatingProject = false

@@ -2,7 +2,7 @@ import Foundation
 import os
 
 public actor ProjectCatalog {
-    private static let schemaVersion = 3
+    private static let schemaVersion = 4
     private static let logger = Logger(subsystem: "com.espindola.camerae", category: "ProjectCatalog")
 
     private let fileManager: FileManager
@@ -31,7 +31,7 @@ public actor ProjectCatalog {
         indexURL = rootDirectory
             .appendingPathComponent("Application Support", isDirectory: true)
             .appendingPathComponent("Camerae", isDirectory: true)
-            .appendingPathComponent("catalog-v3.json")
+            .appendingPathComponent("catalog-v4.json")
     }
 
     public func load() throws -> ProjectCatalogSnapshot {
@@ -72,7 +72,8 @@ public actor ProjectCatalog {
             createdAt: now,
             updatedAt: now,
             lastOpenedAt: now,
-            isArchived: false
+            isArchived: false,
+            sequenceNumber: nextSequenceNumber(for: module, in: existing)
         )
 
         do {
@@ -102,7 +103,8 @@ public actor ProjectCatalog {
             createdAt: current.createdAt,
             updatedAt: dateProvider.now(),
             lastOpenedAt: current.lastOpenedAt,
-            isArchived: isArchived
+            isArchived: isArchived,
+            sequenceNumber: current.sequenceNumber
         )
         let summary = cachedSummaries[current.id] ?? (try? readManifest(at: current.directoryURL).summary) ?? nil
         try writeManifest(updated, summary: summary)
@@ -144,7 +146,8 @@ public actor ProjectCatalog {
             createdAt: current.createdAt,
             updatedAt: now,
             lastOpenedAt: now,
-            isArchived: current.isArchived
+            isArchived: current.isArchived,
+            sequenceNumber: current.sequenceNumber
         )
         let summary = cachedSummaries[current.id] ?? (try? readManifest(at: current.directoryURL).summary) ?? nil
         try writeManifest(updated, summary: summary)
@@ -173,7 +176,7 @@ public actor ProjectCatalog {
 
     private func rebuildFromManifests() throws -> (projects: [ProjectRecord], summaries: [UUID: ProjectSummary]) {
         guard fileManager.fileExists(atPath: projectsDirectory.path) else { return ([], [:]) }
-        var projects: [ProjectRecord] = []
+        var documents: [ProjectManifestDocument] = []
         var summaries: [UUID: ProjectSummary] = [:]
 
         for module in ProjectModule.allCases {
@@ -188,13 +191,23 @@ public actor ProjectCatalog {
                 guard (try? directory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else { continue }
                 do {
                     let document = try readManifest(at: directory)
-                    projects.append(document.project)
+                    documents.append(document)
                     if let summary = document.summary {
                         summaries[document.project.id] = summary
                     }
                 } catch {
                     Self.logger.error("Skipping invalid project manifest at \(directory.path, privacy: .public): \(error.localizedDescription, privacy: .public)")
                 }
+            }
+        }
+        let projects = assigningMissingSequenceNumbers(documents.map(\.project))
+        for project in projects {
+            guard let originalDocument = documents.first(where: {
+                $0.project.directoryURL == project.directoryURL
+            }) else { continue }
+            if originalDocument.project.sequenceNumber != project.sequenceNumber
+                || originalDocument.schemaVersion != CameraeSchema.currentProject {
+                try writeManifest(project, summary: summaries[project.id])
             }
         }
         return (sorted(projects), summaries)
@@ -223,7 +236,8 @@ public actor ProjectCatalog {
                 createdAt: entry.createdAt,
                 updatedAt: entry.updatedAt,
                 lastOpenedAt: entry.lastOpenedAt,
-                isArchived: entry.isArchived
+                isArchived: entry.isArchived,
+                sequenceNumber: entry.sequenceNumber
             )
         })
         let summaries = Dictionary(uniqueKeysWithValues: document.entries.compactMap { entry in
@@ -243,6 +257,7 @@ public actor ProjectCatalog {
                 updatedAt: project.updatedAt,
                 lastOpenedAt: project.lastOpenedAt,
                 isArchived: project.isArchived,
+                sequenceNumber: project.sequenceNumber,
                 summary: summaries[project.id]
             )
         }
@@ -288,10 +303,70 @@ public actor ProjectCatalog {
 
     private func sorted(_ projects: [ProjectRecord]) -> [ProjectRecord] {
         projects.sorted { left, right in
-            let leftDate = left.lastOpenedAt ?? left.updatedAt
-            let rightDate = right.lastOpenedAt ?? right.updatedAt
-            return leftDate == rightDate ? left.createdAt > right.createdAt : leftDate > rightDate
+            if let leftNumber = left.sequenceNumber,
+               let rightNumber = right.sequenceNumber,
+               left.module == right.module,
+               leftNumber != rightNumber {
+                return leftNumber > rightNumber
+            }
+            return left.createdAt == right.createdAt
+                ? left.id.uuidString < right.id.uuidString
+                : left.createdAt > right.createdAt
         }
+    }
+
+    private func nextSequenceNumber(
+        for module: ProjectModule,
+        in projects: [ProjectRecord]
+    ) -> Int {
+        projects
+            .filter { $0.module == module }
+            .compactMap(\.sequenceNumber)
+            .filter { $0 > 0 }
+            .max()
+            .map { $0 + 1 } ?? 1
+    }
+
+    private func assigningMissingSequenceNumbers(_ projects: [ProjectRecord]) -> [ProjectRecord] {
+        var usedByModule: [ProjectModule: Set<Int>] = [:]
+        var nextByModule = Dictionary(uniqueKeysWithValues: ProjectModule.allCases.map { module in
+            let maximum = projects
+                .filter { $0.module == module }
+                .compactMap(\.sequenceNumber)
+                .filter { $0 > 0 }
+                .max() ?? 0
+            return (module, maximum + 1)
+        })
+
+        return projects
+            .sorted {
+                $0.createdAt == $1.createdAt
+                    ? $0.id.uuidString < $1.id.uuidString
+                    : $0.createdAt < $1.createdAt
+            }
+            .map { project in
+                var used = usedByModule[project.module, default: []]
+                if let number = project.sequenceNumber, number > 0, used.insert(number).inserted {
+                    usedByModule[project.module] = used
+                    return project
+                }
+
+                let number = nextByModule[project.module, default: 1]
+                nextByModule[project.module] = number + 1
+                used.insert(number)
+                usedByModule[project.module] = used
+                return ProjectRecord(
+                    id: project.id,
+                    module: project.module,
+                    name: project.name,
+                    directoryURL: project.directoryURL,
+                    createdAt: project.createdAt,
+                    updatedAt: project.updatedAt,
+                    lastOpenedAt: project.lastOpenedAt,
+                    isArchived: project.isArchived,
+                    sequenceNumber: number
+                )
+            }
     }
 
     private static func encoder() -> JSONEncoder {
@@ -338,6 +413,7 @@ private struct CatalogEntry: Codable {
     let updatedAt: Date
     let lastOpenedAt: Date?
     let isArchived: Bool
+    let sequenceNumber: Int?
     let summary: ProjectSummary?
 }
 

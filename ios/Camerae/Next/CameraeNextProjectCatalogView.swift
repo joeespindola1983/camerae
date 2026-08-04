@@ -124,7 +124,7 @@ struct CameraeNextProjectCatalogModel: Equatable {
     let projects: [CameraProject]
     let module: CameraModule
     let filter: CameraeNextProjectCatalogFilter
-    var sort: CameraeNextProjectCatalogSort = .lastActivity
+    var sort: CameraeNextProjectCatalogSort = .createdNewest
 
     private var moduleProjects: [CameraProject] {
         projects
@@ -137,6 +137,11 @@ struct CameraeNextProjectCatalogModel: Equatable {
                     lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
                     rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
                 case .createdNewest:
+                    if let lhsNumber = lhs.sequenceNumber,
+                       let rhsNumber = rhs.sequenceNumber,
+                       lhsNumber != rhsNumber {
+                        return lhsNumber > rhsNumber
+                    }
                     lhsDate = lhs.createdAt
                     rhsDate = rhs.createdAt
                 }
@@ -175,7 +180,7 @@ struct CameraeNextProjectOrganizationModel: Equatable {
     let module: CameraModule
     let organization: ProjectOrganizationSnapshot
     let filter: CameraeNextProjectCatalogFilter
-    var sort: CameraeNextProjectCatalogSort = .lastActivity
+    var sort: CameraeNextProjectCatalogSort = .createdNewest
 
     private var moduleProjects: [CameraProject] {
         projects
@@ -276,6 +281,11 @@ struct CameraeNextProjectOrganizationModel: Equatable {
             lhsDate = lhs.lastOpenedAt ?? lhs.updatedAt
             rhsDate = rhs.lastOpenedAt ?? rhs.updatedAt
         case .createdNewest:
+            if let lhsNumber = lhs.sequenceNumber,
+               let rhsNumber = rhs.sequenceNumber,
+               lhsNumber != rhsNumber {
+                return lhsNumber > rhsNumber
+            }
             lhsDate = lhs.createdAt
             rhsDate = rhs.createdAt
         }
@@ -325,7 +335,7 @@ struct CameraeNextProjectCatalogView: View {
     @Binding var path: NavigationPath
 
     @State private var filter = CameraeNextProjectCatalogFilter.recent
-    @State private var sort = CameraeNextProjectCatalogSort.lastActivity
+    @State private var sort = CameraeNextProjectCatalogSort.createdNewest
     @State private var isCreatingProject = false
     @State private var projectName = ""
     @State private var isCreatingGroup = false

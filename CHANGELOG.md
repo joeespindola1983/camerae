@@ -21,12 +21,19 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added persistent shot numbers to project thumbnails so each timelapse keeps a
+  memorable identity independent of when it was last opened.
+- Added an explicit option to reuse the newest compatible tripod position from
+  another Repeatable project, with source identification and relocalization
+  before use.
 - Added automatic draggable tripod-center suggestions by triangulating the
   camera's viewing rays, validating nearby mesh geometry when available, and
   falling back to the mapped camera path when thin tripod parts are absent.
 
 ### Changed
 
+- Project catalogs now default to stable creation/shot order instead of moving
+  the most recently opened project to the top.
 - Spatial Guidance now hides the reconstructed wireframe after scene mapping
   so tripod definition and review focus only on the placement guides.
 - Simplified Spatial Guidance to show only the tripod's vertical axis instead

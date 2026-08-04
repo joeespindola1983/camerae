@@ -58,6 +58,31 @@ enum SpatialGuidanceAvailabilityPolicy {
     }
 }
 
+enum SpatialGuidanceProjectCapability: Equatable, Sendable {
+    case createReference
+    case reuseRecentReference
+    case navigateScene
+    case watchTutorial
+    case remapReference
+    case continueWithoutGuide
+}
+
+enum SpatialGuidanceProjectCapabilityPolicy {
+    static func actions(
+        availability: SpatialGuidanceAvailability,
+        hasReference: Bool,
+        hasReusableReference: Bool
+    ) -> [SpatialGuidanceProjectCapability] {
+        guard availability == .available else { return [.continueWithoutGuide] }
+        if hasReference {
+            return [.navigateScene, .watchTutorial, .remapReference]
+        }
+        return [.createReference]
+            + (hasReusableReference ? [.reuseRecentReference] : [])
+            + [.watchTutorial]
+    }
+}
+
 struct SpatialGuidanceProjectStatusPresentation: Equatable, Sendable {
     let status: String
     let title: String
@@ -1065,6 +1090,33 @@ struct SpatialReferenceManifest: Codable, Equatable, Sendable {
             tripodLegRadiusMeters: tripodLegRadiusMeters,
             tripodFootPoints: tripodFootPoints,
             appearance: appearance.restricted,
+            targetPose: targetPose,
+            worldMapFileName: worldMapFileName,
+            keyframeFileNames: keyframeFileNames
+        )
+    }
+
+    func reusedCopy(
+        id: UUID,
+        createdAt: Date,
+        cameraLens: RepeatableCameraLens? = nil,
+        cameraZoomFactor: Double? = nil
+    ) -> SpatialReferenceManifest {
+        .init(
+            schemaVersion: schemaVersion,
+            id: id,
+            createdAt: createdAt,
+            module: module,
+            deviceModelIdentifier: deviceModelIdentifier,
+            cameraLens: cameraLens ?? self.cameraLens,
+            cameraZoomFactor: cameraZoomFactor ?? self.cameraZoomFactor,
+            orientation: orientation,
+            tripodBaseCenter: tripodBaseCenter,
+            tripodDirectionPoint: tripodDirectionPoint,
+            tripodHeightMeters: tripodHeightMeters,
+            tripodLegRadiusMeters: tripodLegRadiusMeters,
+            tripodFootPoints: tripodFootPoints,
+            appearance: appearance,
             targetPose: targetPose,
             worldMapFileName: worldMapFileName,
             keyframeFileNames: keyframeFileNames

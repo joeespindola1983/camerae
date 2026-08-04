@@ -77,6 +77,32 @@ struct CameraeNextProjectCatalogTests {
         #expect(byCreation.visibleProjects.map(\.name) == ["Newest", "Older but active"])
     }
 
+    @Test("catalog defaults to stable shot order and exposes each memorisable number")
+    func stableDefaultShotOrder() {
+        let firstRecentlyOpened = makeProject(
+            name: "First",
+            module: .repeatable,
+            day: 1,
+            lastOpenedDay: 5,
+            sequenceNumber: 1
+        )
+        let second = makeProject(
+            name: "Second",
+            module: .repeatable,
+            day: 2,
+            sequenceNumber: 2
+        )
+
+        let catalog = CameraeNextProjectCatalogModel(
+            projects: [firstRecentlyOpened, second],
+            module: .repeatable,
+            filter: .recent
+        )
+
+        #expect(catalog.visibleProjects.map(\.name) == ["Second", "First"])
+        #expect(catalog.visibleProjects.map(\.shotNumberLabel) == ["#2", "#1"])
+    }
+
     @Test("temporary project policy silently discards only a project without durable content")
     func temporaryProjectPolicy() {
         #expect(CameraeNextTemporaryProjectPolicy.shouldAutomaticallyDiscard(hasDurableContent: false))
@@ -394,7 +420,8 @@ struct CameraeNextProjectCatalogTests {
         day: Int,
         lastOpenedDay: Int? = nil,
         archived: Bool = false,
-        mediaCount: Int = 0
+        mediaCount: Int = 0,
+        sequenceNumber: Int? = nil
     ) -> CameraProject {
         let date = Date(timeIntervalSince1970: TimeInterval(day * 86_400))
         let lastOpenedAt = Date(
@@ -408,7 +435,8 @@ struct CameraeNextProjectCatalogTests {
             createdAt: date,
             updatedAt: date,
             lastOpenedAt: lastOpenedAt,
-            isArchived: archived
+            isArchived: archived,
+            sequenceNumber: sequenceNumber
         )
         let summary = ProjectSummary(
             sessionCount: mediaCount == 0 ? 0 : 1,

@@ -733,7 +733,7 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         return map
     }
 
-    private static var deviceModelIdentifier: String {
+    static var deviceModelIdentifier: String {
         var systemInfo = utsname()
         uname(&systemInfo)
         return withUnsafePointer(to: &systemInfo.machine) {
