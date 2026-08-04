@@ -32,6 +32,9 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added a required final tripod-scene photo and an optional second contextual
+  photo after Spatial Guidance setup, preserving mapping keyframes separately
+  and presenting the pair as a vertically composed tripod thumbnail.
 - Added an in-preview physical-camera selector to the Repeatable alignment live
   view so available lenses can be compared before capture.
 - Added persistent shot numbers to project thumbnails so each timelapse keeps a
