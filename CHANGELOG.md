@@ -21,6 +21,17 @@ test distributions do not require an entry here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [9.5.0] - 2026-08-04
+
+**Status:** Local QA candidate (build 36)
+**Areas:** Repeatable capture, project catalog, Spatial Guidance, focus safety, alignment diagnostics
+
+### Added
+
 - Added an in-preview physical-camera selector to the Repeatable alignment live
   view so available lenses can be compared before capture.
 - Added persistent shot numbers to project thumbnails so each timelapse keeps a
