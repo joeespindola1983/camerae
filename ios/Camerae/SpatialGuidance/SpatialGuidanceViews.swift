@@ -22,6 +22,39 @@ private enum SpatialGuidanceAppearanceTarget: CaseIterable {
     }
 }
 
+private struct SpatialReferenceThumbnailView: View {
+    let images: [UIImage]
+
+    var body: some View {
+        GeometryReader { proxy in
+            switch SpatialReferenceThumbnailLayout(photoCount: images.count) {
+            case .unavailable:
+                Color.clear
+            case .singleHero:
+                thumbnailImage(images[0])
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+            case .verticalPair:
+                VStack(spacing: 2) {
+                    ForEach(Array(images.prefix(2).enumerated()), id: \.offset) { _, image in
+                        thumbnailImage(image)
+                            .frame(
+                                width: proxy.size.width,
+                                height: max((proxy.size.height - 2) / 2, 0)
+                            )
+                    }
+                }
+            }
+        }
+    }
+
+    private func thumbnailImage(_ image: UIImage) -> some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .clipped()
+    }
+}
+
 struct SpatialGuidanceConfigurationCard: View {
     let availability: SpatialGuidanceAvailability
     let hasReference: Bool
@@ -161,10 +194,8 @@ struct SpatialGuidanceProjectTab: View {
         ScrollView {
             VStack(spacing: 16) {
                 Group {
-                    if let image = referencePreviewImage {
-                        Image(uiImage: image)
-                            .resizable()
-                            .scaledToFill()
+                    if !referencePreviewImages.isEmpty {
+                        SpatialReferenceThumbnailView(images: referencePreviewImages)
                             .frame(maxWidth: 560)
                             .frame(height: 385)
                             .clipped()
@@ -327,8 +358,11 @@ struct SpatialGuidanceProjectTab: View {
         )
     }
 
-    private var referencePreviewImage: UIImage? {
-        reference?.keyframes.last.flatMap(UIImage.init(data:))
+    private var referencePreviewImages: [UIImage] {
+        guard let reference else { return [] }
+        let manual = reference.thumbnailImages.compactMap(UIImage.init(data:))
+        if !manual.isEmpty { return manual }
+        return reference.keyframes.last.flatMap(UIImage.init(data:)).map { [$0] } ?? []
     }
 
     private func openGuide() {
@@ -715,11 +749,8 @@ struct SpatialGuidanceFlowView: View {
                 tripodDirectionSelectionPanel(hasSelection: false)
             case .tripodDirectionSelected:
                 tripodDirectionSelectionPanel(hasSelection: true)
-            case .readyToMount:
-                busyPanel(
-                    title: "Preparando cena",
-                    detail: "Validando a posição e a direção do tripé."
-                )
+            case .capturingReferencePhotos, .readyToMount:
+                referencePhotoCapturePanel
             case .saving:
                 busyPanel(
                     title: "Salvando cena",
@@ -824,8 +855,55 @@ struct SpatialGuidanceFlowView: View {
 
             if hasSelection {
                 captureAction(title: "Confirmar direção", style: .primary) {
+                    model.confirmTripodDirection()
+                }
+            }
+        }
+    }
+
+    private var referencePhotoCapturePanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(
+                label: model.referencePhotos.isEmpty ? "FOTO NECESSÁRIA" : "CENA REGISTRADA",
+                tone: model.referencePhotos.isEmpty ? .accent : .success
+            )
+            Text(model.referencePhotos.isEmpty ? "Fotografe a posição" : "Confira o thumbnail")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            Text("Enquadre o tripé, sua direção e elementos fixos do ambiente. A malha 3D também será registrada para facilitar o retorno ao local.")
+                .font(.custom("Outfit-Regular", size: 13, relativeTo: .body))
+                .foregroundStyle(CameraeColor.captureForegroundMuted)
+
+            if !model.referencePhotos.isEmpty {
+                HStack(spacing: 8) {
+                    ForEach(Array(model.referencePhotos.enumerated()), id: \.offset) { _, data in
+                        if let image = UIImage(data: data) {
+                            Image(uiImage: image)
+                                .resizable()
+                                .scaledToFill()
+                                .frame(width: 92, height: 64)
+                                .clipped()
+                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(model.referencePhotos.count) fotos da posição do tripé")
+            }
+
+            if model.referencePhotos.count < SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount {
+                captureAction(
+                    title: model.referencePhotos.isEmpty ? "Capturar foto principal" : "Tirar outra foto",
+                    style: .primary
+                ) {
+                    model.captureReferencePhoto()
+                }
+            }
+            if !model.referencePhotos.isEmpty {
+                captureAction(title: "Refazer última foto", style: .secondary) {
+                    model.removeLastReferencePhoto()
+                }
+                captureAction(title: "Salvar posição", style: .primary) {
                     Task {
-                        model.confirmTripodDirection()
                         do {
                             _ = try await model.saveReference(
                                 store: store,

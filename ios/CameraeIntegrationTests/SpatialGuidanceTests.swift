@@ -214,6 +214,8 @@ struct SpatialGuidanceTests {
         try machine.send(.tripodDirectionSelected)
         #expect(machine.phase == .tripodDirectionSelected)
         try machine.send(.confirmTripodDirection)
+        #expect(machine.phase == .capturingReferencePhotos)
+        try machine.send(.referencePhotoCaptured)
         #expect(machine.phase == .readyToMount)
         try machine.send(.referenceSaved)
         #expect(machine.phase == .saved)
@@ -287,6 +289,48 @@ struct SpatialGuidanceTests {
         #expect(throws: SpatialGuidanceTransitionError.self) {
             try machine.send(.confirmTripodDirection)
         }
+    }
+
+    @Test("one final scene photo is required and a second remains optional")
+    func finalReferencePhotoGate() throws {
+        var machine = SpatialGuidanceStateMachine()
+        try machine.send(.startMapping)
+        try machine.send(.mappingSessionReady)
+        try machine.send(.beginSceneCapture)
+        try machine.send(.mappingEvaluated(.ready))
+        try machine.send(.freezeScene)
+        try machine.send(.tripodBaseSelected)
+        try machine.send(.confirmTripodBase)
+        try machine.send(.tripodDirectionSelected)
+        try machine.send(.confirmTripodDirection)
+
+        #expect(machine.phase == .capturingReferencePhotos)
+        #expect(throws: SpatialGuidanceTransitionError.self) {
+            try machine.send(.beginSaving)
+        }
+
+        try machine.send(.referencePhotoCaptured)
+        #expect(machine.phase == .readyToMount)
+        try machine.send(.referencePhotoRemoved)
+        #expect(machine.phase == .capturingReferencePhotos)
+    }
+
+    @Test("reference photo capabilities preserve capture, retake, and save")
+    func finalReferencePhotoCapabilityContract() {
+        #expect(
+            SpatialReferencePhotoCapabilityPolicy.actions(photoCount: 0) ==
+                [.captureReferencePhoto, .cancel]
+        )
+        #expect(
+            SpatialReferencePhotoCapabilityPolicy.actions(photoCount: 1) ==
+                [.captureReferencePhoto, .retakeReferencePhoto, .saveReference, .cancel]
+        )
+        #expect(
+            SpatialReferencePhotoCapabilityPolicy.actions(photoCount: 2) ==
+                [.retakeReferencePhoto, .saveReference, .cancel]
+        )
+        #expect(SpatialReferenceThumbnailLayout(photoCount: 1) == .singleHero)
+        #expect(SpatialReferenceThumbnailLayout(photoCount: 2) == .verticalPair)
     }
 
     @Test("direction handle keeps one fixed radius anywhere the scene is touched")
@@ -396,13 +440,15 @@ struct SpatialGuidanceTests {
         }
     }
 
-    @Test("tripod visualization hides the captured wireframe after scene definition")
+    @Test("wireframe returns only for the final contextual tripod photos")
     func tripodVisualizationHidesWireframe() {
         #expect(SpatialMeshVisibilityPolicy.showsWireframe(during: .mapping))
         #expect(SpatialMeshVisibilityPolicy.showsWireframe(during: .reviewingScene))
         #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .selectingTripodBase))
         #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .tripodBaseSelected))
         #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .selectingTripodDirection))
+        #expect(SpatialMeshVisibilityPolicy.showsWireframe(during: .capturingReferencePhotos))
+        #expect(SpatialMeshVisibilityPolicy.showsWireframe(during: .readyToMount))
         #expect(!SpatialMeshVisibilityPolicy.showsWireframe(during: .positioning))
     }
 
@@ -633,6 +679,30 @@ struct SpatialGuidanceTests {
         #expect(try SpatialReferenceStore(projectDirectory: current.directoryURL).load() == imported)
     }
 
+    @Test("manual tripod photos persist separately from mapping keyframes and survive reuse")
+    func manualReferencePhotosPersist() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeSpatialPhotos-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let sourceStore = SpatialReferenceStore(projectDirectory: root.appendingPathComponent("source"))
+        let targetStore = SpatialReferenceStore(projectDirectory: root.appendingPathComponent("target"))
+        let keyframes = [Data("mapping-one".utf8)]
+        let photos = [Data("hero".utf8), Data("context".utf8)]
+
+        try sourceStore.save(
+            manifest: makeManifest(id: UUID(), createdAt: .now),
+            worldMapData: Data("map".utf8),
+            keyframes: keyframes,
+            thumbnailImages: photos
+        )
+        let source = try #require(try sourceStore.load())
+        let imported = try targetStore.importReference(source)
+
+        #expect(source.keyframes == keyframes)
+        #expect(source.thumbnailImages == photos)
+        #expect(imported.thumbnailImages == photos)
+    }
+
     @Test("current, legacy, empty, and unsupported-newer documents are explicit")
     func storeCompatibility() throws {
         let directory = FileManager.default.temporaryDirectory
@@ -648,6 +718,7 @@ struct SpatialGuidanceTests {
             keyframes: [Data("compatibility-frame".utf8)]
         )
         #expect(try store.load()?.manifest.schemaVersion == SpatialReferenceManifest.currentSchemaVersion)
+        #expect(try store.load()?.thumbnailImages.isEmpty == true)
 
         let manifestURL = directory
             .appendingPathComponent("spatial_reference", isDirectory: true)
