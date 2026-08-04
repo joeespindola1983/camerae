@@ -214,6 +214,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     case tripodDirectionSelected
     case capturingReferencePhotos
     case readyToMount
+    case reviewingReference
     case saving
     case saved
     case relocalizing
@@ -234,7 +235,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
         case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene,
              .selectingTripodBase, .tripodBaseSelected, .readyToMount,
              .selectingTripodDirection, .tripodDirectionSelected,
-             .capturingReferencePhotos,
+             .capturingReferencePhotos, .reviewingReference,
              .relocalizing, .positioning, .aligned:
             true
         default:
@@ -264,8 +265,10 @@ enum SpatialGuidancePhase: Equatable, Sendable {
             .tripodDirectionSelected
         case .capturingReferencePhotos:
             .capturingReferencePhotos
-        case .readyToMount, .saving:
+        case .readyToMount:
             .readyToMount
+        case .reviewingReference, .saving:
+            .reviewingReference
         case .saved:
             .referenceSaved
         case .relocalizing:
@@ -294,6 +297,8 @@ enum SpatialGuidanceEvent: Equatable, Sendable {
     case confirmTripodDirection
     case referencePhotoCaptured
     case referencePhotoRemoved
+    case reviewReference
+    case goBack
     case beginSaving
     case referenceSaved
     case startRelocalization
@@ -335,8 +340,14 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
         case (.capturingReferencePhotos, .referencePhotoCaptured),
              (.readyToMount, .referencePhotoCaptured): .readyToMount
         case (.readyToMount, .referencePhotoRemoved): .capturingReferencePhotos
-        case (.readyToMount, .beginSaving): .saving
-        case (.readyToMount, .referenceSaved), (.saving, .referenceSaved): .saved
+        case (.readyToMount, .reviewReference): .reviewingReference
+        case (.selectingTripodDirection, .goBack),
+             (.tripodDirectionSelected, .goBack): .tripodBaseSelected
+        case (.capturingReferencePhotos, .goBack),
+             (.readyToMount, .goBack): .tripodDirectionSelected
+        case (.reviewingReference, .goBack): .readyToMount
+        case (.reviewingReference, .beginSaving): .saving
+        case (.reviewingReference, .referenceSaved), (.saving, .referenceSaved): .saved
         case (.idle, .startRelocalization),
              (.saved, .startRelocalization),
              (.failed, .startRelocalization): .relocalizing
@@ -351,6 +362,54 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
             throw SpatialGuidanceTransitionError.invalid(phase: phase, event: event)
         }
         phase = next
+    }
+}
+
+enum SpatialGuidanceCreationStep: Int, CaseIterable, Hashable, Sendable {
+    case map
+    case position
+    case reference
+    case finish
+
+    var title: String {
+        switch self {
+        case .map: "Mapa"
+        case .position: "Posição"
+        case .reference: "Referência"
+        case .finish: "Finalizar"
+        }
+    }
+
+    var number: Int { rawValue + 1 }
+}
+
+struct SpatialGuidanceCreationProgress: Equatable, Sendable {
+    let activeStep: SpatialGuidanceCreationStep
+    let completedSteps: Set<SpatialGuidanceCreationStep>
+
+    init(phase: SpatialGuidancePhase) {
+        let resolvedActiveStep: SpatialGuidanceCreationStep = switch phase {
+        case .selectingTripodBase, .tripodBaseSelected,
+             .selectingTripodDirection, .tripodDirectionSelected:
+            .position
+        case .capturingReferencePhotos, .readyToMount:
+            .reference
+        case .reviewingReference, .saving, .saved:
+            .finish
+        default:
+            .map
+        }
+        activeStep = resolvedActiveStep
+
+        if phase == .saved {
+            completedSteps = Set(SpatialGuidanceCreationStep.allCases)
+        } else {
+            completedSteps = Set(
+                SpatialGuidanceCreationStep.allCases.filter {
+                    $0.rawValue < resolvedActiveStep.rawValue
+                }
+            )
+        }
     }
 }
 
@@ -1148,6 +1207,7 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
     case tripodDirectionSelected
     case capturingReferencePhotos
     case readyToMount
+    case reviewingReference
     case relocalizing
     case positioning
     case aligned
@@ -1176,6 +1236,7 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case confirmTripodDirection
     case captureReferencePhoto
     case retakeReferencePhoto
+    case goBack
     case openCamera
     case completeNavigation
     case cancel
@@ -1201,13 +1262,15 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
         case .tripodBaseSelected:
             [.adjustTripodBase, .confirmTripodBase, .cancel]
         case .selectingTripodDirection:
-            [.selectTripodDirection, .cancel]
+            [.selectTripodDirection, .goBack, .cancel]
         case .tripodDirectionSelected:
-            [.adjustTripodDirection, .confirmTripodDirection, .cancel]
+            [.adjustTripodDirection, .confirmTripodDirection, .goBack, .cancel]
         case .capturingReferencePhotos:
-            [.captureReferencePhoto, .cancel]
+            [.captureReferencePhoto, .goBack, .cancel]
         case .readyToMount:
-            [.captureReferencePhoto, .retakeReferencePhoto, .saveReference, .cancel]
+            [.captureReferencePhoto, .retakeReferencePhoto, .reviewReference, .goBack, .cancel]
+        case .reviewingReference:
+            [.saveReference, .goBack, .cancel]
         case .relocalizing:
             [.cancel]
         case .positioning:

@@ -466,7 +466,9 @@ struct CameraView: View {
     private func toggleAstroCapture() async {
         guard !camera.isCaptureStarting else { return }
         let isRunning = camera.isTimelapseRunning || camera.isVideoRecording
-        if !isRunning, !bypassFocusPreflightOnce {
+        if !isRunning,
+           CameraCaptureFocusRequirementPolicy.requiresPreflight(for: captureKind),
+           !bypassFocusPreflightOnce {
             pendingCaptureAfterFocus = true
             guard await verifyFocus(at: nil) else { return }
             pendingCaptureAfterFocus = false

@@ -54,6 +54,12 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Spatial Guidance now presents four named creation steps, visually separates
+  reference capture from final review, and lets users return to confirmed
+  tripod choices without repeating the scene map.
+- The custom sharpness preflight is temporarily disabled after field testing;
+  capture continues to use the camera's native continuous autofocus without a
+  blocking confirmation overlay.
 - Repeatable project hardware now becomes immutable only after the first photo,
   frame, or clip is actually recorded; empty attempts keep lens selection open.
 - Project catalogs now default to stable creation/shot order instead of moving

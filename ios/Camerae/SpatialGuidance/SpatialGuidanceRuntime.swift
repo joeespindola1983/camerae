@@ -448,6 +448,30 @@ final class SpatialGuidanceSessionModel: NSObject, ObservableObject {
         updateWireframeVisibility()
     }
 
+    var canGoBack: Bool {
+        switch phase {
+        case .selectingTripodDirection, .tripodDirectionSelected,
+             .capturingReferencePhotos, .readyToMount, .reviewingReference:
+            true
+        default:
+            false
+        }
+    }
+
+    func goBack() {
+        guard canGoBack else { return }
+        try? machine.send(.goBack)
+        phase = machine.phase
+        updateWireframeVisibility()
+    }
+
+    func reviewReference() {
+        guard phase == .readyToMount, !referencePhotos.isEmpty else { return }
+        try? machine.send(.reviewReference)
+        phase = machine.phase
+        updateWireframeVisibility()
+    }
+
     func captureReferencePhoto() {
         guard phase == .capturingReferencePhotos || phase == .readyToMount,
               referencePhotos.count < SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount,

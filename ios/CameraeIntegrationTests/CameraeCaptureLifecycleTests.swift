@@ -106,7 +106,7 @@ struct CameraeCaptureLifecycleTests {
         #expect(bgraScore > 0.1)
     }
 
-    @Test func uncertainFocusKeepsEveryRecoveryActionReachable() {
+    @Test func customFocusPreflightStaysDisabledWhileNativeAutofocusRemainsAvailable() {
         #expect(
             CameraFocusRecoveryCapabilityPolicy.actions(for: .needsUserFocus) ==
                 [.tapToFocus, .retryAutomaticFocus, .captureAnyway]
@@ -114,7 +114,7 @@ struct CameraeCaptureLifecycleTests {
         #expect(CameraFocusRecoveryCapabilityPolicy.actions(for: .checking) == [])
         #expect(
             RepeatableCaptureKind.captureOptions.allSatisfy {
-                CameraCaptureFocusRequirementPolicy.requiresPreflight(for: $0)
+                !CameraCaptureFocusRequirementPolicy.requiresPreflight(for: $0)
             }
         )
     }
