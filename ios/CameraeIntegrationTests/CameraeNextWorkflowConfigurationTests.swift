@@ -18,7 +18,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(configuration.referenceOpacity == 0.5)
     }
 
-    @Test("project hardware stays fixed while each capture type keeps editable defaults")
+    @Test("project hardware stays provisional until captured media confirms the contract")
     func projectHardwareLockAndCaptureTypeDefaults() throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("CameraeCaptureDefaults-\(UUID().uuidString)", isDirectory: true)
@@ -38,21 +38,46 @@ struct CameraeNextWorkflowConfigurationTests {
         laterTimelapse.cameraZoomFactor = 1
 
         let first = try store.saveDefaults(initialVideo)
-        let second = try store.saveDefaults(laterTimelapse)
-        let profile = try #require(try store.loadProfile())
+        let provisional = try store.saveDefaults(laterTimelapse)
+        let provisionalProfile = try #require(try store.loadProfile())
 
         #expect(first == initialVideo)
-        #expect(second.repeatableKind == .timelapse)
-        #expect(second.durationMinutes == 15)
-        #expect(second.intervalSeconds == 3)
-        #expect(second.cameraLens == .telephoto)
-        #expect(second.cameraZoomFactor == 2)
-        #expect(profile.hardware == .init(cameraLens: .telephoto, cameraZoomFactor: 2))
+        #expect(provisional.repeatableKind == .timelapse)
+        #expect(provisional.durationMinutes == 15)
+        #expect(provisional.intervalSeconds == 3)
+        #expect(provisional.cameraLens == .wide)
+        #expect(provisional.cameraZoomFactor == 1)
+        #expect(!provisionalProfile.isHardwareLocked)
+        #expect(provisionalProfile.hardware == .init(cameraLens: .wide, cameraZoomFactor: 1))
+
+        let firstCapture = makeLegacySummary(
+            directory: directory,
+            kind: .timelapse,
+            frameCount: 1,
+            duration: 0,
+            lens: .wide,
+            zoom: 1,
+            fileExtension: "heic"
+        )
+        let lockedProfile = try #require(
+            try store.loadProfileOrMigrate(module: .repeatable, summaries: [firstCapture])
+        )
+        var laterPhoto = CameraeNextCaptureConfiguration.repeatableDefault
+        laterPhoto.repeatableKind = .photo
+        laterPhoto.cameraLens = .telephoto
+        laterPhoto.cameraZoomFactor = 2
+        let normalizedPhoto = try store.saveDefaults(laterPhoto)
+        let profile = try #require(try store.loadProfile())
+
+        #expect(lockedProfile.isHardwareLocked)
+        #expect(normalizedPhoto.cameraLens == .wide)
+        #expect(normalizedPhoto.cameraZoomFactor == 1)
+        #expect(profile.hardware == .init(cameraLens: .wide, cameraZoomFactor: 1))
         #expect(profile.configuration(for: .video).videoSettings == initialVideo.videoSettings)
         #expect(profile.configuration(for: .video).videoDurationSeconds == 120)
         #expect(profile.configuration(for: .timelapse).intervalSeconds == 3)
         #expect(profile.configuration(for: .photo).repeatableKind == .photo)
-        #expect(profile.selectedKind == .timelapse)
+        #expect(profile.selectedKind == .photo)
     }
 
     @Test("captured legacy projects migrate once into hardware plus per-type defaults")
@@ -85,6 +110,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(migrated.cameraZoomFactor == 2)
         #expect(migrated.sourceFormat == .jpeg)
         let migratedProfile = try #require(try store.loadProfile())
+        #expect(migratedProfile.isHardwareLocked)
         #expect(migratedProfile.hardware.cameraLens == .telephoto)
         #expect(migratedProfile.hardware.cameraZoomFactor == 2)
         #expect(migratedProfile.configuration(for: .photo).repeatableKind == .photo)
@@ -136,6 +162,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(migrated.configuration(for: .photo).repeatableKind == .photo)
         #expect(migrated.configuration(for: .video).repeatableKind == .video)
         #expect(migrated.configuration(for: .timelapse).repeatableKind == .timelapse)
+        #expect(!migrated.isHardwareLocked)
         #expect(try store.loadProfile() == migrated)
 
         try writeConfigurationDocument(
@@ -146,6 +173,42 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(throws: ProjectCaptureConfigurationError.unsupportedSchema(99)) {
             try store.load()
         }
+    }
+
+    @Test("schema three hardware migrates from provisional to captured state exactly once")
+    func schemaThreeHardwareLockMigration() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeConfigurationSchemaThree-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fileURL = directory.appendingPathComponent("capture_configuration.json")
+        let store = ProjectCaptureConfigurationStore(projectDirectory: directory)
+        var configuration = CameraeNextCaptureConfiguration.repeatableDefault
+        configuration.cameraLens = .telephoto
+        let legacyProfile = ProjectCaptureProfile(initialConfiguration: configuration)
+
+        try writeProfileDocument(schemaVersion: 3, profile: legacyProfile, to: fileURL)
+        let emptyMigration = try #require(
+            try store.loadProfileOrMigrate(module: .repeatable, summaries: [])
+        )
+        #expect(!emptyMigration.isHardwareLocked)
+
+        try writeProfileDocument(schemaVersion: 3, profile: legacyProfile, to: fileURL)
+        let captured = makeLegacySummary(
+            directory: directory,
+            kind: .timelapse,
+            frameCount: 1,
+            duration: 0,
+            lens: .ultraWide,
+            zoom: 1,
+            fileExtension: "heic"
+        )
+        let capturedMigration = try #require(
+            try store.loadProfileOrMigrate(module: .repeatable, summaries: [captured])
+        )
+        #expect(capturedMigration.isHardwareLocked)
+        #expect(capturedMigration.hardware.cameraLens == .ultraWide)
+        #expect(try store.loadProfile() == capturedMigration)
     }
 
     @Test(
@@ -225,6 +288,25 @@ struct CameraeNextWorkflowConfigurationTests {
         let document: [String: Any] = [
             "schemaVersion": schemaVersion,
             "configuration": configurationObject
+        ]
+        try JSONSerialization.data(withJSONObject: document)
+            .write(to: fileURL, options: .atomic)
+    }
+
+    private func writeProfileDocument(
+        schemaVersion: Int,
+        profile: ProjectCaptureProfile,
+        to fileURL: URL
+    ) throws {
+        let profileData = try JSONEncoder().encode(profile)
+        var profileObject = try #require(
+            JSONSerialization.jsonObject(with: profileData) as? [String: Any]
+        )
+        profileObject.removeValue(forKey: "isHardwareLocked")
+        let document: [String: Any] = [
+            "schemaVersion": schemaVersion,
+            "origin": "updatedDefaults",
+            "profile": profileObject
         ]
         try JSONSerialization.data(withJSONObject: document)
             .write(to: fileURL, options: .atomic)

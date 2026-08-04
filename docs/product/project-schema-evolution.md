@@ -18,17 +18,20 @@ fallback rules.
 `capture_configuration.json` separates the immutable hardware contract from
 editable defaults for each capture type.
 
-- New captured projects lock the physical camera lens and zoom selected for the
-  first capture.
+- New projects keep camera hardware provisional while the user previews lenses.
+  The physical camera lens and zoom become immutable only after the first
+  capture produces media; an empty attempt does not establish a contract.
 - Photo, Timelapse, and Video each keep an independent editable preset. Starting
   a capture updates only that type's preset and makes it the next preselected
   type.
 - Captured legacy projects without the document infer recoverable fields from
   their earliest captured session and persist them once with origin
   `migratedLegacy`.
-- Schema 1 and 2 configuration documents migrate idempotently to the schema 3
-  profile. Their original configuration becomes the matching type preset while
-  deterministic defaults populate the other two types.
+- Schema 1 and 2 configuration documents migrate idempotently to the current
+  profile. Schema 3 profiles infer whether their stored hardware was provisional
+  or confirmed from actual captured sessions. Their original configuration
+  becomes the matching type preset while deterministic defaults populate the
+  other two types.
 - Empty legacy projects remain configurable because no capture contract exists.
 - Later sessions cannot replace the hardware contract, but may update their own
   capture-type defaults.

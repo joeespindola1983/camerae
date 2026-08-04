@@ -264,7 +264,9 @@ struct CameraeNextWorkflowConfigurationView: View {
         .init(configuration: configuration)
     }
     private var cameraSetupPresentation: CameraeNextCameraSetupPresentation {
-        let hardware = projectCaptureProfile?.hardware
+        let hardware = projectCaptureProfile.flatMap { profile in
+            profile.isHardwareLocked ? profile.hardware : nil
+        }
         return .init(
             module: project.module,
             availableLenses: availableLenses,
@@ -420,8 +422,8 @@ struct CameraeNextWorkflowConfigurationView: View {
         } message: {
             Text(configurationErrorMessage ?? "")
         }
-        .onAppear(perform: synchronizeReference)
-        .onChange(of: referenceRefreshID) { _, _ in synchronizeReference() }
+        .onAppear(perform: synchronizeProjectState)
+        .onChange(of: referenceRefreshID) { _, _ in synchronizeProjectState() }
     }
 
     private var primaryActionTitle: String {
@@ -796,6 +798,25 @@ struct CameraeNextWorkflowConfigurationView: View {
 
     private func synchronizeReference() {
         referenceURL = referenceStore.firstReferenceFrameURL()
+    }
+
+    private func synchronizeProjectState() {
+        synchronizeReference()
+        do {
+            guard let profile = try captureConfigurationStore.loadProfileOrMigrate(
+                module: project.module,
+                summaries: referenceStore.sessionSummaries()
+            ) else {
+                return
+            }
+            projectCaptureProfile = profile
+            configuration = profile.selectedConfiguration
+            usesCustomDuration = CameraeNextDurationSelection(
+                configuration: configuration
+            ).selectedValue == 0
+        } catch {
+            configurationErrorMessage = error.localizedDescription
+        }
     }
 
     private func refreshPreflight() async {

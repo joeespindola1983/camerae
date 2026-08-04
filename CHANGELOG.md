@@ -21,9 +21,18 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added an in-preview physical-camera selector to the Repeatable alignment live
+  view so available lenses can be compared before capture.
+
 ### Changed
 
+- Repeatable project hardware now becomes immutable only after the first photo,
+  frame, or clip is actually recorded; empty attempts keep lens selection open.
+
 ### Fixed
+
+- Empty timelapse attempts are now removed cleanly instead of leaving an unused
+  session behind.
 
 ## [9.4.0] - 2026-08-02
 

@@ -258,6 +258,24 @@ struct AppCompositionTests {
         #expect(try store.capturePlan(in: session) == plan)
     }
 
+    @Test("empty capture attempts are discarded without touching sessions that contain media")
+    func emptyCaptureAttemptsAreDiscarded() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeEmptyCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectStore = ProjectStore(rootDirectory: root)
+        let project = try await projectStore.createProject(module: .repeatable, name: "Empty capture")
+        let store = TimelapseSessionStore(project: project)
+        let emptySession = try store.createSession(captureKind: .timelapse, cameraLens: .telephoto)
+        let capturedSession = try store.createSession(captureKind: .timelapse, cameraLens: .wide)
+        _ = try store.saveFrame(Data([1]), in: capturedSession, index: 1, format: .heic)
+
+        #expect(try store.discardSessionIfEmpty(emptySession))
+        #expect(!FileManager.default.fileExists(atPath: emptySession.directoryURL.path))
+        #expect(!(try store.discardSessionIfEmpty(capturedSession)))
+        #expect(FileManager.default.fileExists(atPath: capturedSession.directoryURL.path))
+    }
+
     @Test("a new project reference replaces the previous reference on disk")
     func referenceReplacement() async throws {
         let root = FileManager.default.temporaryDirectory

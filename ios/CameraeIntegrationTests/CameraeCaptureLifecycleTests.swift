@@ -24,4 +24,26 @@ struct CameraeCaptureLifecycleTests {
         #expect(CameraeLocationAuthorizationPolicy.action(for: .denied) == .unavailable)
         #expect(CameraeLocationAuthorizationPolicy.action(for: .restricted) == .unavailable)
     }
+
+    @Test("live view keeps lens testing reachable only while capture is idle")
+    func repeatableLiveViewCapabilityContract() {
+        #expect(
+            RepeatableLiveViewCapabilityPolicy.actions(
+                isCaptureActive: false,
+                availableLensCount: 3
+            ) == [.leave, .switchLens, .startCapture]
+        )
+        #expect(
+            RepeatableLiveViewCapabilityPolicy.actions(
+                isCaptureActive: true,
+                availableLensCount: 3
+            ) == [.stopCapture]
+        )
+        #expect(
+            RepeatableLiveViewCapabilityPolicy.actions(
+                isCaptureActive: false,
+                availableLensCount: 1
+            ) == [.leave, .startCapture]
+        )
+    }
 }

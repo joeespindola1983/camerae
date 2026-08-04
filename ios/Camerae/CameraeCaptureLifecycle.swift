@@ -23,6 +23,29 @@ enum CameraeCaptureLifecycleState: Equatable, Sendable {
     case stopped
 }
 
+enum RepeatableLiveViewCapability: Hashable, Sendable {
+    case leave
+    case switchLens
+    case startCapture
+    case stopCapture
+}
+
+enum RepeatableLiveViewCapabilityPolicy {
+    static func actions(
+        isCaptureActive: Bool,
+        availableLensCount: Int
+    ) -> Set<RepeatableLiveViewCapability> {
+        if isCaptureActive {
+            return [.stopCapture]
+        }
+        var actions: Set<RepeatableLiveViewCapability> = [.leave, .startCapture]
+        if availableLensCount > 1 {
+            actions.insert(.switchLens)
+        }
+        return actions
+    }
+}
+
 struct CameraeCaptureLifecyclePresentation: Equatable, Sendable {
     let title: String?
     let message: String?
