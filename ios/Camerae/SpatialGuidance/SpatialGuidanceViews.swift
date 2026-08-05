@@ -460,10 +460,6 @@ struct SpatialGuidanceFlowView: View {
                 .ignoresSafeArea()
                 .allowsHitTesting(false)
 
-            if showsTripodTargetReticle {
-                tripodTargetReticle
-            }
-
             VStack(spacing: 12) {
                 topBar
                 if case .createReference = mode {
@@ -560,26 +556,6 @@ struct SpatialGuidanceFlowView: View {
         return model.phase.showsLiveCamera
             && model.phase != .saving
             && model.phase != .saved
-    }
-
-    private var showsTripodTargetReticle: Bool {
-        model.phase == .mapping || model.phase == .insufficientCoverage
-    }
-
-    private var tripodTargetReticle: some View {
-        ZStack {
-            Circle()
-                .stroke(CameraeColor.captureForeground.opacity(0.9), lineWidth: 1.5)
-                .frame(width: 54, height: 54)
-            Rectangle()
-                .fill(CameraeColor.captureForeground)
-                .frame(width: 18, height: 1.5)
-            Rectangle()
-                .fill(CameraeColor.captureForeground)
-                .frame(width: 1.5, height: 18)
-        }
-        .accessibilityHidden(true)
-        .allowsHitTesting(false)
     }
 
     private var creationContrastToggle: some View {
@@ -744,7 +720,7 @@ struct SpatialGuidanceFlowView: View {
             case .idle, .initializingMapping:
                 busyPanel(
                     title: "Preparando câmera",
-                    detail: "Iniciando o LiDAR e reconhecendo o chão ao redor do tripé."
+                    detail: "Iniciando o LiDAR e reconhecendo as referências fixas do ambiente."
                 )
             case .readyToStartMapping:
                 mappingStartPanel
@@ -752,9 +728,11 @@ struct SpatialGuidanceFlowView: View {
                 mappingPanel
             case .reviewingScene:
                 busyPanel(
-                    title: "Captura suficiente",
-                    detail: "Preparando a marcação do tripé."
+                    title: "Mapa confiável",
+                    detail: "Salvando as referências fixas antes de inserir o tripé."
                 )
+            case .awaitingTripodPlacement:
+                tripodPlacementPanel
             case .selectingTripodBase:
                 tripodBaseSelectionPanel(hasSelection: false)
             case .tripodBaseSelected:
@@ -797,7 +775,7 @@ struct SpatialGuidanceFlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Pronto para começar")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Confira se o tripé, o chão e os elementos fixos ao redor estão visíveis.")
+            Text("Retire o tripé. Mantenha o chão e elementos fixos ao redor visíveis.")
                 .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Iniciar captura", style: .primary) {
@@ -813,16 +791,34 @@ struct SpatialGuidanceFlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             SpatialProgressCardView(
                 status: model.mappingQuality.canSave ? "MAPA PRONTO" : "MAPEANDO",
-                title: model.mappingQuality.canDefineScene ? "Captura suficiente" : "Circule o tripé",
+                title: hasLowReferenceGeometry ? "Poucas referências" : "Buscando referências",
                 detail: missingRequirementsDescription,
                 progress: model.mappingQuality.progress,
-                tone: model.mappingQuality.canDefineScene ? .success : .accent
+                tone: model.mappingQuality.canSave ? .success : .accent
             )
-            Text("Mantenha o centro do tripé dentro da mira enquanto circula. Ao atingir o mínimo confiável, posicionamos o ponto automaticamente.")
+            Text("Inclua bordas, paredes e objetos fixos em diferentes distâncias.")
                 .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
             captureAction(title: "Reiniciar local", style: .secondary) {
                 model.restartLocalCapture()
+            }
+        }
+    }
+
+    private var tripodPlacementPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(label: "AMBIENTE RECONHECIDO", tone: .success)
+            Text("Agora posicione o tripé")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            SpatialProgressCardView(
+                status: "MAPA CONCLUÍDO",
+                title: "Mapa concluído",
+                detail: "Coloque o tripé na cena e confirme quando estiver pronto.",
+                progress: 1,
+                tone: .success
+            )
+            captureAction(title: "Tripé posicionado", style: .primary) {
+                model.confirmTripodPlaced()
             }
         }
     }
@@ -836,9 +832,7 @@ struct SpatialGuidanceFlowView: View {
             Text(hasSelection ? "Confira o centro" : "Toque no centro do tripé")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
             Text(
-                model.tripodAlignmentWasSuggested
-                    ? "Estimamos o centro pelo percurso e validamos com a malha disponível. Arraste para corrigir se necessário."
-                    : hasSelection
+                hasSelection
                     ? "Arraste o marcador laranja sobre o chão para corrigir. Ele deve ficar no centro entre as pernas."
                     : "Toque no chão, no centro entre as pernas do tripé. Depois você poderá arrastar para ajustar."
             )
@@ -1099,15 +1093,31 @@ struct SpatialGuidanceFlowView: View {
 
     private var navigationTitle: String {
         switch mode {
-        case .createReference: "Mapeie a cena"
+        case .createReference: "Mapeie o ambiente"
         case .relocalize: "Volte ao mesmo lugar"
         }
+    }
+
+    private var hasLowReferenceGeometry: Bool {
+        let missing = model.mappingQuality.missingRequirements
+        return missing.contains(.geometryVariation)
+            || missing.contains(.featureDistribution)
+            || missing.contains(.parallax)
     }
 
     private var missingRequirementsDescription: String {
         let missing = model.mappingQuality.missingRequirements
         if missing.contains(.tracking) { return "Mova o iPhone mais devagar para recuperar o tracking." }
-        if missing.contains(.coverage) { return "Inclua mais chão e objetos fixos ao redor do tripé." }
+        if missing.contains(.geometryVariation) {
+            return "Cena muito plana. Inclua cantos ou objetos fixos em outras distâncias."
+        }
+        if missing.contains(.featureDistribution) {
+            return "As referências estão concentradas. Mostre outras partes do ambiente."
+        }
+        if missing.contains(.parallax) {
+            return "Caminhe lateralmente para observar as referências de outros ângulos."
+        }
+        if missing.contains(.coverage) { return "Inclua mais chão e objetos fixos ao redor." }
         if missing.contains(.detail) { return "Aproxime-se de superfícies com textura e boa luz." }
         if missing.contains(.keyframes) { return "Continue por mais alguns segundos para registrar referências." }
         return "Cobertura suficiente para definir a cena."

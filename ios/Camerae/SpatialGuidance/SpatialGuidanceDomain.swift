@@ -122,6 +122,9 @@ enum SpatialMappingRequirement: String, CaseIterable, Equatable, Sendable {
     case coverage
     case detail
     case keyframes
+    case featureDistribution
+    case geometryVariation
+    case parallax
 }
 
 struct SpatialMappingMetrics: Equatable, Sendable {
@@ -130,6 +133,9 @@ struct SpatialMappingMetrics: Equatable, Sendable {
     let mappedAreaSquareMeters: Double
     let featurePointCount: Int
     let keyframeCount: Int
+    let featureCellCoverage: Double
+    let featureHeightRangeMeters: Double
+    let cameraTravelDistanceMeters: Double
 }
 
 enum SpatialMappingQualityLevel: Equatable, Sendable {
@@ -164,6 +170,9 @@ enum SpatialMappingQualityEvaluator {
     private static let minimumAreaSquareMeters = 6.0
     private static let minimumFeaturePoints = 900
     private static let minimumKeyframes = 4
+    private static let minimumFeatureCellCoverage = 0.45
+    private static let minimumFeatureHeightRangeMeters = 0.45
+    private static let minimumCameraTravelDistanceMeters = 1.2
 
     static func evaluate(_ metrics: SpatialMappingMetrics) -> SpatialMappingQuality {
         var missing: Set<SpatialMappingRequirement> = []
@@ -172,13 +181,25 @@ enum SpatialMappingQualityEvaluator {
         if metrics.mappedAreaSquareMeters < minimumAreaSquareMeters { missing.insert(.coverage) }
         if metrics.featurePointCount < minimumFeaturePoints { missing.insert(.detail) }
         if metrics.keyframeCount < minimumKeyframes { missing.insert(.keyframes) }
+        if metrics.featureCellCoverage < minimumFeatureCellCoverage {
+            missing.insert(.featureDistribution)
+        }
+        if metrics.featureHeightRangeMeters < minimumFeatureHeightRangeMeters {
+            missing.insert(.geometryVariation)
+        }
+        if metrics.cameraTravelDistanceMeters < minimumCameraTravelDistanceMeters {
+            missing.insert(.parallax)
+        }
 
         let scores = [
             min(metrics.elapsedSeconds / minimumDuration, 1),
             metrics.trackingIsNormal ? 1 : 0,
             min(metrics.mappedAreaSquareMeters / minimumAreaSquareMeters, 1),
             min(Double(metrics.featurePointCount) / Double(minimumFeaturePoints), 1),
-            min(Double(metrics.keyframeCount) / Double(minimumKeyframes), 1)
+            min(Double(metrics.keyframeCount) / Double(minimumKeyframes), 1),
+            min(metrics.featureCellCoverage / minimumFeatureCellCoverage, 1),
+            min(metrics.featureHeightRangeMeters / minimumFeatureHeightRangeMeters, 1),
+            min(metrics.cameraTravelDistanceMeters / minimumCameraTravelDistanceMeters, 1)
         ]
         let progress = scores.reduce(0, +) / Double(scores.count)
         return SpatialMappingQuality(
@@ -190,6 +211,9 @@ enum SpatialMappingQualityEvaluator {
                 && metrics.mappedAreaSquareMeters >= 2
                 && metrics.featurePointCount >= 500
                 && metrics.keyframeCount >= 3
+                && metrics.featureCellCoverage >= 0.30
+                && metrics.featureHeightRangeMeters >= 0.30
+                && metrics.cameraTravelDistanceMeters >= 0.8
         )
     }
 }
@@ -208,6 +232,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     case mapping
     case insufficientCoverage
     case reviewingScene
+    case awaitingTripodPlacement
     case selectingTripodBase
     case tripodBaseSelected
     case selectingTripodDirection
@@ -233,6 +258,7 @@ enum SpatialGuidancePhase: Equatable, Sendable {
     var showsLiveCamera: Bool {
         switch self {
         case .readyToStartMapping, .mapping, .insufficientCoverage, .reviewingScene,
+             .awaitingTripodPlacement,
              .selectingTripodBase, .tripodBaseSelected, .readyToMount,
              .selectingTripodDirection, .tripodDirectionSelected,
              .capturingReferencePhotos, .reviewingReference,
@@ -255,6 +281,8 @@ enum SpatialGuidancePhase: Equatable, Sendable {
             .insufficientCoverage
         case .reviewingScene:
             .reviewingScene
+        case .awaitingTripodPlacement:
+            .awaitingTripodPlacement
         case .selectingTripodBase:
             .selectingTripodBase
         case .tripodBaseSelected:
@@ -291,6 +319,7 @@ enum SpatialGuidanceEvent: Equatable, Sendable {
     case beginSceneCapture
     case mappingEvaluated(SpatialMappingQualityLevel)
     case freezeScene
+    case tripodPlaced
     case tripodBaseSelected
     case confirmTripodBase
     case tripodDirectionSelected
@@ -326,11 +355,10 @@ struct SpatialGuidanceStateMachine: Equatable, Sendable {
              (.insufficientCoverage, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.mapping, .mappingEvaluated(.ready)),
              (.insufficientCoverage, .mappingEvaluated(.ready)): .reviewingScene
-        case (.mapping, .freezeScene),
-             (.insufficientCoverage, .freezeScene): .selectingTripodBase
         case (.reviewingScene, .mappingEvaluated(.insufficient)): .insufficientCoverage
         case (.reviewingScene, .mappingEvaluated(.ready)): .reviewingScene
-        case (.reviewingScene, .freezeScene): .selectingTripodBase
+        case (.reviewingScene, .freezeScene): .awaitingTripodPlacement
+        case (.awaitingTripodPlacement, .tripodPlaced): .selectingTripodBase
         case (.selectingTripodBase, .tripodBaseSelected),
              (.tripodBaseSelected, .tripodBaseSelected): .tripodBaseSelected
         case (.tripodBaseSelected, .confirmTripodBase): .selectingTripodDirection
@@ -389,7 +417,8 @@ struct SpatialGuidanceCreationProgress: Equatable, Sendable {
 
     init(phase: SpatialGuidancePhase) {
         let resolvedActiveStep: SpatialGuidanceCreationStep = switch phase {
-        case .selectingTripodBase, .tripodBaseSelected,
+        case .awaitingTripodPlacement,
+             .selectingTripodBase, .tripodBaseSelected,
              .selectingTripodDirection, .tripodDirectionSelected:
             .position
         case .capturingReferencePhotos, .readyToMount:
@@ -1201,6 +1230,7 @@ enum SpatialGuidanceVisualState: Equatable, Sendable {
     case mapping
     case insufficientCoverage
     case reviewingScene
+    case awaitingTripodPlacement
     case selectingTripodBase
     case tripodBaseSelected
     case selectingTripodDirection
@@ -1228,6 +1258,7 @@ enum SpatialGuidanceAction: Equatable, Sendable {
     case saveReference
     case defineScene
     case continueMapping
+    case confirmTripodPlaced
     case selectTripodBase
     case adjustTripodBase
     case confirmTripodBase
@@ -1256,7 +1287,9 @@ enum SpatialGuidanceInterfaceCapabilityPolicy {
         case .mapping, .insufficientCoverage:
             [.cancel]
         case .reviewingScene:
-            [.defineScene, .continueMapping, .cancel]
+            [.cancel]
+        case .awaitingTripodPlacement:
+            [.confirmTripodPlaced, .cancel]
         case .selectingTripodBase:
             [.selectTripodBase, .cancel]
         case .tripodBaseSelected:

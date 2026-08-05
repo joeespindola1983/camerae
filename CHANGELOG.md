@@ -23,6 +23,11 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Spatial Guidance now maps and validates the fixed environment before asking
+  for the tripod, rejects overly flat or poorly distributed scene evidence,
+  and saves a clean world map that does not depend on the tripod for later
+  recognition.
+
 ### Fixed
 
 ## [9.5.0] - 2026-08-04

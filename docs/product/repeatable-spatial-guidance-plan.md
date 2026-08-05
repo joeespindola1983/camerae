@@ -4,8 +4,8 @@
 
 - Product name: **Spatial Guidance** in design and code; **Guia espacial**
   in Portuguese user-facing copy.
-- Implementation status: local evaluation branch
-  `codex/repeatable-spatial-guide`; not promoted to QA or a release branch.
+- Implementation status: active product branch
+  `codex/figma-ios-android-parity-audit`; not promoted to QA or a release branch.
 - Initial module: Repeatable.
 - Future module: Astro, enabled by capability policy rather than a separate
   implementation.
@@ -19,9 +19,9 @@
 
 Help a person return the tripod base to a previously recorded physical point
 and recover its intended horizontal orientation. The first visit saves an
-ARKit world map, a compact center anchor, and a second point in front of the
-tripod. A later visit relocalizes into that map and displays the center plus a
-direction line on the ground.
+ARKit world map of the fixed environment plus a base coordinate and a second
+point in front of the tripod. A later visit relocalizes into that clean map and
+displays the center plus a direction line on the ground.
 
 Spatial Guidance is scene navigation, not camera alignment. Lens framing,
 rotation, height, and post-capture registration remain responsibilities of the
@@ -36,11 +36,11 @@ The first release provides:
    textual fallback and later access from the Tripod tab.
 3. A project-level **Tripod** tab that exists only when Spatial Guidance is
    available on the current device.
-4. A guided first-visit scan around a stationary tripod and static surroundings.
+4. A guided first-visit scan of the fixed environment with the tripod removed.
 5. Explicit mapping-quality feedback followed by automatic capture completion
    as soon as the minimum trustworthy contract is met.
-6. A positioning step in which the tripod-base center is selected and
-   confirmed.
+6. A separate positioning step that asks the person to place the tripod only
+   after the clean environment map is frozen, then select and confirm its base.
 7. A direction step initialized automatically from the operator viewpoint. Its
    45-centimeter handle may be rotated by touching or dragging across any mapped
    scene surface before saving.
@@ -82,37 +82,38 @@ The first release provides:
    **Start capture** resets tracking, anchors, metrics, and guide images before
    collection begins. **Restart location** returns to the same clean checkpoint.
 5. Initial operational guidance asks the person to:
-   - keep the tripod stationary;
-   - walk slowly around it;
-   - include the ground and distinctive static surroundings;
+   - remove the tripod from the scene;
+   - walk slowly through the environment;
+   - include the ground, edges, walls, and distinctive static surroundings at
+     different distances;
    - avoid people, moving vehicles, and rapid camera motion.
 6. The app starts world tracking, scene depth, and scene reconstruction.
 7. A pure quality evaluator combines:
    - normal camera tracking;
    - suitable world-mapping status;
    - minimum elapsed scan time;
-   - angular coverage around the target;
-   - detected floor;
-   - minimum mapped volume;
+   - spatial distribution of feature points;
+   - vertical geometry variation, rejecting grass-only and flat-floor scenes;
+   - camera travel/parallax;
+   - detected floor and minimum mapped area;
    - acceptable thermal state.
-8. As soon as the minimum trustworthy quality contract is satisfied, the app
-   freezes the reconstructed scene and advances automatically. Suggested
-   coverage is not required, preventing an arbitrarily large scene from
-   blocking the flow.
-9. The person taps the center between the tripod legs and may drag the marker
+8. As soon as the trustworthy quality contract is satisfied, the app archives
+   the environment-only world map and freezes the reconstructed scene. The
+   tripod is intentionally absent from this relocalization evidence.
+9. The app asks the person to place the tripod and explicitly confirm that it
+   is ready. The person then taps the center between the tripod legs and may drag the marker
    over the detected floor to correct it.
-10. The app estimates tripod height from reconstructed vertices close to the
-   confirmed base, then searches a narrow band above the floor for three
-   independent solid angular clusters. Those clusters become individual feet
-   connected to the central hub. If three feet are not supported, it falls back
-   to a one-meter standard mesh with conservative opening.
+10. Because the frozen reconstruction intentionally excludes the tripod, the
+   app renders its standard axis at the manually confirmed base instead of
+   inferring dimensions from unrelated environment geometry.
 11. The app proposes an initial direction from the tripod toward the operator.
    The person may touch or drag across any reconstructed surface to rotate its
    fixed 45-centimeter handle. An arrow from the center provides explicit
    orientation while its visual length remains stable.
 12. Only after center and direction are confirmed does the app enable saving.
-13. The app records the tripod-base anchor, direction anchor, estimated height, device, lens,
-   zoom, orientation, and guide images.
+13. The app records the base and direction coordinates in the manifest together
+   with estimated height, device, lens, zoom, orientation, and guide images. It
+   does not recapture the world map after the tripod enters the scene.
 14. The store writes a candidate bundle, validates it, and publishes it
    atomically. Its final guide screenshot becomes the visual reference in the
    Tripod tab.
@@ -126,8 +127,8 @@ The first release provides:
    relocalizing.
 5. The navigation guide appears only after:
    - tracking returns to normal;
-   - the saved target anchor is restored;
-   - the base anchor is restored.
+   - the environment-only world map is restored;
+   - the saved base coordinates can be rendered in that coordinate system.
 6. The person positions and mounts the tripod.
 7. The person positions the center of the tripod base over the point, rotates
    the camera to follow the direction line, and concludes navigation when
@@ -213,7 +214,7 @@ The version-one manifest records:
 - optional detected tripod foot points;
 - optional mesh, tripod, and camera RGBA appearance;
 - optional legacy camera transform for forward decoding of existing references;
-- anchor identifiers;
+- base and direction coordinates in the clean world-map coordinate system;
 - world-map filename;
 - guide-image filenames;
 - mapping-quality evidence.

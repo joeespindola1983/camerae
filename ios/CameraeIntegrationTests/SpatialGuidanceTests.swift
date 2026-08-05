@@ -113,7 +113,10 @@ struct SpatialGuidanceTests {
                 trackingIsNormal: true,
                 mappedAreaSquareMeters: 3.8,
                 featurePointCount: 420,
-                keyframeCount: 2
+                keyframeCount: 2,
+                featureCellCoverage: 0.22,
+                featureHeightRangeMeters: 0.18,
+                cameraTravelDistanceMeters: 0.55
             )
         )
         let ready = SpatialMappingQualityEvaluator.evaluate(
@@ -122,7 +125,10 @@ struct SpatialGuidanceTests {
                 trackingIsNormal: true,
                 mappedAreaSquareMeters: 8.2,
                 featurePointCount: 1_350,
-                keyframeCount: 5
+                keyframeCount: 5,
+                featureCellCoverage: 0.72,
+                featureHeightRangeMeters: 1.4,
+                cameraTravelDistanceMeters: 2.1
             )
         )
 
@@ -132,6 +138,46 @@ struct SpatialGuidanceTests {
         #expect(ready.level == .ready)
         #expect(ready.canSave)
         #expect(ready.progress == 1)
+    }
+
+    @Test("many points on a flat surface do not make a trustworthy map")
+    func flatSurfaceQualityGate() {
+        let flat = SpatialMappingQualityEvaluator.evaluate(
+            .init(
+                elapsedSeconds: 28,
+                trackingIsNormal: true,
+                mappedAreaSquareMeters: 8.2,
+                featurePointCount: 1_650,
+                keyframeCount: 5,
+                featureCellCoverage: 0.76,
+                featureHeightRangeMeters: 0.12,
+                cameraTravelDistanceMeters: 2.0
+            )
+        )
+
+        #expect(flat.level == .insufficient)
+        #expect(flat.missingRequirements.contains(.geometryVariation))
+        #expect(!flat.canDefineScene)
+    }
+
+    @Test("concentrated features and insufficient parallax remain actionable blockers")
+    func distributedFeatureQualityGate() {
+        let concentrated = SpatialMappingQualityEvaluator.evaluate(
+            .init(
+                elapsedSeconds: 28,
+                trackingIsNormal: true,
+                mappedAreaSquareMeters: 8.2,
+                featurePointCount: 1_650,
+                keyframeCount: 5,
+                featureCellCoverage: 0.18,
+                featureHeightRangeMeters: 1.2,
+                cameraTravelDistanceMeters: 0.35
+            )
+        )
+
+        #expect(concentrated.missingRequirements.contains(.featureDistribution))
+        #expect(concentrated.missingRequirements.contains(.parallax))
+        #expect(!concentrated.canSave)
     }
 
     @Test("the minimum trustworthy mapping threshold advances automatically")
@@ -147,7 +193,10 @@ struct SpatialGuidanceTests {
                 trackingIsNormal: true,
                 mappedAreaSquareMeters: 6,
                 featurePointCount: 900,
-                keyframeCount: 4
+                keyframeCount: 4,
+                featureCellCoverage: 0.55,
+                featureHeightRangeMeters: 0.9,
+                cameraTravelDistanceMeters: 1.5
             )
         )
         try machine.send(.mappingEvaluated(ready.level))
@@ -156,7 +205,7 @@ struct SpatialGuidanceTests {
         #expect(machine.phase == .reviewingScene)
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: machine.phase.visualState) ==
-                [.defineScene, .continueMapping, .cancel]
+                [.cancel]
         )
     }
 
@@ -168,7 +217,10 @@ struct SpatialGuidanceTests {
                 trackingIsNormal: true,
                 mappedAreaSquareMeters: 0.4,
                 featurePointCount: 120,
-                keyframeCount: 1
+                keyframeCount: 1,
+                featureCellCoverage: 0.08,
+                featureHeightRangeMeters: 0.08,
+                cameraTravelDistanceMeters: 0.12
             )
         )
         let reviewable = SpatialMappingQualityEvaluator.evaluate(
@@ -177,7 +229,10 @@ struct SpatialGuidanceTests {
                 trackingIsNormal: true,
                 mappedAreaSquareMeters: 2.4,
                 featurePointCount: 620,
-                keyframeCount: 3
+                keyframeCount: 3,
+                featureCellCoverage: 0.42,
+                featureHeightRangeMeters: 0.65,
+                cameraTravelDistanceMeters: 1.0
             )
         )
 
@@ -197,8 +252,9 @@ struct SpatialGuidanceTests {
         #expect(machine.phase == .mapping)
         try machine.send(.mappingEvaluated(.insufficient))
         #expect(machine.phase == .insufficientCoverage)
-        try machine.send(.freezeScene)
-        #expect(machine.phase == .selectingTripodBase)
+        #expect(throws: SpatialGuidanceTransitionError.self) {
+            try machine.send(.freezeScene)
+        }
         try machine.send(.reset)
         try machine.send(.startMapping)
         try machine.send(.mappingSessionReady)
@@ -206,6 +262,8 @@ struct SpatialGuidanceTests {
         try machine.send(.mappingEvaluated(.ready))
         #expect(machine.phase == .reviewingScene)
         try machine.send(.freezeScene)
+        #expect(machine.phase == .awaitingTripodPlacement)
+        try machine.send(.tripodPlaced)
         #expect(machine.phase == .selectingTripodBase)
         try machine.send(.tripodBaseSelected)
         #expect(machine.phase == .tripodBaseSelected)
@@ -256,7 +314,11 @@ struct SpatialGuidanceTests {
         )
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .reviewingScene) ==
-                [.defineScene, .continueMapping, .cancel]
+                [.cancel]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .awaitingTripodPlacement) ==
+                [.confirmTripodPlaced, .cancel]
         )
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .selectingTripodBase) ==
@@ -288,6 +350,7 @@ struct SpatialGuidanceTests {
         try machine.send(.beginSceneCapture)
         try machine.send(.mappingEvaluated(.ready))
         try machine.send(.freezeScene)
+        try machine.send(.tripodPlaced)
         try machine.send(.tripodBaseSelected)
         try machine.send(.confirmTripodBase)
 
@@ -325,6 +388,7 @@ struct SpatialGuidanceTests {
         try machine.send(.beginSceneCapture)
         try machine.send(.mappingEvaluated(.ready))
         try machine.send(.freezeScene)
+        try machine.send(.tripodPlaced)
         try machine.send(.tripodBaseSelected)
         try machine.send(.confirmTripodBase)
         try machine.send(.tripodDirectionSelected)
@@ -349,6 +413,7 @@ struct SpatialGuidanceTests {
         try machine.send(.beginSceneCapture)
         try machine.send(.mappingEvaluated(.ready))
         try machine.send(.freezeScene)
+        try machine.send(.tripodPlaced)
         try machine.send(.tripodBaseSelected)
         try machine.send(.confirmTripodBase)
         try machine.send(.tripodDirectionSelected)

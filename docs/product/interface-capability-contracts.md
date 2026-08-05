@@ -161,6 +161,11 @@ The creation flow must keep these actions reachable:
 
 - start capture only after the first usable AR frame and explicit confirmation;
 - restart the location from a clean tracking state;
+- map fixed environment geometry with the tripod absent;
+- explain whether geometry variation, feature distribution, or camera parallax
+  is blocking a trustworthy map;
+- confirm that the tripod has been positioned only after the environment map
+  is archived;
 - select and adjust the tripod-base center;
 - accept the proposed camera direction or drag its fixed-length handle;
 - save only after both points are confirmed;
@@ -172,9 +177,10 @@ only the tripod, direction, camera marker, and yellow plumb guide; reconstructed
 mesh is not a navigation capability.
 
 The executable contract lives in `CameraeTutorialTests`, `SpatialGuidanceTests`, and
-`CameraeNextSessionCatalogTests`. The current Figma registry begins at
-`682:148` on `05 · Spatial Guidance`; its first-use tutorial screen is
-`695:158`. The reusable tutorial component is `692:104` on
+`CameraeNextSessionCatalogTests`. The current environment-first Figma flow is on
+`05 · Spatial Guidance`: clean-map states include `684:145`, `685:146`, and
+`806:233`; tripod placement begins at `806:5853`, followed by base selection at
+`686:145`. Its first-use tutorial screen is `695:158`. The reusable tutorial component is `692:104` on
 `03 · Workflow Components`.
 
 ## Change checklist
