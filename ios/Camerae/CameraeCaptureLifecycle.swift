@@ -58,7 +58,11 @@ enum CameraFocusRecoveryCapabilityPolicy {
 }
 
 enum CameraCaptureFocusRequirementPolicy {
-    static func requiresPreflight(for _: RepeatableCaptureKind) -> Bool { true }
+    // The custom sharpness gate is temporarily disabled after field testing.
+    // AVCaptureDevice continuous autofocus remains active in CameraController.
+    static let isEnabled = false
+
+    static func requiresPreflight(for _: RepeatableCaptureKind) -> Bool { isEnabled }
 }
 
 enum CameraFocusSharpnessAnalyzer {

@@ -21,6 +21,17 @@ test distributions do not require an entry here.
 
 ### Added
 
+### Changed
+
+### Fixed
+
+## [9.5.0] - 2026-08-04
+
+**Status:** Approved local release (build 36; not submitted)
+**Areas:** Repeatable capture, project catalog, Spatial Guidance, focus safety, alignment diagnostics
+
+### Added
+
 - Added a required final tripod-scene photo and an optional second contextual
   photo after Spatial Guidance setup, preserving mapping keyframes separately
   and presenting the pair as a vertically composed tripod thumbnail.
@@ -31,9 +42,6 @@ test distributions do not require an entry here.
 - Added an explicit option to reuse the newest compatible tripod position from
   another Repeatable project, with source identification and relocalization
   before use.
-- Added a sharpness-aware focus check before every capture, with automatic
-  center focus, tap-to-focus recovery, and an explicit manual override when
-  the app cannot confirm focus in difficult light.
 - Added a clear three-second start countdown to photo, video, timelapse, and
   Astro captures, plus a top-right remaining-time indicator whenever the
   in-progress information panel is hidden.
@@ -43,6 +51,12 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Spatial Guidance now presents four named creation steps, visually separates
+  reference capture from final review, and lets users return to confirmed
+  tripod choices without repeating the scene map.
+- The custom sharpness preflight is temporarily disabled after field testing;
+  capture continues to use the camera's native continuous autofocus without a
+  blocking confirmation overlay.
 - Repeatable project hardware now becomes immutable only after the first photo,
   frame, or clip is actually recorded; empty attempts keep lens selection open.
 - Project catalogs now default to stable creation/shot order instead of moving

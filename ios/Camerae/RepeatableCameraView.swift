@@ -1414,7 +1414,9 @@ struct RepeatableCameraView: View {
 
     private func performPrimaryCaptureAction() async {
         guard !camera.isCaptureStarting else { return }
-        if !isCaptureActive, !bypassFocusPreflightOnce {
+        if !isCaptureActive,
+           CameraCaptureFocusRequirementPolicy.requiresPreflight(for: selectedCaptureKind),
+           !bypassFocusPreflightOnce {
             pendingCaptureAfterFocus = true
             guard await verifyFocus(at: nil) else { return }
             pendingCaptureAfterFocus = false

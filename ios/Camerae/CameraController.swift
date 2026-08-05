@@ -710,6 +710,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     private func consumeConfirmedFocus() -> Bool {
+        guard CameraCaptureFocusRequirementPolicy.isEnabled else {
+            focusPreflightState = .idle
+            return true
+        }
         guard focusPreflightState == .ready else {
             status = "Confirme o foco antes de capturar"
             return false

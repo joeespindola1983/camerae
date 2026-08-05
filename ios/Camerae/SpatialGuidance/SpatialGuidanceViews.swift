@@ -466,6 +466,11 @@ struct SpatialGuidanceFlowView: View {
 
             VStack(spacing: 12) {
                 topBar
+                if case .createReference = mode {
+                    SpatialGuidanceStepIndicator(
+                        progress: SpatialGuidanceCreationProgress(phase: model.phase)
+                    )
+                }
                 if showsCreationContrastToggle {
                     creationContrastToggle
                 }
@@ -495,6 +500,15 @@ struct SpatialGuidanceFlowView: View {
 
     private var topBar: some View {
         HStack {
+            if model.canGoBack {
+                Button(action: model.goBack) {
+                    Label("Voltar", systemImage: "chevron.left")
+                        .font(.custom("Outfit-SemiBold", size: 13, relativeTo: .subheadline))
+                }
+                .buttonStyle(.bordered)
+                .tint(CameraeColor.captureForeground)
+                .accessibilityHint("Retorna à etapa anterior sem apagar o mapeamento")
+            }
             VStack(alignment: .leading, spacing: 3) {
                 Text("REPEATABLE · GUIA ESPACIAL")
                     .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
@@ -751,6 +765,8 @@ struct SpatialGuidanceFlowView: View {
                 tripodDirectionSelectionPanel(hasSelection: true)
             case .capturingReferencePhotos, .readyToMount:
                 referencePhotoCapturePanel
+            case .reviewingReference:
+                referenceReviewPanel
             case .saving:
                 busyPanel(
                     title: "Salvando cena",
@@ -867,22 +883,31 @@ struct SpatialGuidanceFlowView: View {
                 label: model.referencePhotos.isEmpty ? "FOTO NECESSÁRIA" : "CENA REGISTRADA",
                 tone: model.referencePhotos.isEmpty ? .accent : .success
             )
-            Text(model.referencePhotos.isEmpty ? "Fotografe a posição" : "Confira o thumbnail")
+            Text(model.referencePhotos.isEmpty ? "Tire a foto de referência" : "Referência criada")
                 .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
-            Text("Enquadre o tripé, sua direção e elementos fixos do ambiente. A malha 3D também será registrada para facilitar o retorno ao local.")
+            Text(
+                model.referencePhotos.isEmpty
+                    ? "Esta imagem será o thumbnail da posição. Enquadre o tripé, sua direção e elementos fixos do ambiente."
+                    : "A validação da posição terminou. Confira a imagem e avance para a revisão final."
+            )
                 .font(.custom("Outfit-Regular", size: 13, relativeTo: .body))
                 .foregroundStyle(CameraeColor.captureForegroundMuted)
 
             if !model.referencePhotos.isEmpty {
-                HStack(spacing: 8) {
+                HStack(spacing: 10) {
                     ForEach(Array(model.referencePhotos.enumerated()), id: \.offset) { _, data in
                         if let image = UIImage(data: data) {
                             Image(uiImage: image)
                                 .resizable()
                                 .scaledToFill()
-                                .frame(width: 92, height: 64)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 116)
                                 .clipped()
-                                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .stroke(.green, lineWidth: 2)
+                                }
                         }
                     }
                 }
@@ -892,8 +917,10 @@ struct SpatialGuidanceFlowView: View {
 
             if model.referencePhotos.count < SpatialReferencePhotoCapabilityPolicy.maximumPhotoCount {
                 captureAction(
-                    title: model.referencePhotos.isEmpty ? "Capturar foto principal" : "Tirar outra foto",
-                    style: .primary
+                    title: model.referencePhotos.isEmpty ? "Tirar foto de referência" : "Adicionar segunda foto",
+                    systemImage: "camera.fill",
+                    style: .primary,
+                    tone: .reference
                 ) {
                     model.captureReferencePhoto()
                 }
@@ -902,21 +929,64 @@ struct SpatialGuidanceFlowView: View {
                 captureAction(title: "Refazer última foto", style: .secondary) {
                     model.removeLastReferencePhoto()
                 }
-                captureAction(title: "Salvar posição", style: .primary) {
-                    Task {
-                        do {
-                            _ = try await model.saveReference(
-                                store: store,
-                                configuration: configuration,
-                                orientation: currentOrientation
-                            )
-                            onReferenceSaved()
-                        } catch {
-                            model.reportPersistenceFailure(error)
-                        }
+                captureAction(
+                    title: "Revisar e finalizar",
+                    systemImage: "checkmark.circle.fill",
+                    style: .primary,
+                    tone: .success
+                ) {
+                    model.reviewReference()
+                }
+            }
+        }
+    }
+
+    private var referenceReviewPanel: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SpatialStatusBadgeView(label: "PRONTO PARA FINALIZAR", tone: .success)
+            Text("Revise a configuração")
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3))
+            Text("Nada será salvo até você concluir esta etapa.")
+                .font(.custom("Outfit-Regular", size: 13, relativeTo: .body))
+                .foregroundStyle(CameraeColor.captureForegroundMuted)
+
+            VStack(spacing: 9) {
+                reviewChecklistRow("Mapa do ambiente")
+                reviewChecklistRow("Centro e direção do tripé")
+                reviewChecklistRow("Foto de referência")
+            }
+            .padding(12)
+            .background(Color.black.opacity(0.32), in: RoundedRectangle(cornerRadius: 16))
+
+            captureAction(
+                title: "Finalizar configuração",
+                systemImage: "checkmark",
+                style: .primary,
+                tone: .success
+            ) {
+                Task {
+                    do {
+                        _ = try await model.saveReference(
+                            store: store,
+                            configuration: configuration,
+                            orientation: currentOrientation
+                        )
+                        onReferenceSaved()
+                    } catch {
+                        model.reportPersistenceFailure(error)
                     }
                 }
             }
+        }
+    }
+
+    private func reviewChecklistRow(_ title: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+            Text(title)
+                .font(.custom("Outfit-Medium", size: 14, relativeTo: .body))
+            Spacer()
         }
     }
 
@@ -997,17 +1067,34 @@ struct SpatialGuidanceFlowView: View {
 
     private func captureAction(
         title: String,
+        systemImage: String? = nil,
         style: CameraeNextActionButton.Style,
+        tone: SpatialGuidanceActionTone = .accent,
         action: @escaping () -> Void
     ) -> some View {
-        CameraeNextActionButton(
-            title: title,
-            systemImage: nil,
-            theme: lightTheme,
-            style: style,
-            isBusy: model.isBusy,
-            action: action
-        )
+        Group {
+            if tone == .accent {
+                CameraeNextActionButton(
+                    title: title,
+                    systemImage: systemImage,
+                    theme: lightTheme,
+                    style: style,
+                    isBusy: model.isBusy,
+                    action: action
+                )
+            } else {
+                Button(action: action) {
+                    Label(title, systemImage: systemImage ?? "circle.fill")
+                        .font(.custom("Outfit-SemiBold", size: 15, relativeTo: .body))
+                        .foregroundStyle(tone.foreground)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 58)
+                        .background(tone.background, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(model.isBusy)
+            }
+        }
     }
 
     private var navigationTitle: String {
@@ -1038,6 +1125,77 @@ struct SpatialGuidanceFlowView: View {
     private func close() {
         model.stop()
         onDismiss()
+    }
+}
+
+private enum SpatialGuidanceActionTone {
+    case accent
+    case reference
+    case success
+
+    var foreground: Color {
+        switch self {
+        case .accent, .success: .white
+        case .reference: .black
+        }
+    }
+
+    var background: Color {
+        switch self {
+        case .accent: CameraeColor.accentRepeatable
+        case .reference: .white
+        case .success: .green
+        }
+    }
+}
+
+private struct SpatialGuidanceStepIndicator: View {
+    let progress: SpatialGuidanceCreationProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text("ETAPA \(progress.activeStep.number) DE \(SpatialGuidanceCreationStep.allCases.count) · \(progress.activeStep.title.uppercased())")
+                .font(.custom("DMMono-Regular", size: 10, relativeTo: .caption2))
+                .tracking(1.1)
+                .foregroundStyle(CameraeColor.captureForeground)
+
+            HStack(spacing: 6) {
+                ForEach(SpatialGuidanceCreationStep.allCases, id: \.self) { step in
+                    VStack(spacing: 4) {
+                        ZStack {
+                            Circle()
+                                .fill(stepColor(step))
+                                .frame(width: 28, height: 28)
+                            if progress.completedSteps.contains(step) {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 11, weight: .bold))
+                            } else {
+                                Text("\(step.number)")
+                                    .font(.custom("DMMono-Regular", size: 11, relativeTo: .caption))
+                            }
+                        }
+                        Text(step.title)
+                            .font(.custom("Outfit-Medium", size: 9, relativeTo: .caption2))
+                            .lineLimit(1)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity)
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(Color.black.opacity(0.46), in: RoundedRectangle(cornerRadius: 18))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "Etapa \(progress.activeStep.number) de \(SpatialGuidanceCreationStep.allCases.count), \(progress.activeStep.title)"
+        )
+    }
+
+    private func stepColor(_ step: SpatialGuidanceCreationStep) -> Color {
+        if progress.completedSteps.contains(step) { return .green }
+        if step == progress.activeStep { return CameraeColor.accentRepeatable }
+        return Color.white.opacity(0.18)
     }
 }
 

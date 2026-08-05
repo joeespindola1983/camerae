@@ -217,6 +217,8 @@ struct SpatialGuidanceTests {
         #expect(machine.phase == .capturingReferencePhotos)
         try machine.send(.referencePhotoCaptured)
         #expect(machine.phase == .readyToMount)
+        try machine.send(.reviewReference)
+        #expect(machine.phase == .reviewingReference)
         try machine.send(.referenceSaved)
         #expect(machine.phase == .saved)
 
@@ -266,11 +268,15 @@ struct SpatialGuidanceTests {
         )
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .selectingTripodDirection) ==
-                [.selectTripodDirection, .cancel]
+                [.selectTripodDirection, .goBack, .cancel]
         )
         #expect(
             SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .tripodDirectionSelected) ==
-                [.adjustTripodDirection, .confirmTripodDirection, .cancel]
+                [.adjustTripodDirection, .confirmTripodDirection, .goBack, .cancel]
+        )
+        #expect(
+            SpatialGuidanceInterfaceCapabilityPolicy.actions(for: .capturingReferencePhotos) ==
+                [.captureReferencePhoto, .goBack, .cancel]
         )
     }
 
@@ -289,6 +295,50 @@ struct SpatialGuidanceTests {
         #expect(throws: SpatialGuidanceTransitionError.self) {
             try machine.send(.confirmTripodDirection)
         }
+    }
+
+    @Test("creation progress groups the flow into four discoverable steps")
+    func creationProgressPresentation() {
+        #expect(SpatialGuidanceCreationProgress(phase: .mapping).activeStep == .map)
+        #expect(
+            SpatialGuidanceCreationProgress(phase: .tripodDirectionSelected).activeStep == .position
+        )
+        #expect(
+            SpatialGuidanceCreationProgress(phase: .capturingReferencePhotos).activeStep == .reference
+        )
+        #expect(SpatialGuidanceCreationProgress(phase: .saving).activeStep == .finish)
+        #expect(
+            SpatialGuidanceCreationProgress(phase: .readyToMount).completedSteps ==
+                [.map, .position]
+        )
+        #expect(
+            SpatialGuidanceCreationProgress(phase: .saved).completedSteps ==
+                Set(SpatialGuidanceCreationStep.allCases)
+        )
+    }
+
+    @Test("confirmed tripod choices can be revisited without remapping the scene")
+    func reversibleTripodConfirmation() throws {
+        var machine = SpatialGuidanceStateMachine()
+        try machine.send(.startMapping)
+        try machine.send(.mappingSessionReady)
+        try machine.send(.beginSceneCapture)
+        try machine.send(.mappingEvaluated(.ready))
+        try machine.send(.freezeScene)
+        try machine.send(.tripodBaseSelected)
+        try machine.send(.confirmTripodBase)
+        try machine.send(.tripodDirectionSelected)
+
+        try machine.send(.goBack)
+        #expect(machine.phase == .tripodBaseSelected)
+
+        try machine.send(.confirmTripodBase)
+        try machine.send(.tripodDirectionSelected)
+        try machine.send(.confirmTripodDirection)
+        #expect(machine.phase == .capturingReferencePhotos)
+
+        try machine.send(.goBack)
+        #expect(machine.phase == .tripodDirectionSelected)
     }
 
     @Test("one final scene photo is required and a second remains optional")
@@ -310,6 +360,13 @@ struct SpatialGuidanceTests {
         }
 
         try machine.send(.referencePhotoCaptured)
+        #expect(machine.phase == .readyToMount)
+        #expect(throws: SpatialGuidanceTransitionError.self) {
+            try machine.send(.beginSaving)
+        }
+        try machine.send(.reviewReference)
+        #expect(machine.phase == .reviewingReference)
+        try machine.send(.goBack)
         #expect(machine.phase == .readyToMount)
         try machine.send(.referencePhotoRemoved)
         #expect(machine.phase == .capturingReferencePhotos)
