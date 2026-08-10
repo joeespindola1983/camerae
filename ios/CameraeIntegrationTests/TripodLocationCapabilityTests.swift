@@ -10,11 +10,11 @@ struct TripodLocationCapabilityTests {
 
     @Test("position detail owns project and recapture actions")
     func detailCapabilities() {
-        #expect(TripodPositionsCapabilityPolicy.detail == [.addReference, .createProject, .linkProject, .scheduleRecapture])
+        #expect(TripodPositionsCapabilityPolicy.detail == [.addReference, .createProject, .linkProject, .scheduleRecapture, .showMetrics])
     }
 
     @Test("calendar keeps history and planning reachable")
     func calendarCapabilities() {
-        #expect(CaptureCalendarCapabilityPolicy.root == [.browseMonth, .openDay, .openLocation, .scheduleRecapture])
+        #expect(CaptureCalendarCapabilityPolicy.root == [.browseMonth, .openDay, .openLocation, .scheduleRecapture, .showNextReturn])
     }
 }

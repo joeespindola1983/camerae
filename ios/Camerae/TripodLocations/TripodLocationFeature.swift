@@ -7,15 +7,15 @@ import UserNotifications
 
 enum CameraeHomeDestination: Hashable { case calendar, positions }
 
-enum TripodPositionsCapability: Hashable, Sendable { case create, switchMapList, openLocation, addReference, createProject, linkProject, scheduleRecapture }
+enum TripodPositionsCapability: Hashable, Sendable { case create, switchMapList, openLocation, addReference, createProject, linkProject, scheduleRecapture, showMetrics }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [.create, .switchMapList, .openLocation]
-    static let detail: Set<TripodPositionsCapability> = [.addReference, .createProject, .linkProject, .scheduleRecapture]
+    static let detail: Set<TripodPositionsCapability> = [.addReference, .createProject, .linkProject, .scheduleRecapture, .showMetrics]
 }
 
-enum CaptureCalendarCapability: Hashable, Sendable { case browseMonth, openDay, openLocation, scheduleRecapture }
+enum CaptureCalendarCapability: Hashable, Sendable { case browseMonth, openDay, openLocation, scheduleRecapture, showNextReturn }
 enum CaptureCalendarCapabilityPolicy {
-    static let root: Set<CaptureCalendarCapability> = [.browseMonth, .openDay, .openLocation, .scheduleRecapture]
+    static let root: Set<CaptureCalendarCapability> = [.browseMonth, .openDay, .openLocation, .scheduleRecapture, .showNextReturn]
 }
 
 @MainActor
@@ -91,11 +91,23 @@ struct TripodPositionsView: View {
     @State private var isCreating = false
 
     var body: some View {
-        Group {
+        ZStack {
+            theme.background.ignoresSafeArea()
             if store.snapshot.locations.isEmpty {
                 ContentUnavailableView("Nenhuma posição ainda", systemImage: "mappin.and.ellipse", description: Text("Salve GPS, fotos e a referência espacial do ponto onde o tripé volta."))
+                    .foregroundStyle(theme.text)
             } else if showsList {
-                List(store.snapshot.locations) { location in NavigationLink(value: location) { TripodLocationRow(location: location) } }
+                ScrollView {
+                    LazyVStack(spacing: 12) {
+                        ForEach(store.snapshot.locations) { location in
+                            NavigationLink(value: location) { TripodLocationRow(location: location) }
+                                .buttonStyle(.plain)
+                                .padding(14)
+                                .background(theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                    }
+                    .padding()
+                }
             } else {
                 Map {
                     ForEach(store.snapshot.locations.filter { $0.coordinate != nil }) { location in
@@ -103,20 +115,40 @@ struct TripodPositionsView: View {
                     }
                 }
                 .mapStyle(.standard(elevation: .realistic))
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .padding(.horizontal, 16)
+                .padding(.bottom, 12)
                 .overlay(alignment: .bottom) {
-                    if let location = store.snapshot.locations.first { NavigationLink(value: location) { TripodLocationRow(location: location).padding(14).background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20)) }.buttonStyle(.plain).padding() }
+                    if let location = store.snapshot.locations.first {
+                        NavigationLink(value: location) {
+                            TripodLocationRow(location: location)
+                                .padding(14)
+                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .padding(28)
+                    }
                 }
             }
         }
-        .navigationTitle("Posições")
+        .navigationTitle("Seus pontos de tripé")
+        .navigationBarTitleDisplayMode(.large)
         .toolbar {
-            ToolbarItem(placement: .topBarLeading) { Button(showsList ? "Mapa" : "Lista") { showsList.toggle() } }
-            ToolbarItem(placement: .topBarTrailing) { Button { isCreating = true } label: { Image(systemName: "plus") } }
+            ToolbarItem(placement: .topBarLeading) {
+                Button(showsList ? "Mapa" : "Lista", systemImage: showsList ? "map" : "list.bullet") { showsList.toggle() }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { isCreating = true } label: { Image(systemName: "plus").fontWeight(.semibold) }
+            }
         }
+        .tint(theme.accent)
+        .preferredColorScheme(.light)
         .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
         .sheet(isPresented: $isCreating) { TripodLocationEditorView() }
         .onAppear { store.reload() }
     }
+
+    private let theme = CameraeNextTheme(workflow: .repeatable)
 }
 
 private struct TripodLocationRow: View {
@@ -168,22 +200,77 @@ struct TripodLocationDetailView: View {
     var body: some View {
         ScrollView {
             if let location {
-                VStack(alignment: .leading, spacing: 16) {
-                    RoundedRectangle(cornerRadius: 24).fill(CameraeColor.accentRepeatable.opacity(0.22)).frame(height: 210).overlay(alignment: .bottomLeading) { VStack(alignment: .leading) { Text("FOTO DE REFERÊNCIA").font(.caption2.monospaced()); Text(location.name).font(.custom("Outfit-SemiBold", size: 24)) }.padding() }
-                    GroupBox("Localização") { Text(location.coordinate.map { "\($0.latitude), \($0.longitude)" } ?? "GPS indisponível") }.frame(maxWidth: .infinity, alignment: .leading)
-                    GroupBox("Referência espacial") { Label(location.spatialRevisions.isEmpty ? "Ainda não criada" : "Pronta para reutilizar", systemImage: location.spatialRevisions.isEmpty ? "viewfinder" : "checkmark.circle.fill") }.frame(maxWidth: .infinity, alignment: .leading)
-                    PhotosPicker(selection: $selectedPhoto, matching: .images) { Label("Adicionar foto de referência", systemImage: "photo.badge.plus") }.buttonStyle(.bordered)
-                    Text("Projetos nesta posição").font(.headline)
-                    ForEach(projects.projects.filter { location.projectIDs.contains($0.id) }) { project in NavigationLink(value: project) { Text(project.name).frame(maxWidth: .infinity, alignment: .leading).padding().background(CameraeColor.surface, in: RoundedRectangle(cornerRadius: 16)) } }
-                    Button("Criar projeto nesta posição") { isCreatingProject = true }.buttonStyle(.borderedProminent)
-                    Button("Planejar nova captura") { isPlanning = true }.buttonStyle(.bordered)
+                VStack(alignment: .leading, spacing: 14) {
+                    referenceHero(location)
+                    HStack(spacing: 10) {
+                        metricCard("GPS", value: location.coordinate == nil ? "—" : "± 4 m")
+                        metricCard("PROJETOS", value: String(format: "%02d", location.projectIDs.count))
+                        metricCard("REFERÊNCIAS", value: String(format: "%02d", location.referencePhotos.count))
+                    }
+                    locationCard(location)
+                    CameraeNextSectionLabel(title: "Projetos nesta posição", theme: theme)
+                    ForEach(projects.projects.filter { location.projectIDs.contains($0.id) }) { project in
+                        NavigationLink(value: project) {
+                            HStack(spacing: 12) {
+                                RoundedRectangle(cornerRadius: 10).fill(theme.accent).frame(width: 44, height: 38)
+                                Text(project.name).font(.custom("Outfit-Regular", size: 15)).foregroundStyle(theme.text)
+                                Spacer(); Image(systemName: "chevron.right").foregroundStyle(theme.muted)
+                            }
+                            .padding(12).background(theme.card, in: RoundedRectangle(cornerRadius: 16))
+                        }.buttonStyle(.plain)
+                    }
+                    HStack(spacing: 10) {
+                        PhotosPicker(selection: $selectedPhoto, matching: .images) {
+                            Label("Referência", systemImage: "photo.badge.plus").frame(maxWidth: .infinity)
+                        }.buttonStyle(.bordered)
+                        Button("Planejar retorno") { isPlanning = true }.buttonStyle(.borderedProminent)
+                    }
+                    Button("Criar projeto nesta posição") { isCreatingProject = true }
+                        .font(.custom("Outfit-SemiBold", size: 15)).frame(maxWidth: .infinity)
                 }.padding()
             }
         }
+        .background(theme.background)
+        .foregroundStyle(theme.text)
+        .tint(theme.accent)
+        .preferredColorScheme(.light)
         .navigationTitle(location?.name ?? "Posição")
         .sheet(isPresented: $isCreatingProject) { CameraeNextNewProjectSheet(module: .repeatable, name: $newProjectName, defaultName: projects.defaultProjectName(for: .repeatable)) { Task { if let project = try? await projects.createProject(module: .repeatable, name: newProjectName) { try? await store.link(projectID: project.id, to: locationID); try? store.seedProject(project, from: locationID); isCreatingProject = false } } } }
         .sheet(isPresented: $isPlanning) { RecapturePlannerView(locationID: locationID) }
         .onChange(of: selectedPhoto) { _, item in Task { if let data = try? await item?.loadTransferable(type: Data.self) { try? await store.addReferencePhoto(data: data, to: locationID) } } }
+    }
+
+    private let theme = CameraeNextTheme(workflow: .repeatable)
+
+    private func referenceHero(_ location: TripodLocation) -> some View {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+            .fill(theme.accent.gradient)
+            .frame(height: 210)
+            .overlay(alignment: .bottomLeading) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("FOTO DE REFERÊNCIA").font(.custom("DMMono-Regular", size: 10)).tracking(1.2)
+                    Text(location.name).font(.custom("Outfit-SemiBold", size: 24))
+                    if let note = location.note { Text(note).font(.custom("Outfit-Regular", size: 12)) }
+                }.foregroundStyle(.white).padding()
+            }
+    }
+
+    private func metricCard(_ title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.custom("DMMono-Regular", size: 9)).tracking(1.1).foregroundStyle(theme.muted)
+            Text(value).font(.custom("Outfit-SemiBold", size: 22)).foregroundStyle(title == "GPS" ? theme.accent : theme.text)
+        }.frame(maxWidth: .infinity, minHeight: 64, alignment: .leading).padding(10).background(theme.card, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private func locationCard(_ location: TripodLocation) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                CameraeNextSectionLabel(title: "Localização", theme: theme)
+                Text(location.coordinate.map { "\($0.latitude), \($0.longitude)" } ?? "GPS indisponível")
+                    .font(.custom("Outfit-Regular", size: 14))
+            }
+            Spacer(); Image(systemName: "map").foregroundStyle(theme.accent)
+        }.padding(14).background(theme.card, in: RoundedRectangle(cornerRadius: 18))
     }
 }
 
@@ -191,24 +278,68 @@ struct CaptureCalendarView: View {
     @EnvironmentObject private var store: TripodLocationStore
     @EnvironmentObject private var projects: ProjectStore
     @State private var selectedDate = Date()
+    @State private var planningLocationID: UUID?
     var body: some View {
-        List {
-            DatePicker("Data", selection: $selectedDate, displayedComponents: .date).datePickerStyle(.graphical)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+            nextReturnCard
+            DatePicker("Data", selection: $selectedDate, displayedComponents: .date)
+                .datePickerStyle(.graphical)
+                .padding(8)
+                .background(theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             let entries = store.snapshot.calendarEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
             let captures = capturedSessions(on: selectedDate)
+            CameraeNextSectionLabel(title: selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)), theme: theme)
             if entries.isEmpty && captures.isEmpty { ContentUnavailableView("Nenhuma captura nesta data", systemImage: "calendar") }
             ForEach(entries) { entry in
-                if let location = store.snapshot.location(id: entry.locationID) { NavigationLink(value: location) { VStack(alignment: .leading) { Text(location.name); Text(entry.kind == .planned ? "Retorno planejado" : "Captura concluída").font(.caption).foregroundStyle(.secondary) } } }
+                if let location = store.snapshot.location(id: entry.locationID) { calendarRow(location: location, subtitle: entry.kind == .planned ? "Retorno planejado" : "Captura concluída", accent: entry.kind == .planned ? theme.accent : .green) }
             }
             ForEach(captures, id: \.id) { capture in
-                NavigationLink(value: capture.location) {
-                    VStack(alignment: .leading) { Text(capture.location.name); Text("Captura concluída · \(capture.date.formatted(date: .omitted, time: .shortened))").font(.caption).foregroundStyle(.secondary) }
-                }
+                calendarRow(location: capture.location, subtitle: "Captura concluída · \(capture.date.formatted(date: .omitted, time: .shortened))", accent: .green)
             }
-        }
-        .navigationTitle("Calendário")
+            if let first = store.snapshot.locations.first {
+                CameraeNextActionButton(title: "Planejar novo retorno", systemImage: "calendar.badge.plus", theme: theme) { planningLocationID = first.id }
+            }
+            }.padding()
+        }.background(theme.background)
+        .navigationTitle(selectedDate.formatted(.dateTime.month(.wide).year()))
+        .foregroundStyle(theme.text).tint(theme.accent).preferredColorScheme(.light)
         .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
+        .sheet(isPresented: Binding(
+            get: { planningLocationID != nil },
+            set: { if !$0 { planningLocationID = nil } }
+        )) {
+            if let planningLocationID { RecapturePlannerView(locationID: planningLocationID) }
+        }
         .onAppear { store.reload() }
+    }
+
+    private let theme = CameraeNextTheme(workflow: .repeatable)
+
+    @ViewBuilder private var nextReturnCard: some View {
+        if let entry = store.snapshot.calendarEntries.filter({ $0.kind == .planned && $0.date >= Date() }).sorted(by: { $0.date < $1.date }).first,
+           let location = store.snapshot.location(id: entry.locationID) {
+            Button { planningLocationID = location.id } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    CameraeNextSectionLabel(title: "Próximo retorno", theme: theme)
+                    Text(location.name).font(.custom("Outfit-SemiBold", size: 20)).foregroundStyle(theme.text)
+                    Text(entry.date.formatted(date: .abbreviated, time: .shortened)).font(.custom("Outfit-Regular", size: 12)).foregroundStyle(theme.muted)
+                }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(theme.card, in: RoundedRectangle(cornerRadius: 20))
+            }.buttonStyle(.plain)
+        }
+    }
+
+    private func calendarRow(location: TripodLocation, subtitle: String, accent: Color) -> some View {
+        NavigationLink(value: location) {
+            HStack(spacing: 12) {
+                RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 4, height: 42)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(location.name).font(.custom("Outfit-Regular", size: 15)).foregroundStyle(theme.text)
+                    Text(subtitle).font(.custom("Outfit-Regular", size: 12)).foregroundStyle(theme.muted)
+                }
+                Spacer(); Image(systemName: "chevron.right").foregroundStyle(theme.muted)
+            }.padding(14).background(theme.card, in: RoundedRectangle(cornerRadius: 18))
+        }.buttonStyle(.plain)
     }
 
     private func capturedSessions(on date: Date) -> [CalendarCaptureRow] {
