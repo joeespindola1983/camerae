@@ -1,3 +1,4 @@
+import CameraeCore
 import Testing
 @testable import Camerae
 
@@ -5,12 +6,41 @@ import Testing
 struct TripodLocationCapabilityTests {
     @Test("catalog actions stay reachable independently of layout")
     func catalogCapabilities() {
-        #expect(TripodPositionsCapabilityPolicy.catalog == [.create, .switchMapList, .openLocation])
+        #expect(TripodPositionsCapabilityPolicy.catalog == [.create, .switchMapList, .selectMapLocation, .showSavedSummary, .openLocation])
     }
 
-    @Test("position detail owns project and recapture actions")
+    @Test("position detail matches the approved read-only project flow")
     func detailCapabilities() {
-        #expect(TripodPositionsCapabilityPolicy.detail == [.addReference, .createProject, .linkProject, .scheduleRecapture, .showMetrics])
+        #expect(TripodPositionsCapabilityPolicy.detail == [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics])
+    }
+
+    @Test("map and list are typed presentation modes")
+    func catalogModes() {
+        #expect(TripodPositionsViewMode.allCases == [.map, .list])
+        #expect(TripodPositionsViewMode.map.title == "Mapa")
+        #expect(TripodPositionsViewMode.list.title == "Lista")
+    }
+
+    @Test("position metrics expose persisted facts without inventing GPS accuracy")
+    func positionMetrics() {
+        let location = TripodLocation(
+            id: UUID(),
+            name: "Mirante",
+            coordinate: .init(latitude: -23.55052, longitude: -46.633308, horizontalAccuracy: 4.4),
+            referencePhotos: [
+                .init(id: UUID(), relativePath: "reference-1.jpg"),
+                .init(id: UUID(), relativePath: "reference-2.jpg")
+            ],
+            projectIDs: [UUID()],
+            createdAt: .distantPast,
+            updatedAt: .distantPast
+        )
+        let metrics = TripodPositionMetrics(location: location)
+
+        #expect(metrics.gpsAccuracy == "± 4 m")
+        #expect(metrics.projectCount == "01")
+        #expect(metrics.referenceCount == "02")
+        #expect(metrics.coordinateText == "-23.55052, -46.63331")
     }
 
     @Test("calendar keeps history and planning reachable")

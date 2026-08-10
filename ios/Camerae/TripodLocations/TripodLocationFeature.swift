@@ -3,14 +3,52 @@ import CoreLocation
 import MapKit
 import PhotosUI
 import SwiftUI
+import UIKit
 import UserNotifications
 
 enum CameraeHomeDestination: Hashable { case calendar, positions }
 
-enum TripodPositionsCapability: Hashable, Sendable { case create, switchMapList, openLocation, addReference, createProject, linkProject, scheduleRecapture, showMetrics }
+enum TripodPositionsCapability: Hashable, Sendable {
+    case create, switchMapList, selectMapLocation, showSavedSummary, openLocation
+    case addReference, openProject, openMap, scheduleRecapture, showMetrics
+}
 enum TripodPositionsCapabilityPolicy {
-    static let catalog: Set<TripodPositionsCapability> = [.create, .switchMapList, .openLocation]
-    static let detail: Set<TripodPositionsCapability> = [.addReference, .createProject, .linkProject, .scheduleRecapture, .showMetrics]
+    static let catalog: Set<TripodPositionsCapability> = [.create, .switchMapList, .selectMapLocation, .showSavedSummary, .openLocation]
+    static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
+}
+
+enum TripodPositionsViewMode: String, CaseIterable, Identifiable, Sendable {
+    case map, list
+
+    var id: String { rawValue }
+    var title: String { self == .map ? "Mapa" : "Lista" }
+}
+
+struct TripodPositionMetrics: Equatable, Sendable {
+    let gpsAccuracy: String
+    let projectCount: String
+    let referenceCount: String
+    let coordinateText: String
+
+    init(location: TripodLocation) {
+        if let accuracy = location.coordinate?.horizontalAccuracy {
+            gpsAccuracy = "± \(Int(accuracy.rounded())) m"
+        } else {
+            gpsAccuracy = location.coordinate == nil ? "—" : "GPS"
+        }
+        projectCount = String(format: "%02d", location.projectIDs.count)
+        referenceCount = String(format: "%02d", location.referencePhotos.count)
+        if let coordinate = location.coordinate {
+            coordinateText = String(
+                format: "%.5f, %.5f",
+                locale: Locale(identifier: "en_US_POSIX"),
+                coordinate.latitude,
+                coordinate.longitude
+            )
+        } else {
+            coordinateText = "GPS indisponível"
+        }
+    }
 }
 
 enum CaptureCalendarCapability: Hashable, Sendable {
@@ -53,6 +91,11 @@ final class TripodLocationStore: ObservableObject {
         try await catalog.addReferencePhoto(.init(id: id, relativePath: relativePath), to: locationID)
         await reloadNow()
     }
+    func referencePhotoURL(_ photo: TripodReferencePhoto) -> URL {
+        rootDirectory
+            .appendingPathComponent("Application Support/Camerae")
+            .appendingPathComponent(photo.relativePath)
+    }
     func migrateLegacyProjects(_ projects: [CameraProject]) async {
         for project in projects where project.module == .repeatable && snapshot.location(forProjectID: project.id) == nil {
             let source = project.directoryURL.appendingPathComponent("spatial_reference", isDirectory: true)
@@ -90,68 +133,196 @@ final class TripodLocationStore: ObservableObject {
 
 struct TripodPositionsView: View {
     @EnvironmentObject private var store: TripodLocationStore
-    @State private var showsList = false
+    @State private var viewMode = TripodPositionsViewMode.map
+    @State private var selectedLocationID: UUID?
+    @State private var mapPosition = MapCameraPosition.automatic
     @State private var isCreating = false
 
     var body: some View {
-        ZStack {
-            theme.background.ignoresSafeArea()
-            if store.snapshot.locations.isEmpty {
-                ContentUnavailableView("Nenhuma posição ainda", systemImage: "mappin.and.ellipse", description: Text("Salve GPS, fotos e a referência espacial do ponto onde o tripé volta."))
-                    .foregroundStyle(theme.text)
-            } else if showsList {
-                ScrollView {
-                    LazyVStack(spacing: 12) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                header
+                modePicker
+
+                if store.snapshot.locations.isEmpty {
+                    emptyState
+                } else if viewMode == .map {
+                    mapCard
+                    savedPositionsSummary
+                } else {
+                    LazyVStack(spacing: 10) {
                         ForEach(store.snapshot.locations) { location in
-                            NavigationLink(value: location) { TripodLocationRow(location: location) }
-                                .buttonStyle(.plain)
-                                .padding(14)
-                                .background(theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            NavigationLink(value: location) {
+                                TripodLocationRow(location: location)
+                                    .padding(14)
+                                    .background(theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            }
+                            .buttonStyle(.plain)
                         }
                     }
-                    .padding()
-                }
-            } else {
-                Map {
-                    ForEach(store.snapshot.locations.filter { $0.coordinate != nil }) { location in
-                        if let coordinate = location.coordinate { Marker(location.name, coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)).tint(CameraeColor.accentRepeatable) }
-                    }
-                }
-                .mapStyle(.standard(elevation: .realistic))
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .padding(.horizontal, 16)
-                .padding(.bottom, 12)
-                .overlay(alignment: .bottom) {
-                    if let location = store.snapshot.locations.first {
-                        NavigationLink(value: location) {
-                            TripodLocationRow(location: location)
-                                .padding(14)
-                                .background(theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                        }
-                        .buttonStyle(.plain)
-                        .padding(28)
-                    }
                 }
             }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 24)
         }
-        .navigationTitle("Seus pontos de tripé")
-        .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .topBarLeading) {
-                Button(showsList ? "Mapa" : "Lista", systemImage: showsList ? "map" : "list.bullet") { showsList.toggle() }
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { isCreating = true } label: { Image(systemName: "plus").fontWeight(.semibold) }
-            }
-        }
+        .background(theme.background.ignoresSafeArea())
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
         .tint(theme.accent)
         .preferredColorScheme(.light)
         .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
         .sheet(isPresented: $isCreating) { TripodLocationEditorView() }
-        .onAppear { store.reload() }
+        .onAppear {
+            store.reload()
+            selectInitialLocationIfNeeded()
+        }
+        .onChange(of: store.snapshot.locations) { _, _ in selectInitialLocationIfNeeded() }
     }
 
     private let theme = CameraeNextTheme(workflow: .repeatable)
+
+    private var header: some View {
+        HStack(alignment: .center) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("POSIÇÕES")
+                    .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                    .tracking(1.2)
+                    .foregroundStyle(theme.accent)
+                Text("Seus pontos de tripé")
+                    .font(.custom("Outfit-SemiBold", size: 28, relativeTo: .title))
+                    .foregroundStyle(theme.text)
+            }
+            Spacer()
+            Button { isCreating = true } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(theme.accent, in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Nova posição")
+        }
+    }
+
+    private var modePicker: some View {
+        HStack(spacing: 4) {
+            ForEach(TripodPositionsViewMode.allCases) { mode in
+                Button(mode.title) { viewMode = mode }
+                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                    .foregroundStyle(viewMode == mode ? Color.white : theme.text)
+                    .frame(width: 79, height: 34)
+                    .background(viewMode == mode ? theme.accent : Color.clear, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var mapCard: some View {
+        Map(position: $mapPosition, selection: $selectedLocationID) {
+            ForEach(store.snapshot.locations.filter { $0.coordinate != nil }) { location in
+                if let coordinate = location.coordinate {
+                    Marker(
+                        location.name,
+                        coordinate: CLLocationCoordinate2D(latitude: coordinate.latitude, longitude: coordinate.longitude)
+                    )
+                    .tint(theme.accent)
+                    .tag(location.id)
+                }
+            }
+        }
+        .mapStyle(.standard(elevation: .realistic))
+        .frame(height: 380)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(alignment: .bottom) {
+            if let selectedLocation {
+                NavigationLink(value: selectedLocation) {
+                    selectedLocationBadge(selectedLocation)
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 16)
+            }
+        }
+    }
+
+    private var savedPositionsSummary: some View {
+        Group {
+            if let selectedLocation {
+                NavigationLink(value: selectedLocation) { savedPositionsSummaryContent }
+                    .buttonStyle(.plain)
+            } else {
+                savedPositionsSummaryContent
+            }
+        }
+    }
+
+    private var savedPositionsSummaryContent: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 5) {
+                Text("\(store.snapshot.locations.count) POSIÇÕES SALVAS")
+                    .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                    .tracking(1.1)
+                    .foregroundStyle(theme.accent)
+                Text(selectedLocation.map { "Selecionada: \($0.name)" } ?? "Selecione um ponto no mapa")
+                    .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer()
+            Text("ABRIR  ›")
+                .font(.custom("DMMono-Medium", size: 10, relativeTo: .caption2))
+                .foregroundStyle(theme.accent)
+        }
+        .padding(.horizontal, 16)
+        .frame(height: 76)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView(
+            "Nenhuma posição ainda",
+            systemImage: "mappin.and.ellipse",
+            description: Text("Salve GPS, fotos e a referência espacial do ponto onde o tripé volta.")
+        )
+        .foregroundStyle(theme.text)
+        .frame(maxWidth: .infinity, minHeight: 380)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+    }
+
+    private var selectedLocation: TripodLocation? {
+        selectedLocationID.flatMap { store.snapshot.location(id: $0) }
+    }
+
+    private func selectedLocationBadge(_ location: TripodLocation) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: "mappin.circle.fill")
+                .font(.system(size: 24))
+                .foregroundStyle(theme.accent)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(location.name)
+                    .font(.custom("Outfit-SemiBold", size: 15, relativeTo: .body))
+                    .foregroundStyle(theme.text)
+                Text("\(location.projectIDs.count) projetos · \(location.referencePhotos.count) referências")
+                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
+                    .foregroundStyle(theme.muted)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(theme.accent)
+        }
+        .padding(.horizontal, 14)
+        .frame(width: 250, height: 64)
+        .background(theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func selectInitialLocationIfNeeded() {
+        guard selectedLocation == nil else { return }
+        selectedLocationID = store.snapshot.locations.first(where: { $0.coordinate != nil })?.id
+        mapPosition = .automatic
+    }
 }
 
 private struct TripodLocationRow: View {
@@ -191,11 +362,10 @@ struct TripodLocationEditorView: View {
 }
 
 struct TripodLocationDetailView: View {
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var store: TripodLocationStore
     @EnvironmentObject private var projects: ProjectStore
     let locationID: UUID
-    @State private var newProjectName = ""
-    @State private var isCreatingProject = false
     @State private var isPlanning = false
     @State private var selectedPhoto: PhotosPickerItem?
 
@@ -206,39 +376,66 @@ struct TripodLocationDetailView: View {
                 VStack(alignment: .leading, spacing: 14) {
                     referenceHero(location)
                     HStack(spacing: 10) {
-                        metricCard("GPS", value: location.coordinate == nil ? "—" : "± 4 m")
-                        metricCard("PROJETOS", value: String(format: "%02d", location.projectIDs.count))
-                        metricCard("REFERÊNCIAS", value: String(format: "%02d", location.referencePhotos.count))
+                        let metrics = TripodPositionMetrics(location: location)
+                        metricCard("GPS", value: metrics.gpsAccuracy)
+                        metricCard("PROJETOS", value: metrics.projectCount)
+                        metricCard("REFERÊNCIAS", value: metrics.referenceCount)
                     }
                     locationCard(location)
                     CameraeNextSectionLabel(title: "Projetos nesta posição", theme: theme)
-                    ForEach(projects.projects.filter { location.projectIDs.contains($0.id) }) { project in
-                        NavigationLink(value: project) {
-                            HStack(spacing: 12) {
-                                RoundedRectangle(cornerRadius: 10).fill(theme.accent).frame(width: 44, height: 38)
-                                Text(project.name).font(.custom("Outfit-Regular", size: 15)).foregroundStyle(theme.text)
-                                Spacer(); Image(systemName: "chevron.right").foregroundStyle(theme.muted)
-                            }
-                            .padding(12).background(theme.card, in: RoundedRectangle(cornerRadius: 16))
-                        }.buttonStyle(.plain)
+                    if linkedProjects(for: location).isEmpty {
+                        Text("Nenhum projeto vinculado a esta posição.")
+                            .font(.custom("Outfit-Regular", size: 13, relativeTo: .footnote))
+                            .foregroundStyle(theme.muted)
+                            .frame(maxWidth: .infinity, minHeight: 66, alignment: .leading)
+                            .padding(.horizontal, 14)
+                            .background(theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    } else {
+                        ForEach(linkedProjects(for: location)) { project in
+                            NavigationLink(value: project) { linkedProjectRow(project) }
+                                .buttonStyle(.plain)
+                        }
                     }
                     HStack(spacing: 10) {
                         PhotosPicker(selection: $selectedPhoto, matching: .images) {
-                            Label("Referência", systemImage: "photo.badge.plus").frame(maxWidth: .infinity)
-                        }.buttonStyle(.bordered)
-                        Button("Planejar retorno") { isPlanning = true }.buttonStyle(.borderedProminent)
+                            Text("ADICIONAR REFERÊNCIA")
+                                .font(.custom("Outfit-SemiBold", size: 11, relativeTo: .caption))
+                                .foregroundStyle(theme.text)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 54)
+                                .background(theme.card, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        Button("PLANEJAR RETORNO") { isPlanning = true }
+                            .font(.custom("Outfit-SemiBold", size: 11, relativeTo: .caption))
+                            .foregroundStyle(.white)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 54)
+                            .background(theme.accent, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                            .buttonStyle(.plain)
                     }
-                    Button("Criar projeto nesta posição") { isCreatingProject = true }
-                        .font(.custom("Outfit-SemiBold", size: 15)).frame(maxWidth: .infinity)
-                }.padding()
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 24)
             }
         }
         .background(theme.background)
         .foregroundStyle(theme.text)
         .tint(theme.accent)
         .preferredColorScheme(.light)
-        .navigationTitle(location?.name ?? "Posição")
-        .sheet(isPresented: $isCreatingProject) { CameraeNextNewProjectSheet(module: .repeatable, name: $newProjectName, defaultName: projects.defaultProjectName(for: .repeatable)) { Task { if let project = try? await projects.createProject(module: .repeatable, name: newProjectName) { try? await store.link(projectID: project.id, to: locationID); try? store.seedProject(project, from: locationID); isCreatingProject = false } } } }
+        .navigationTitle("Detalhe da posição")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let location, location.coordinate != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button("Abrir no Mapas", systemImage: "map") { openInMaps(location) }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                }
+            }
+        }
         .sheet(isPresented: $isPlanning) { RecapturePlannerView(locationID: locationID) }
         .onChange(of: selectedPhoto) { _, item in Task { if let data = try? await item?.loadTransferable(type: Data.self) { try? await store.addReferencePhoto(data: data, to: locationID) } } }
     }
@@ -246,34 +443,134 @@ struct TripodLocationDetailView: View {
     private let theme = CameraeNextTheme(workflow: .repeatable)
 
     private func referenceHero(_ location: TripodLocation) -> some View {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
-            .fill(theme.accent.gradient)
-            .frame(height: 210)
-            .overlay(alignment: .bottomLeading) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("FOTO DE REFERÊNCIA").font(.custom("DMMono-Regular", size: 10)).tracking(1.2)
-                    Text(location.name).font(.custom("Outfit-SemiBold", size: 24))
-                    if let note = location.note { Text(note).font(.custom("Outfit-Regular", size: 12)) }
-                }.foregroundStyle(.white).padding()
+        ZStack(alignment: .bottomLeading) {
+            if let image = referenceImage(for: location) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                LinearGradient(
+                    colors: [.clear, Color.black.opacity(0.72)],
+                    startPoint: .center,
+                    endPoint: .bottom
+                )
+            } else {
+                LinearGradient(
+                    colors: [theme.accent.opacity(0.72), theme.accent],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                TripodReferenceHeroArtwork()
+                    .stroke(Color.white.opacity(0.24), lineWidth: 1)
             }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("FOTO DE REFERÊNCIA").font(.custom("DMMono-Regular", size: 10)).tracking(1.2)
+                Text(location.name).font(.custom("Outfit-SemiBold", size: 28, relativeTo: .title))
+                if let note = location.note { Text(note).font(.custom("Outfit-Regular", size: 12)) }
+            }
+            .foregroundStyle(.white)
+            .padding(18)
+        }
+        .frame(height: 210)
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private func metricCard(_ title: String, value: String) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(title).font(.custom("DMMono-Regular", size: 9)).tracking(1.1).foregroundStyle(theme.muted)
             Text(value).font(.custom("Outfit-SemiBold", size: 22)).foregroundStyle(title == "GPS" ? theme.accent : theme.text)
-        }.frame(maxWidth: .infinity, minHeight: 64, alignment: .leading).padding(10).background(theme.card, in: RoundedRectangle(cornerRadius: 16))
+        }.frame(maxWidth: .infinity, minHeight: 68, alignment: .leading).padding(10).background(theme.card, in: RoundedRectangle(cornerRadius: 16))
     }
 
     private func locationCard(_ location: TripodLocation) -> some View {
-        HStack {
+        let metrics = TripodPositionMetrics(location: location)
+        return HStack {
             VStack(alignment: .leading, spacing: 4) {
                 CameraeNextSectionLabel(title: "Localização", theme: theme)
-                Text(location.coordinate.map { "\($0.latitude), \($0.longitude)" } ?? "GPS indisponível")
+                Text(metrics.coordinateText)
                     .font(.custom("Outfit-Regular", size: 14))
             }
-            Spacer(); Image(systemName: "map").foregroundStyle(theme.accent)
-        }.padding(14).background(theme.card, in: RoundedRectangle(cornerRadius: 18))
+            Spacer()
+            if location.coordinate != nil {
+                Button("ABRIR MAPA  ›") { openInMaps(location) }
+                    .font(.custom("DMMono-Medium", size: 9, relativeTo: .caption2))
+                    .foregroundStyle(theme.accent)
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(minHeight: 72)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private func linkedProjects(for location: TripodLocation) -> [CameraProject] {
+        projects.projects.filter { location.projectIDs.contains($0.id) }
+    }
+
+    private func linkedProjectRow(_ project: CameraProject) -> some View {
+        let presentation = ProjectListCardPresentation(
+            summaries: TimelapseSessionStore(project: project).sessionSummaries(),
+            fallbackHardware: project.captureProfile?.hardware
+        )
+        return HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(theme.accent.gradient)
+                .frame(width: 52, height: 46)
+                .overlay(Image(systemName: "camera.fill").foregroundStyle(.white.opacity(0.9)))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(project.name)
+                    .font(.custom("Outfit-SemiBold", size: 15, relativeTo: .body))
+                    .foregroundStyle(theme.text)
+                Text(presentation.lastCaptureText ?? "Ainda sem capturas")
+                    .font(.custom("Outfit-Regular", size: 11, relativeTo: .caption))
+                    .foregroundStyle(theme.muted)
+                    .lineLimit(1)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(theme.muted)
+        }
+        .padding(.horizontal, 12)
+        .frame(minHeight: 70)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func openInMaps(_ location: TripodLocation) {
+        guard let coordinate = location.coordinate else { return }
+        var components = URLComponents(string: "https://maps.apple.com/")
+        components?.queryItems = [
+            URLQueryItem(name: "ll", value: "\(coordinate.latitude),\(coordinate.longitude)"),
+            URLQueryItem(name: "q", value: location.name)
+        ]
+        if let url = components?.url { openURL(url) }
+    }
+
+    private func referenceImage(for location: TripodLocation) -> UIImage? {
+        guard let photo = location.referencePhotos.last else { return nil }
+        return UIImage(contentsOfFile: store.referencePhotoURL(photo).path)
+    }
+}
+
+private struct TripodReferenceHeroArtwork: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let center = CGPoint(x: rect.maxX * 0.73, y: rect.minY + rect.height * 0.42)
+        for inset in stride(from: CGFloat(0), through: rect.width * 0.55, by: 22) {
+            path.addEllipse(in: CGRect(
+                x: center.x - inset,
+                y: center.y - inset * 0.62,
+                width: inset * 2,
+                height: inset * 1.24
+            ))
+        }
+        path.move(to: CGPoint(x: rect.minX - 20, y: rect.height * 0.34))
+        path.addCurve(
+            to: CGPoint(x: rect.maxX + 20, y: rect.height * 0.18),
+            control1: CGPoint(x: rect.width * 0.28, y: rect.height * 0.08),
+            control2: CGPoint(x: rect.width * 0.62, y: rect.height * 0.42)
+        )
+        return path
     }
 }
 
