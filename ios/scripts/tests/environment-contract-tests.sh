@@ -54,16 +54,18 @@ rg -q '^ASSETCATALOG_COMPILER_APPICON_NAME = AppIconQA$' "$IOS_DIR/Config/QA.xcc
   || fail "QA archives must use the QA-badged app icon"
 rg -q '^ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon$' "$IOS_DIR/Config/Release.xcconfig" \
   || fail "Release must retain the production app icon"
-rg -q '^CODE_SIGN_STYLE = Manual$' "$IOS_DIR/Config/Debug.xcconfig" \
-  || fail "Debug must use the explicit QA development profile"
-rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = Camerae QA Dev$' "$IOS_DIR/Config/Debug.xcconfig" \
-  || fail "Debug must select the Camerae QA Dev profile"
-rg -q '^CODE_SIGN_STYLE = Manual$' "$IOS_DIR/Config/QA.xcconfig" \
-  || fail "QA archives must use deterministic manual Ad Hoc signing"
-rg -q '^CODE_SIGN_IDENTITY = iPhone Distribution$' "$IOS_DIR/Config/QA.xcconfig" \
-  || fail "QA archives must use the installed distribution identity"
-rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = Camerae Ad Hoc$' "$IOS_DIR/Config/QA.xcconfig" \
-  || fail "QA archives must select the Camerae Ad Hoc profile"
+rg -q '^DEVELOPMENT_TEAM = V6JPGVRWCS$' "$IOS_DIR/Config/Signing.xcconfig" \
+  || fail "all worktrees must inherit the Camerae development team"
+rg -q '^CODE_SIGN_STYLE = Automatic$' "$IOS_DIR/Config/Debug.xcconfig" \
+  || fail "Debug must use automatic signing in Xcode"
+rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = *$' "$IOS_DIR/Config/Debug.xcconfig" \
+  || fail "Debug must let Xcode select its development profile"
+rg -q '^CODE_SIGN_STYLE = Automatic$' "$IOS_DIR/Config/QA.xcconfig" \
+  || fail "QA must use automatic signing in Xcode"
+rg -q '^CODE_SIGN_IDENTITY = Apple Development$' "$IOS_DIR/Config/QA.xcconfig" \
+  || fail "QA device builds must use an Apple Development identity"
+rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = *$' "$IOS_DIR/Config/QA.xcconfig" \
+  || fail "QA must let Xcode select its development profile"
 
 rg -q '^\s+QA: release$' "$IOS_DIR/project.yml" \
   || fail "XcodeGen must declare QA as a release configuration"
@@ -77,6 +79,8 @@ rg -q 'CFBundleDisplayName: \$\(CAMERAE_DISPLAY_NAME\)' "$IOS_DIR/project.yml" \
   || fail "the app display name must come from the environment configuration"
 rg -q 'copy-firebase-config\.sh' "$IOS_DIR/project.yml" \
   || fail "the build must embed exactly one environment-specific Firebase plist"
+rg -q '^        DEVELOPMENT_TEAM: V6JPGVRWCS$' "$IOS_DIR/project.yml" \
+  || fail "XcodeGen must preserve the Camerae development team"
 
 rg -q "'QA' => :release" "$IOS_DIR/Podfile" \
   || fail "CocoaPods must map QA to a release configuration"

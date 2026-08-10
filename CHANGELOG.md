@@ -25,6 +25,9 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Made new Xcode worktrees inherit automatic signing and the Camerae
+  development team, avoiding repeated manual signing setup before device runs.
+
 ## [9.5.0] - 2026-08-04
 
 **Status:** Approved local release (build 36; not submitted)
