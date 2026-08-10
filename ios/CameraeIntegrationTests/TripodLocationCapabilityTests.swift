@@ -8,7 +8,7 @@ struct TripodLocationCapabilityTests {
     func catalogCapabilities() {
         #expect(TripodPositionsCapabilityPolicy.catalog == [
             .create, .switchMapList, .selectMapLocation, .showSavedSummary,
-            .openLocation, .openProjects, .openCalendar
+            .openLocation, .returnHome
         ])
     }
 
@@ -25,34 +25,33 @@ struct TripodLocationCapabilityTests {
         #expect(TripodPositionsCatalogPresentation.savedPositionsDestination == .list)
     }
 
-    @Test("map projection keeps every GPS position visible and selectable")
-    func mapProjection() {
-        let firstID = UUID()
-        let secondID = UUID()
-        let withoutGPSID = UUID()
+    @Test("map camera fits every GPS position and ignores positions without GPS")
+    func mapCameraFit() throws {
         let locations = [
-            TripodLocation.fixture(id: firstID, latitude: -23.551, longitude: -46.634),
-            TripodLocation.fixture(id: secondID, latitude: -23.548, longitude: -46.628),
-            TripodLocation.fixture(id: withoutGPSID)
+            TripodLocation.fixture(id: UUID(), latitude: -23.551, longitude: -46.634),
+            TripodLocation.fixture(id: UUID(), latitude: -23.548, longitude: -46.628),
+            TripodLocation.fixture(id: UUID())
         ]
 
-        let markers = TripodMapProjection.markers(for: locations)
+        let region = try #require(TripodMapCameraFit.region(for: locations))
 
-        #expect(markers.map(\.id) == [firstID, secondID])
-        #expect(markers.allSatisfy { (0...1).contains($0.x) && (0...1).contains($0.y) })
-        #expect(Set(markers.map { "\($0.x),\($0.y)" }).count == 2)
+        #expect(region.minimumLatitude <= -23.551)
+        #expect(region.maximumLatitude >= -23.548)
+        #expect(region.minimumLongitude <= -46.634)
+        #expect(region.maximumLongitude >= -46.628)
     }
 
-    @Test("a single GPS position is centered in the safe map area")
-    func singleMapMarker() throws {
-        let id = UUID()
-        let marker = try #require(TripodMapProjection.markers(for: [
-            TripodLocation.fixture(id: id, latitude: -23.551, longitude: -46.634)
-        ]).first)
+    @Test("a single GPS position receives a useful minimum camera span")
+    func singleMapPosition() throws {
+        let region = try #require(TripodMapCameraFit.region(for: [
+            TripodLocation.fixture(id: UUID(), latitude: -23.551, longitude: -46.634)
+        ]))
 
-        #expect(marker.id == id)
-        #expect(marker.x == 0.5)
-        #expect(marker.y == 0.43)
+        #expect(region.centerLatitude == -23.551)
+        #expect(region.centerLongitude == -46.634)
+        #expect(region.latitudeDelta >= TripodMapCameraFit.minimumSpan)
+        #expect(region.longitudeDelta >= TripodMapCameraFit.minimumSpan)
+        #expect(TripodMapCameraFit.region(for: [.fixture(id: UUID())]) == nil)
     }
 
     @Test("legacy positions recover GPS from the newest captured session")
@@ -102,7 +101,7 @@ struct TripodLocationCapabilityTests {
 
     @Test("calendar keeps history and planning reachable")
     func calendarCapabilities() {
-        #expect(CaptureCalendarCapabilityPolicy.root == [.browseMonth, .openDay, .filterProjects, .showProjectMarkers, .openProjectSummary])
+        #expect(CaptureCalendarCapabilityPolicy.root == [.returnHome, .browseMonth, .openDay, .filterProjects, .showProjectMarkers, .openProjectSummary])
         #expect(CaptureCalendarCapabilityPolicy.summary == [.openProject, .scheduleRecapture])
     }
 

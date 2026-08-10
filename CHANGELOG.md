@@ -46,9 +46,11 @@ test distributions do not require an entry here.
 
 ### Fixed
 
-- Tripod Positions now renders every persisted GPS point on the Camerae map,
-  opens the complete saved-position list from its summary card, and
-  idempotently recovers GPS coordinates from the newest legacy project session.
+- Tripod Positions now uses a real Apple map that fits every persisted GPS
+  point, exposes selectable photo thumbnails, opens the complete saved-position
+  list from its summary card, and idempotently recovers GPS coordinates from
+  the newest legacy project session. Calendar and Positions now return directly
+  to Home instead of presenting an internal bottom tab bar.
 - The first project in the new catalog now uses the same selectable card and
   actions as every other project, removing the legacy featured-project split
   that could leave its navigation and menu unresponsive.

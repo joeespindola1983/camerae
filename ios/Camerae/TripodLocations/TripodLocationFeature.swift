@@ -1,5 +1,6 @@
 import CameraeCore
 import Foundation
+import MapKit
 import PhotosUI
 import SwiftUI
 import UIKit
@@ -8,14 +9,13 @@ import UserNotifications
 enum CameraeHomeDestination: Hashable { case calendar, positions }
 
 enum TripodPositionsCapability: Hashable, Sendable {
-    case create, switchMapList, selectMapLocation, showSavedSummary, openLocation
-    case openProjects, openCalendar
+    case returnHome, create, switchMapList, selectMapLocation, showSavedSummary, openLocation
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [
         .create, .switchMapList, .selectMapLocation, .showSavedSummary,
-        .openLocation, .openProjects, .openCalendar
+        .openLocation, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -31,43 +31,37 @@ enum TripodPositionsCatalogPresentation {
     static let savedPositionsDestination = TripodPositionsViewMode.list
 }
 
-struct TripodMapMarkerPosition: Identifiable, Equatable, Sendable {
-    let id: UUID
-    let x: Double
-    let y: Double
+struct TripodMapCameraRegion: Equatable, Sendable {
+    let centerLatitude: Double
+    let centerLongitude: Double
+    let latitudeDelta: Double
+    let longitudeDelta: Double
+
+    var minimumLatitude: Double { centerLatitude - latitudeDelta / 2 }
+    var maximumLatitude: Double { centerLatitude + latitudeDelta / 2 }
+    var minimumLongitude: Double { centerLongitude - longitudeDelta / 2 }
+    var maximumLongitude: Double { centerLongitude + longitudeDelta / 2 }
 }
 
-enum TripodMapProjection {
-    static func markers(for locations: [TripodLocation]) -> [TripodMapMarkerPosition] {
-        let located = locations.compactMap { location in
-            location.coordinate.map { (location.id, $0) }
-        }
-        guard !located.isEmpty else { return [] }
-        guard located.count > 1 else {
-            return [.init(id: located[0].0, x: 0.5, y: 0.43)]
-        }
+enum TripodMapCameraFit {
+    static let minimumSpan = 0.006
+    private static let padding = 1.45
 
-        let latitudes = located.map { $0.1.latitude }
-        let longitudes = located.map { $0.1.longitude }
-        let latitudeRange = (latitudes.min() ?? 0)...(latitudes.max() ?? 0)
-        let longitudeRange = (longitudes.min() ?? 0)...(longitudes.max() ?? 0)
-
-        return located.enumerated().map { index, item in
-            let fallback = Double(index) / Double(max(located.count - 1, 1))
-            let longitudeFraction = normalized(item.1.longitude, in: longitudeRange, fallback: fallback)
-            let latitudeFraction = normalized(item.1.latitude, in: latitudeRange, fallback: fallback)
-            return .init(
-                id: item.0,
-                x: 0.18 + longitudeFraction * 0.64,
-                y: 0.20 + (1 - latitudeFraction) * 0.56
-            )
-        }
-    }
-
-    private static func normalized(_ value: Double, in range: ClosedRange<Double>, fallback: Double) -> Double {
-        let distance = range.upperBound - range.lowerBound
-        guard distance > .ulpOfOne else { return fallback }
-        return min(max((value - range.lowerBound) / distance, 0), 1)
+    static func region(for locations: [TripodLocation]) -> TripodMapCameraRegion? {
+        let coordinates = locations.compactMap(\.coordinate)
+        guard let first = coordinates.first else { return nil }
+        let latitudes = coordinates.map(\.latitude)
+        let longitudes = coordinates.map(\.longitude)
+        let minimumLatitude = latitudes.min() ?? first.latitude
+        let maximumLatitude = latitudes.max() ?? first.latitude
+        let minimumLongitude = longitudes.min() ?? first.longitude
+        let maximumLongitude = longitudes.max() ?? first.longitude
+        return TripodMapCameraRegion(
+            centerLatitude: (minimumLatitude + maximumLatitude) / 2,
+            centerLongitude: (minimumLongitude + maximumLongitude) / 2,
+            latitudeDelta: max((maximumLatitude - minimumLatitude) * padding, minimumSpan),
+            longitudeDelta: max((maximumLongitude - minimumLongitude) * padding, minimumSpan)
+        )
     }
 }
 
@@ -86,26 +80,6 @@ enum TripodCoordinateBackfill {
             longitude: newest.longitude,
             horizontalAccuracy: newest.horizontalAccuracy
         )
-    }
-}
-
-enum CameraeRepeatableTab: CaseIterable, Identifiable, Sendable {
-    case projects, calendar, positions
-
-    var id: Self { self }
-    var title: String {
-        switch self {
-        case .projects: "Projetos"
-        case .calendar: "Calendário"
-        case .positions: "Posições"
-        }
-    }
-    var systemImage: String {
-        switch self {
-        case .projects: "rectangle.grid.2x2"
-        case .calendar: "calendar"
-        case .positions: "mappin.and.ellipse"
-        }
     }
 }
 
@@ -137,10 +111,10 @@ struct TripodPositionMetrics: Equatable, Sendable {
 }
 
 enum CaptureCalendarCapability: Hashable, Sendable {
-    case browseMonth, openDay, filterProjects, showProjectMarkers, openProjectSummary, openProject, scheduleRecapture
+    case returnHome, browseMonth, openDay, filterProjects, showProjectMarkers, openProjectSummary, openProject, scheduleRecapture
 }
 enum CaptureCalendarCapabilityPolicy {
-    static let root: Set<CaptureCalendarCapability> = [.browseMonth, .openDay, .filterProjects, .showProjectMarkers, .openProjectSummary]
+    static let root: Set<CaptureCalendarCapability> = [.returnHome, .browseMonth, .openDay, .filterProjects, .showProjectMarkers, .openProjectSummary]
     static let summary: Set<CaptureCalendarCapability> = [.openProject, .scheduleRecapture]
 }
 
@@ -243,47 +217,42 @@ struct TripodPositionsView: View {
     @State private var viewMode = TripodPositionsViewMode.map
     @State private var selectedLocationID: UUID?
     @State private var isCreating = false
+    @State private var mapPosition = MapCameraPosition.automatic
 
     var body: some View {
-        VStack(spacing: 0) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    modePicker
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                modePicker
 
-                    if store.snapshot.locations.isEmpty {
-                        emptyState
-                    } else if viewMode == .map {
-                        mapCard
-                        savedPositionsSummary
-                    } else {
-                        LazyVStack(spacing: 12) {
-                            ForEach(store.snapshot.locations) { location in
-                                NavigationLink(value: location) {
-                                    TripodLocationCatalogRow(
-                                        location: location,
-                                        subtitle: listSubtitle(for: location),
-                                        referenceImage: referenceImage(for: location),
-                                        theme: theme
-                                    )
-                                }
-                                .buttonStyle(.plain)
+                if store.snapshot.locations.isEmpty {
+                    emptyState
+                } else if viewMode == .map {
+                    mapCard
+                    savedPositionsSummary
+                } else {
+                    LazyVStack(spacing: 12) {
+                        ForEach(store.snapshot.locations) { location in
+                            NavigationLink(value: location) {
+                                TripodLocationCatalogRow(
+                                    location: location,
+                                    subtitle: listSubtitle(for: location),
+                                    referenceImage: referenceImage(for: location),
+                                    theme: theme
+                                )
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
-                .padding(.horizontal, 20)
-                .padding(.bottom, 16)
             }
-
-            CameraeRepeatableTabBar(selection: .positions, theme: theme)
-                .padding(.horizontal, 20)
-                .padding(.bottom, 8)
+            .padding(.horizontal, 20)
+            .padding(.bottom, 16)
         }
         .background(theme.background.ignoresSafeArea())
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
-        .toolbar(.hidden, for: .navigationBar)
+        .toolbar(.visible, for: .navigationBar)
         .tint(theme.accent)
         .preferredColorScheme(.light)
         .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
@@ -291,8 +260,12 @@ struct TripodPositionsView: View {
         .onAppear {
             store.reload()
             selectInitialLocationIfNeeded()
+            fitMapToLocations()
         }
-        .onChange(of: store.snapshot.locations) { _, _ in selectInitialLocationIfNeeded() }
+        .onChange(of: store.snapshot.locations) { _, _ in
+            selectInitialLocationIfNeeded()
+            fitMapToLocations()
+        }
     }
 
     private let theme = CameraeNextTheme(workflow: .repeatable)
@@ -339,55 +312,55 @@ struct TripodPositionsView: View {
     }
 
     private var mapCard: some View {
-        GeometryReader { proxy in
-            ZStack(alignment: .bottomLeading) {
-                theme.card
-                TripodMapGuideLines()
-                    .stroke(theme.border.opacity(0.9), lineWidth: 2)
-
-                ForEach(TripodMapProjection.markers(for: store.snapshot.locations)) { marker in
-                    Button {
-                        selectedLocationID = marker.id
-                    } label: {
-                        Circle()
-                            .fill(theme.accent)
-                            .frame(
-                                width: selectedLocationID == marker.id ? 36 : 28,
-                                height: selectedLocationID == marker.id ? 36 : 28
-                            )
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+        ZStack(alignment: .bottomLeading) {
+            Map(position: $mapPosition) {
+                ForEach(locationsWithGPS) { location in
+                    if let coordinate = location.coordinate {
+                        Annotation(
+                            location.name,
+                            coordinate: CLLocationCoordinate2D(
+                                latitude: coordinate.latitude,
+                                longitude: coordinate.longitude
+                            ),
+                            anchor: .center
+                        ) {
+                            Button { selectedLocationID = location.id } label: {
+                                mapThumbnail(for: location)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(location.name)
+                            .accessibilityIdentifier("tripod.positions.marker.\(location.id.uuidString)")
+                        }
+                        .annotationTitles(.hidden)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(store.snapshot.location(id: marker.id)?.name ?? "Posição salva")
-                    .accessibilityIdentifier("tripod.positions.marker.\(marker.id.uuidString)")
-                    .position(
-                        x: proxy.size.width * marker.x,
-                        y: proxy.size.height * marker.y
-                    )
                 }
+            }
+            .mapStyle(.standard(elevation: .flat))
+            .mapControls {
+                MapCompass()
+                MapScaleView()
+            }
 
-                if TripodMapProjection.markers(for: store.snapshot.locations).isEmpty {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("NENHUMA POSIÇÃO COM GPS")
-                            .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
-                            .foregroundStyle(theme.accent)
-                        Text("Abra a lista para consultar os pontos salvos.")
-                            .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
-                            .foregroundStyle(theme.muted)
-                    }
-                    .padding(16)
-                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if locationsWithGPS.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("NENHUMA POSIÇÃO COM GPS")
+                        .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                        .foregroundStyle(theme.accent)
+                    Text("Abra a lista para consultar os pontos salvos.")
+                        .font(.custom("Outfit-Regular", size: 14, relativeTo: .subheadline))
+                        .foregroundStyle(theme.muted)
                 }
+                .padding(16)
+                .background(theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(16)
+            }
 
-                if let selectedLocation {
-                    NavigationLink(value: selectedLocation) {
-                        selectedLocationBadge(selectedLocation)
-                    }
-                    .buttonStyle(.plain)
-                    .padding(16)
+            if let selectedLocation {
+                NavigationLink(value: selectedLocation) {
+                    selectedLocationBadge(selectedLocation)
                 }
+                .buttonStyle(.plain)
+                .padding(16)
             }
         }
         .frame(height: 380)
@@ -437,6 +410,54 @@ struct TripodPositionsView: View {
 
     private var selectedLocation: TripodLocation? {
         selectedLocationID.flatMap { store.snapshot.location(id: $0) }
+    }
+
+    private var locationsWithGPS: [TripodLocation] {
+        store.snapshot.locations.filter { $0.coordinate != nil }
+    }
+
+    @ViewBuilder
+    private func mapThumbnail(for location: TripodLocation) -> some View {
+        Group {
+            if let image = referenceImage(for: location) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Circle()
+                    .fill(theme.accent)
+                    .overlay {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+            }
+        }
+        .frame(
+            width: selectedLocationID == location.id ? 52 : 44,
+            height: selectedLocationID == location.id ? 52 : 44
+        )
+        .clipShape(Circle())
+        .overlay { Circle().stroke(Color.white, lineWidth: 3) }
+        .shadow(color: .black.opacity(0.24), radius: 4, y: 2)
+        .animation(.easeOut(duration: 0.16), value: selectedLocationID)
+    }
+
+    private func fitMapToLocations() {
+        guard let fitted = TripodMapCameraFit.region(for: store.snapshot.locations) else {
+            mapPosition = .automatic
+            return
+        }
+        mapPosition = .region(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: fitted.centerLatitude,
+                longitude: fitted.centerLongitude
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: fitted.latitudeDelta,
+                longitudeDelta: fitted.longitudeDelta
+            )
+        ))
     }
 
     private func selectedLocationBadge(_ location: TripodLocation) -> some View {
@@ -500,25 +521,6 @@ struct TripodPositionsView: View {
     }
 }
 
-private struct TripodMapGuideLines: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        let lines: [(CGPoint, CGPoint)] = [
-            (.init(x: -0.08, y: 0.12), .init(x: 1.08, y: 0.28)),
-            (.init(x: -0.08, y: 0.28), .init(x: 1.08, y: 0.08)),
-            (.init(x: -0.08, y: 0.44), .init(x: 1.08, y: 0.60)),
-            (.init(x: -0.08, y: 0.60), .init(x: 1.08, y: 0.40)),
-            (.init(x: -0.08, y: 0.76), .init(x: 1.08, y: 0.92)),
-            (.init(x: -0.08, y: 0.92), .init(x: 1.08, y: 0.72))
-        ]
-        for line in lines {
-            path.move(to: CGPoint(x: rect.width * line.0.x, y: rect.height * line.0.y))
-            path.addLine(to: CGPoint(x: rect.width * line.1.x, y: rect.height * line.1.y))
-        }
-        return path
-    }
-}
-
 private struct TripodLocationCatalogRow: View {
     let location: TripodLocation
     let subtitle: String
@@ -563,56 +565,6 @@ private struct TripodLocationCatalogRow: View {
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
         .background(theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-    }
-}
-
-private struct CameraeRepeatableTabBar: View {
-    let selection: CameraeRepeatableTab
-    let theme: CameraeNextTheme
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(CameraeRepeatableTab.allCases) { tab in
-                tabDestination(tab)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-        .padding(8)
-        .frame(height: 58)
-        .background(theme.card, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-    }
-
-    @ViewBuilder
-    private func tabDestination(_ tab: CameraeRepeatableTab) -> some View {
-        if tab == selection {
-            tabLabel(tab)
-        } else {
-            switch tab {
-            case .projects:
-                NavigationLink(value: CameraModule.repeatable) { tabLabel(tab) }
-                    .buttonStyle(.plain)
-            case .calendar:
-                NavigationLink(value: CameraeHomeDestination.calendar) { tabLabel(tab) }
-                    .buttonStyle(.plain)
-            case .positions:
-                NavigationLink(value: CameraeHomeDestination.positions) { tabLabel(tab) }
-                    .buttonStyle(.plain)
-            }
-        }
-    }
-
-    private func tabLabel(_ tab: CameraeRepeatableTab) -> some View {
-        VStack(spacing: 2) {
-            Image(systemName: tab.systemImage)
-                .font(.system(size: 14, weight: .medium))
-            Text(tab.title)
-                .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-                .tracking(2.2)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-        }
-        .foregroundStyle(tab == selection ? theme.accent : theme.muted)
-        .frame(maxWidth: .infinity, minHeight: 42)
     }
 }
 
@@ -909,6 +861,8 @@ struct CaptureCalendarView: View {
         }
         .background(theme.background)
         .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.visible, for: .navigationBar)
         .foregroundStyle(theme.text)
         .tint(theme.accent)
         .preferredColorScheme(.light)
