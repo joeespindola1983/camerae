@@ -791,7 +791,9 @@ struct SpatialGuidanceFlowView: View {
         VStack(alignment: .leading, spacing: 12) {
             SpatialProgressCardView(
                 status: model.mappingQuality.canSave ? "MAPA PRONTO" : "MAPEANDO",
-                title: hasLowReferenceGeometry ? "Poucas referências" : "Buscando referências",
+                title: model.mappingQuality.canSave
+                    ? (hasLowReferenceGeometry ? "Mapa pronto com ressalva" : "Mapa pronto")
+                    : (hasLowReferenceGeometry ? "Poucas referências" : "Buscando referências"),
                 detail: missingRequirementsDescription,
                 progress: model.mappingQuality.progress,
                 tone: model.mappingQuality.canSave ? .success : .accent
@@ -1109,7 +1111,9 @@ struct SpatialGuidanceFlowView: View {
         let missing = model.mappingQuality.missingRequirements
         if missing.contains(.tracking) { return "Mova o iPhone mais devagar para recuperar o tracking." }
         if missing.contains(.geometryVariation) {
-            return "Cena muito plana. Inclua cantos ou objetos fixos em outras distâncias."
+            return model.mappingQuality.canSave
+                ? "A variação de altura parece baixa, mas você já pode continuar."
+                : "A variação de altura parece baixa. Inclua cantos ou objetos fixos, se possível."
         }
         if missing.contains(.featureDistribution) {
             return "As referências estão concentradas. Mostre outras partes do ambiente."

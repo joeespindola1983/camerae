@@ -39,6 +39,8 @@ rg -q "^PRODUCT_BUNDLE_IDENTIFIER = $QA_BUNDLE_ID$" "$IOS_DIR/Config/Debug.xccon
   || fail "Debug must install the QA app"
 rg -q "^PRODUCT_BUNDLE_IDENTIFIER = $QA_BUNDLE_ID$" "$IOS_DIR/Config/QA.xcconfig" \
   || fail "QA archives must use the QA bundle identifier"
+rg -q "^PRODUCT_BUNDLE_IDENTIFIER = $QA_BUNDLE_ID$" "$IOS_DIR/Config/QADebug.xcconfig" \
+  || fail "QA Debug must install the QA app"
 rg -q "^PRODUCT_BUNDLE_IDENTIFIER = $PRODUCTION_BUNDLE_ID$" "$IOS_DIR/Config/Release.xcconfig" \
   || fail "Release archives must use the production bundle identifier"
 
@@ -58,6 +60,10 @@ rg -q '^CODE_SIGN_STYLE = Manual$' "$IOS_DIR/Config/Debug.xcconfig" \
   || fail "Debug must use the explicit QA development profile"
 rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = Camerae QA Dev$' "$IOS_DIR/Config/Debug.xcconfig" \
   || fail "Debug must select the Camerae QA Dev profile"
+rg -q '^CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES$' "$IOS_DIR/Config/QADebug.xcconfig" \
+  || fail "QA Debug must allow consent-controlled Firebase collection"
+rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = Camerae QA Dev$' "$IOS_DIR/Config/QADebug.xcconfig" \
+  || fail "QA Debug must select the Camerae QA Dev profile"
 rg -q '^CODE_SIGN_STYLE = Manual$' "$IOS_DIR/Config/QA.xcconfig" \
   || fail "QA archives must use deterministic manual Ad Hoc signing"
 rg -q '^CODE_SIGN_IDENTITY = iPhone Distribution$' "$IOS_DIR/Config/QA.xcconfig" \
@@ -67,12 +73,18 @@ rg -q '^PROVISIONING_PROFILE_SPECIFIER\[sdk=iphoneos\*\] = Camerae Ad Hoc$' "$IO
 
 rg -q '^\s+QA: release$' "$IOS_DIR/project.yml" \
   || fail "XcodeGen must declare QA as a release configuration"
+rg -q '^\s+QADebug: debug$' "$IOS_DIR/project.yml" \
+  || fail "XcodeGen must declare a runnable QA Debug configuration"
 rg -q '^\s+Camerae QA:$' "$IOS_DIR/project.yml" \
   || fail "XcodeGen must declare the Camerae QA scheme"
 rg -q '^\s+archive:$' "$IOS_DIR/project.yml" \
   || fail "XcodeGen schemes must declare archive actions"
 rg -q '^\s+config: QA$' "$IOS_DIR/project.yml" \
   || fail "Camerae QA must archive with the QA configuration"
+rg -q '^\s+config: QADebug$' "$IOS_DIR/project.yml" \
+  || fail "Camerae QA must run with the telemetry-enabled QA Debug configuration"
+rg -q '"-FIRDebugEnabled": true' "$IOS_DIR/project.yml" \
+  || fail "Camerae QA must identify development devices in Firebase DebugView"
 rg -q 'CFBundleDisplayName: \$\(CAMERAE_DISPLAY_NAME\)' "$IOS_DIR/project.yml" \
   || fail "the app display name must come from the environment configuration"
 rg -q 'copy-firebase-config\.sh' "$IOS_DIR/project.yml" \
@@ -80,6 +92,8 @@ rg -q 'copy-firebase-config\.sh' "$IOS_DIR/project.yml" \
 
 rg -q "'QA' => :release" "$IOS_DIR/Podfile" \
   || fail "CocoaPods must map QA to a release configuration"
+rg -q "'QADebug' => :debug" "$IOS_DIR/Podfile" \
+  || fail "CocoaPods must map QA Debug to a debug configuration"
 
 rg -q 'SCHEME="Camerae QA"' "$IOS_DIR/scripts/distribute-firebase.sh" \
   || fail "Firebase distribution must archive the Camerae QA scheme"

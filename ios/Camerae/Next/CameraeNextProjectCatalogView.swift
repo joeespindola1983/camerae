@@ -164,6 +164,9 @@ struct CameraeNextProjectCatalogModel: Equatable {
     var featuredProject: CameraProject? { visibleProjects.first }
     var projectCount: Int { visibleProjects.count }
     var remainingProjects: [CameraProject] { Array(visibleProjects.dropFirst()) }
+    /// The interactive catalog must never remove its first item into a special
+    /// presentation. Every project uses the same tested navigation and menu path.
+    var selectableProjects: [CameraProject] { visibleProjects }
 }
 
 struct CameraeNextProjectCatalogContentPolicy: Equatable {
@@ -408,18 +411,7 @@ struct CameraeNextProjectCatalogView: View {
                             .padding(.bottom, 18)
                     }
 
-                    if let featured = catalog.featuredProject {
-                        ZStack(alignment: .topTrailing) {
-                            NavigationLink(value: featured) {
-                                ProjectListHeroCard(project: featured, theme: theme)
-                            }
-                            .buttonStyle(.plain)
-
-                            projectActionsMenu(featured)
-                                .padding(12)
-                        }
-                        .padding(.top, 12)
-                    } else if contentPolicy.showsFirstProjectOnboarding {
+                    if catalog.selectableProjects.isEmpty && contentPolicy.showsFirstProjectOnboarding {
                         ProjectListEmptyHero(theme: theme, createAction: beginCreatingProject)
                             .padding(.top, 12)
                     }
@@ -442,12 +434,12 @@ struct CameraeNextProjectCatalogView: View {
                                 .padding(.top, 4)
                         }
 
-                        if catalog.remainingProjects.isEmpty {
+                        if catalog.selectableProjects.isEmpty {
                             emptyFilteredState
                                 .padding(.top, 26)
                         } else {
                             LazyVStack(spacing: 8) {
-                                ForEach(catalog.remainingProjects) { project in
+                                ForEach(catalog.selectableProjects) { project in
                                     ZStack(alignment: .trailing) {
                                         NavigationLink(value: project) {
                                             ProjectListRow(project: project, theme: theme)

@@ -18,9 +18,23 @@ struct CameraeNextProjectCatalogTests {
             filter: .recent
         )
 
-        #expect(catalog.featuredProject?.name == "Latest")
-        #expect(catalog.remainingProjects.map(\.name) == ["Older"])
+        #expect(catalog.selectableProjects.map(\.name) == ["Latest", "Older"])
         #expect(catalog.projectCount == 2)
+    }
+
+    @Test("the first project remains in the same selectable collection as every other project")
+    func firstProjectIsSelectable() {
+        let first = makeProject(name: "First", module: .repeatable, day: 3)
+        let second = makeProject(name: "Second", module: .repeatable, day: 2)
+
+        let catalog = CameraeNextProjectCatalogModel(
+            projects: [second, first],
+            module: .repeatable,
+            filter: .recent
+        )
+
+        #expect(catalog.selectableProjects.map(\.id) == [first.id, second.id])
+        #expect(catalog.selectableProjects.count == catalog.projectCount)
     }
 
     @Test("capture and archive filters keep archived projects out of active results")

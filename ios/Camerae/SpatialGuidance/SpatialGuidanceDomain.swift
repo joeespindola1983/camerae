@@ -201,10 +201,11 @@ enum SpatialMappingQualityEvaluator {
             min(metrics.featureHeightRangeMeters / minimumFeatureHeightRangeMeters, 1),
             min(metrics.cameraTravelDistanceMeters / minimumCameraTravelDistanceMeters, 1)
         ]
+        let blockingMissing = missing.subtracting([.geometryVariation])
         let progress = scores.reduce(0, +) / Double(scores.count)
         return SpatialMappingQuality(
-            level: missing.isEmpty ? .ready : .insufficient,
-            progress: missing.isEmpty ? 1 : progress,
+            level: blockingMissing.isEmpty ? .ready : .insufficient,
+            progress: blockingMissing.isEmpty ? 1 : progress,
             missingRequirements: missing,
             canDefineScene: metrics.elapsedSeconds >= 12
                 && metrics.trackingIsNormal
@@ -212,7 +213,6 @@ enum SpatialMappingQualityEvaluator {
                 && metrics.featurePointCount >= 500
                 && metrics.keyframeCount >= 3
                 && metrics.featureCellCoverage >= 0.30
-                && metrics.featureHeightRangeMeters >= 0.30
                 && metrics.cameraTravelDistanceMeters >= 0.8
         )
     }

@@ -140,7 +140,7 @@ struct SpatialGuidanceTests {
         #expect(ready.progress == 1)
     }
 
-    @Test("many points on a flat surface do not make a trustworthy map")
+    @Test("flat geometry is advisory when the rest of the scene evidence is trustworthy")
     func flatSurfaceQualityGate() {
         let flat = SpatialMappingQualityEvaluator.evaluate(
             .init(
@@ -155,9 +155,10 @@ struct SpatialGuidanceTests {
             )
         )
 
-        #expect(flat.level == .insufficient)
+        #expect(flat.level == .ready)
         #expect(flat.missingRequirements.contains(.geometryVariation))
-        #expect(!flat.canDefineScene)
+        #expect(flat.canDefineScene)
+        #expect(flat.canSave)
     }
 
     @Test("concentrated features and insufficient parallax remain actionable blockers")

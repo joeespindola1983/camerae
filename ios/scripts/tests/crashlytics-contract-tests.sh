@@ -26,6 +26,8 @@ rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES' "$IOS_DIR/Config/Release.xc
   || fail "Release collection must be enabled"
 rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES' "$IOS_DIR/Config/QA.xcconfig" \
   || fail "QA collection must be enabled"
+rg -q 'CAMERAE_CRASHLYTICS_COLLECTION_ENABLED = YES' "$IOS_DIR/Config/QADebug.xcconfig" \
+  || fail "QA Debug collection must be enabled"
 rg -q 'CAMERAE_RELEASE_CHANNEL=qa' "$IOS_DIR/scripts/distribute-firebase.sh" \
   || fail "Firebase distribution must identify QA reports"
 rg -q 'setAnalyticsCollectionEnabled' "$IOS_DIR/Camerae/Diagnostics/CameraeDiagnosticsConsent.swift" \
