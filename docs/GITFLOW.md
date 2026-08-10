@@ -123,7 +123,13 @@ O gate roda `pod install --deployment`, fronteiras de arquitetura, testes Swift,
 
 O workflow `iOS Build` valida a política em todo Draft PR direcionado a `develop` ou `release/*`. Quando o PR é marcado como pronto, também executa testes e build iOS no macOS e os testes C++ no Linux. Execuções antigas do mesmo PR são canceladas quando um novo commit chega. O acionamento manual por `workflow_dispatch` continua disponível para diagnóstico.
 
-Os workflows de Firebase e App Store permanecem somente por `workflow_dispatch`. Nenhum workflow publica automaticamente em pushes, PRs ou tags.
+Os workflows de Firebase e App Store permanecem somente por `workflow_dispatch`.
+O workflow `Publish GitHub Release` é a etapa final da promoção: ele reage a
+uma tag final `vX.Y.Z` ou pode ser reexecutado manualmente para uma tag
+existente. Antes de criar a página em GitHub Releases, valida que a tag é
+SemVer final, que existe de forma imutável e que seu commit está contido em
+`main`. Tags `-qa.N` nunca são publicadas como releases. A operação é
+idempotente para permitir recuperação segura de execuções interrompidas.
 
 ## Registro de submissões à App Store
 
@@ -136,6 +142,11 @@ Prepared, Submitted, In Review, Approved, Available ou Rejected. Registre a
 data da confirmação e diferencie explicitamente aprovação da Apple de
 disponibilidade pública. Distribuições Firebase e builds locais não entram
 nesse registro.
+
+Depois da aprovação de produção, promova o commit exato para `main`, crie e
+envie a tag anotada final e confirme que o workflow `Publish GitHub Release`
+criou a página correspondente. A página de release não substitui o registro de
+status da Apple e não deve ser criada para candidatos de QA.
 
 ## GitHub repository settings
 
