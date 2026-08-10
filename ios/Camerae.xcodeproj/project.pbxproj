@@ -1329,6 +1329,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					45DC7A710A742AE62BE0DF9E = {
+						DevelopmentTeam = V6JPGVRWCS;
+						ProvisioningStyle = Automatic;
+					};
 					5A9E03783BFB31D21264C2B2 = {
 						TestTargetID = 45DC7A710A742AE62BE0DF9E;
 					};
@@ -2037,7 +2041,9 @@
 			baseConfigurationReference = DEFD8284BD0139903908040C /* Release.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = V6JPGVRWCS;
 				INFOPLIST_FILE = Camerae/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2172,8 +2178,9 @@
 			baseConfigurationReference = 4FD61DCF79DE05A11F6D4F15 /* Debug.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = V6JPGVRWCS;
 				INFOPLIST_FILE = Camerae/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2183,7 +2190,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PROVISIONING_PROFILE_SPECIFIER = "Camerae QA Dev";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Camerae/Camerae-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = "1,2";
@@ -2330,9 +2337,10 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = 6F9CCF059F967D4E08C99D3A /* QA.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_IDENTITY = "iPhone Distribution";
-				CODE_SIGN_STYLE = Manual;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = V6JPGVRWCS;
 				INFOPLIST_FILE = Camerae/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -2342,7 +2350,7 @@
 					"$(inherited)",
 					"-ObjC",
 				);
-				PROVISIONING_PROFILE_SPECIFIER = "Camerae Ad Hoc";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				SDKROOT = iphoneos;
 				SWIFT_OBJC_BRIDGING_HEADER = "Camerae/Camerae-Bridging-Header.h";
 				TARGETED_DEVICE_FAMILY = "1,2";
