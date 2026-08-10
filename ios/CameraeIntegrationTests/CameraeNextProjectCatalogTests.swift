@@ -126,6 +126,20 @@ struct CameraeNextProjectCatalogTests {
         #expect(layout.thumbnailRange.upperBound <= layout.informationRange.lowerBound)
     }
 
+    @Test("stacked project cards keep independent non-overlapping tap targets")
+    func stackedProjectCardHitTargets() {
+        let layout = ProjectListStackLayout(cardHeight: 244, spacing: 10)
+
+        #expect(layout.cardIndex(at: -1, count: 2) == nil)
+        #expect(layout.cardIndex(at: 0, count: 2) == 0)
+        #expect(layout.cardIndex(at: 243, count: 2) == 0)
+        #expect(layout.cardIndex(at: 244, count: 2) == nil)
+        #expect(layout.cardIndex(at: 253, count: 2) == nil)
+        #expect(layout.cardIndex(at: 254, count: 2) == 1)
+        #expect(layout.cardIndex(at: 497, count: 2) == 1)
+        #expect(layout.cardIndex(at: 498, count: 2) == nil)
+    }
+
     @Test("project cards summarize only durable captures by type")
     func projectCardCaptureSummary() {
         let date = Date(timeIntervalSince1970: 1_754_000_000)
