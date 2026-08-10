@@ -13,9 +13,12 @@ enum TripodPositionsCapabilityPolicy {
     static let detail: Set<TripodPositionsCapability> = [.addReference, .createProject, .linkProject, .scheduleRecapture, .showMetrics]
 }
 
-enum CaptureCalendarCapability: Hashable, Sendable { case browseMonth, openDay, openLocation, scheduleRecapture, showNextReturn }
+enum CaptureCalendarCapability: Hashable, Sendable {
+    case browseMonth, openDay, filterProjects, showProjectMarkers, openProjectSummary, openProject, scheduleRecapture
+}
 enum CaptureCalendarCapabilityPolicy {
-    static let root: Set<CaptureCalendarCapability> = [.browseMonth, .openDay, .openLocation, .scheduleRecapture, .showNextReturn]
+    static let root: Set<CaptureCalendarCapability> = [.browseMonth, .openDay, .filterProjects, .showProjectMarkers, .openProjectSummary]
+    static let summary: Set<CaptureCalendarCapability> = [.openProject, .scheduleRecapture]
 }
 
 @MainActor
@@ -278,91 +281,355 @@ struct CaptureCalendarView: View {
     @EnvironmentObject private var store: TripodLocationStore
     @EnvironmentObject private var projects: ProjectStore
     @State private var selectedDate = Date()
-    @State private var planningLocationID: UUID?
+    @State private var visibleMonth = Date()
+    @State private var filter = CalendarProjectFilter.all
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-            nextReturnCard
-            DatePicker("Data", selection: $selectedDate, displayedComponents: .date)
-                .datePickerStyle(.graphical)
-                .padding(8)
-                .background(theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            let entries = store.snapshot.calendarEntries.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
-            let captures = capturedSessions(on: selectedDate)
-            CameraeNextSectionLabel(title: selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)), theme: theme)
-            if entries.isEmpty && captures.isEmpty { ContentUnavailableView("Nenhuma captura nesta data", systemImage: "calendar") }
-            ForEach(entries) { entry in
-                if let location = store.snapshot.location(id: entry.locationID) { calendarRow(location: location, subtitle: entry.kind == .planned ? "Retorno planejado" : "Captura concluída", accent: entry.kind == .planned ? theme.accent : .green) }
+            VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CALENDÁRIO")
+                        .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                        .foregroundStyle(theme.accent)
+                    Text(visibleMonth.formatted(.dateTime.month(.wide).year()))
+                        .font(.custom("Outfit-SemiBold", size: 28, relativeTo: .title))
+                        .foregroundStyle(theme.text)
+                }
+
+                CameraeCalendarMonthGrid(
+                    visibleMonth: $visibleMonth,
+                    selectedDate: $selectedDate,
+                    markedDates: Set(agendaItems.map { Calendar.current.startOfDay(for: $0.date) }),
+                    theme: theme
+                )
+
+                HStack {
+                    CameraeNextSectionLabel(
+                        title: selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)),
+                        theme: theme
+                    )
+                    Spacer()
+                    Text("\(selectedItems.count) PROJETOS")
+                        .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                        .tracking(2.2)
+                        .foregroundStyle(theme.muted)
+                }
+
+                filterPicker
+
+                if filteredItems.isEmpty {
+                    ContentUnavailableView("Nenhum projeto nesta data", systemImage: "calendar")
+                        .foregroundStyle(theme.text)
+                } else {
+                    ForEach(filteredItems) { item in
+                        NavigationLink(value: item) { CalendarProjectAgendaRow(item: item, theme: theme) }
+                            .buttonStyle(.plain)
+                    }
+                }
             }
-            ForEach(captures, id: \.id) { capture in
-                calendarRow(location: capture.location, subtitle: "Captura concluída · \(capture.date.formatted(date: .omitted, time: .shortened))", accent: .green)
-            }
-            if let first = store.snapshot.locations.first {
-                CameraeNextActionButton(title: "Planejar novo retorno", systemImage: "calendar.badge.plus", theme: theme) { planningLocationID = first.id }
-            }
-            }.padding()
-        }.background(theme.background)
-        .navigationTitle(selectedDate.formatted(.dateTime.month(.wide).year()))
-        .foregroundStyle(theme.text).tint(theme.accent).preferredColorScheme(.light)
-        .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
-        .sheet(isPresented: Binding(
-            get: { planningLocationID != nil },
-            set: { if !$0 { planningLocationID = nil } }
-        )) {
-            if let planningLocationID { RecapturePlannerView(locationID: planningLocationID) }
+            .padding()
+        }
+        .background(theme.background)
+        .navigationTitle("")
+        .foregroundStyle(theme.text)
+        .tint(theme.accent)
+        .preferredColorScheme(.light)
+        .navigationDestination(for: CalendarProjectAgendaItem.self) { item in
+            CalendarProjectSummaryView(
+                item: item,
+                history: agendaItems.filter { $0.projectID == item.projectID }.sorted { $0.date > $1.date }
+            )
         }
         .onAppear { store.reload() }
     }
 
     private let theme = CameraeNextTheme(workflow: .repeatable)
 
-    @ViewBuilder private var nextReturnCard: some View {
-        if let entry = store.snapshot.calendarEntries.filter({ $0.kind == .planned && $0.date >= Date() }).sorted(by: { $0.date < $1.date }).first,
-           let location = store.snapshot.location(id: entry.locationID) {
-            Button { planningLocationID = location.id } label: {
-                VStack(alignment: .leading, spacing: 6) {
-                    CameraeNextSectionLabel(title: "Próximo retorno", theme: theme)
-                    Text(location.name).font(.custom("Outfit-SemiBold", size: 20)).foregroundStyle(theme.text)
-                    Text(entry.date.formatted(date: .abbreviated, time: .shortened)).font(.custom("Outfit-Regular", size: 12)).foregroundStyle(theme.muted)
-                }.frame(maxWidth: .infinity, alignment: .leading).padding(16).background(theme.card, in: RoundedRectangle(cornerRadius: 20))
-            }.buttonStyle(.plain)
+    private var filterPicker: some View {
+        HStack(spacing: 8) {
+            ForEach(CalendarProjectFilter.allCases) { candidate in
+                Button(candidate.title) { filter = candidate }
+                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                    .foregroundStyle(filter == candidate ? Color.white : theme.text)
+                    .padding(.horizontal, 18)
+                    .frame(height: 34)
+                    .background(filter == candidate ? theme.accent : theme.surface, in: RoundedRectangle(cornerRadius: 14))
+                    .buttonStyle(.plain)
+            }
         }
     }
 
-    private func calendarRow(location: TripodLocation, subtitle: String, accent: Color) -> some View {
-        NavigationLink(value: location) {
-            HStack(spacing: 12) {
-                RoundedRectangle(cornerRadius: 2).fill(accent).frame(width: 4, height: 42)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(location.name).font(.custom("Outfit-Regular", size: 15)).foregroundStyle(theme.text)
-                    Text(subtitle).font(.custom("Outfit-Regular", size: 12)).foregroundStyle(theme.muted)
-                }
-                Spacer(); Image(systemName: "chevron.right").foregroundStyle(theme.muted)
-            }.padding(14).background(theme.card, in: RoundedRectangle(cornerRadius: 18))
-        }.buttonStyle(.plain)
+    private var selectedItems: [CalendarProjectAgendaItem] {
+        agendaItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
     }
 
-    private func capturedSessions(on date: Date) -> [CalendarCaptureRow] {
-        projects.projects.flatMap { project -> [CalendarCaptureRow] in
+    private var filteredItems: [CalendarProjectAgendaItem] { filter.apply(to: selectedItems) }
+
+    private var agendaItems: [CalendarProjectAgendaItem] {
+        let planned = store.snapshot.calendarEntries.compactMap { entry -> CalendarProjectAgendaItem? in
+            guard entry.kind == .planned,
+                  let location = store.snapshot.location(id: entry.locationID) else { return nil }
+            let project = entry.projectID.flatMap { id in projects.projects.first { $0.id == id } }
+            return CalendarProjectAgendaItem(
+                id: entry.id,
+                kind: .planned,
+                date: entry.date,
+                projectID: project?.id,
+                locationID: location.id,
+                locationTitle: location.name,
+                title: project?.name ?? location.name,
+                detail: "Retorno planejado · \(entry.date.formatted(date: .omitted, time: .shortened))",
+                session: nil
+            )
+        }
+        let captured = projects.projects.flatMap { project -> [CalendarProjectAgendaItem] in
             guard let location = store.snapshot.location(forProjectID: project.id) else { return [] }
-            return TimelapseSessionStore(project: project).sessionSummaries().compactMap { summary in
-                guard Calendar.current.isDate(summary.session.createdAt, inSameDayAs: date) else { return nil }
-                return CalendarCaptureRow(id: summary.id, location: location, date: summary.session.createdAt)
+            return TimelapseSessionStore(project: project).sessionSummaries().map { summary in
+                CalendarProjectAgendaItem(
+                    id: summary.id,
+                    kind: .captured,
+                    date: summary.session.createdAt,
+                    projectID: project.id,
+                    locationID: location.id,
+                    locationTitle: location.name,
+                    title: project.name,
+                    detail: "Captura concluída · \(summary.session.createdAt.formatted(date: .omitted, time: .shortened))",
+                    session: .init(
+                        captureKind: summary.captureKind.title,
+                        lens: summary.session.cameraLens?.title ?? "—",
+                        frameCount: summary.frameCount,
+                        duration: summary.captureDuration
+                    )
+                )
             }
-        }.sorted { $0.date < $1.date }
+        }
+        let created = projects.projects.compactMap { project -> CalendarProjectAgendaItem? in
+            guard let location = store.snapshot.location(forProjectID: project.id) else { return nil }
+            return CalendarProjectAgendaItem(
+                id: project.id,
+                kind: .created,
+                date: project.createdAt,
+                projectID: project.id,
+                locationID: location.id,
+                locationTitle: location.name,
+                title: project.name,
+                detail: "Projeto criado nesta posição",
+                session: nil
+            )
+        }
+        return (planned + captured + created).sorted { $0.date < $1.date }
     }
 }
 
-private struct CalendarCaptureRow: Identifiable {
+enum CalendarProjectAgendaKind: Hashable, Sendable { case captured, planned, created }
+
+struct CalendarProjectSessionSummary: Hashable, Sendable {
+    let captureKind: String
+    let lens: String
+    let frameCount: Int
+    let duration: TimeInterval?
+}
+
+struct CalendarProjectAgendaItem: Identifiable, Hashable, Sendable {
     let id: UUID
-    let location: TripodLocation
+    let kind: CalendarProjectAgendaKind
     let date: Date
+    let projectID: UUID?
+    let locationID: UUID
+    let locationTitle: String
+    let title: String
+    let detail: String
+    let session: CalendarProjectSessionSummary?
+}
+
+enum CalendarProjectFilter: String, CaseIterable, Identifiable, Sendable {
+    case all, captures, returns
+    var id: String { rawValue }
+    var title: String { switch self { case .all: "Todos"; case .captures: "Capturas"; case .returns: "Retornos" } }
+    func apply(to items: [CalendarProjectAgendaItem]) -> [CalendarProjectAgendaItem] {
+        switch self {
+        case .all: items
+        case .captures: items.filter { $0.kind == .captured }
+        case .returns: items.filter { $0.kind == .planned }
+        }
+    }
+}
+
+private struct CameraeCalendarMonthGrid: View {
+    @Binding var visibleMonth: Date
+    @Binding var selectedDate: Date
+    let markedDates: Set<Date>
+    let theme: CameraeNextTheme
+    private let calendar = Calendar.current
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 7)
+
+    var body: some View {
+        VStack(spacing: 7) {
+            HStack {
+                Button { moveMonth(-1) } label: { Image(systemName: "chevron.left") }
+                Spacer()
+                Text(visibleMonth.formatted(.dateTime.month(.wide)).uppercased())
+                    .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                Spacer()
+                Button { moveMonth(1) } label: { Image(systemName: "chevron.right") }
+            }
+            LazyVGrid(columns: columns, spacing: 7) {
+                ForEach(calendar.veryShortWeekdaySymbols, id: \.self) { symbol in
+                    Text(symbol.uppercased()).font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2)).foregroundStyle(theme.muted)
+                }
+                ForEach(Array(days.enumerated()), id: \.offset) { _, day in dayCell(day) }
+            }
+        }
+        .padding(12)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private var days: [Date] {
+        guard let interval = calendar.dateInterval(of: .month, for: visibleMonth),
+              let gridStart = calendar.dateInterval(of: .weekOfMonth, for: interval.start)?.start else { return [] }
+        guard let monthEnd = calendar.date(byAdding: .day, value: -1, to: interval.end),
+              let fifthWeekEnd = calendar.date(byAdding: .day, value: 34, to: gridStart) else { return [] }
+        let count = monthEnd > fifthWeekEnd ? 42 : 35
+        return (0..<count).compactMap { calendar.date(byAdding: .day, value: $0, to: gridStart) }
+    }
+
+    private func dayCell(_ day: Date) -> some View {
+        let selected = calendar.isDate(day, inSameDayAs: selectedDate)
+        let insideMonth = calendar.isDate(day, equalTo: visibleMonth, toGranularity: .month)
+        let marked = markedDates.contains(calendar.startOfDay(for: day))
+        return Button { selectedDate = day } label: {
+            VStack(spacing: 1) {
+                Text(day.formatted(.dateTime.day()))
+                    .font(.custom("Outfit-Regular", size: 14, relativeTo: .body))
+                Circle().fill(selected ? Color.white : theme.accent).frame(width: 5, height: 5).opacity(marked ? 1 : 0)
+            }
+            .foregroundStyle(selected ? Color.white : (insideMonth ? theme.text : theme.muted))
+            .frame(maxWidth: .infinity).frame(height: 34)
+            .background(selected ? theme.accent : Color.clear, in: Circle())
+        }.buttonStyle(.plain)
+    }
+
+    private func moveMonth(_ offset: Int) {
+        guard let next = calendar.date(byAdding: .month, value: offset, to: visibleMonth) else { return }
+        visibleMonth = next
+        selectedDate = next
+    }
+}
+
+private struct CalendarProjectAgendaRow: View {
+    let item: CalendarProjectAgendaItem
+    let theme: CameraeNextTheme
+    var body: some View {
+        HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 2).fill(item.kind == .captured ? Color.green : theme.accent).frame(width: 4, height: 42)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(item.title).font(.custom("Outfit-Regular", size: 16, relativeTo: .body)).foregroundStyle(theme.text)
+                Text(item.detail).font(.custom("Outfit-Regular", size: 12, relativeTo: .caption)).foregroundStyle(theme.muted)
+            }
+            Spacer(); Image(systemName: "chevron.right").foregroundStyle(theme.muted)
+        }
+        .padding(12)
+        .background(theme.card, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+    }
+}
+
+private struct CalendarProjectSummaryView: View {
+    @EnvironmentObject private var projects: ProjectStore
+    let item: CalendarProjectAgendaItem
+    let history: [CalendarProjectAgendaItem]
+    @State private var isPlanning = false
+    private let theme = CameraeNextTheme(workflow: .repeatable)
+    private var project: CameraProject? { item.projectID.flatMap { id in projects.projects.first { $0.id == id } } }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                CameraeNextSectionLabel(title: "Projeto do calendário", theme: theme)
+                Text(item.title).font(.custom("Outfit-SemiBold", size: 28, relativeTo: .title)).foregroundStyle(theme.text)
+                Text(item.detail).font(.custom("Outfit-Regular", size: 16, relativeTo: .body)).foregroundStyle(theme.muted)
+                summaryCard
+                metrics
+                positionCard
+                CameraeNextSectionLabel(title: "Histórico do projeto", theme: theme)
+                ForEach(history.prefix(3)) { historyRow($0) }
+                if let project {
+                    NavigationLink(value: project) {
+                        Text("IR PARA O PROJETO").frame(maxWidth: .infinity).frame(height: 46)
+                    }
+                    .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                    .foregroundStyle(.white).background(theme.accent, in: RoundedRectangle(cornerRadius: 17)).buttonStyle(.plain)
+                }
+                Button("PLANEJAR RETORNO") { isPlanning = true }
+                    .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                    .foregroundStyle(theme.accent).frame(maxWidth: .infinity).frame(height: 46)
+                    .background(theme.surface, in: RoundedRectangle(cornerRadius: 17))
+                    .overlay { RoundedRectangle(cornerRadius: 17).stroke(theme.border) }
+                    .buttonStyle(.plain)
+            }.padding()
+        }
+        .background(theme.background).navigationTitle("Resumo").navigationBarTitleDisplayMode(.inline)
+        .tint(theme.accent).preferredColorScheme(.light)
+        .sheet(isPresented: $isPlanning) { RecapturePlannerView(locationID: item.locationID, projectID: item.projectID) }
+    }
+
+    private var summaryCard: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(statusTitle)
+                .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption)).foregroundStyle(.white)
+                .padding(.horizontal, 14).frame(height: 28).background(item.kind == .captured ? Color.green : theme.accent, in: RoundedRectangle(cornerRadius: 12))
+            Text(item.date.formatted(.dateTime.weekday(.wide).day().month(.wide).year()))
+                .font(.custom("Outfit-SemiBold", size: 20, relativeTo: .title3)).foregroundStyle(theme.text)
+            if let session = item.session { Text("Sessão · \(session.frameCount) fotos").font(.custom("Outfit-Regular", size: 12, relativeTo: .caption)).foregroundStyle(theme.muted) }
+        }.frame(maxWidth: .infinity, minHeight: 104, alignment: .leading).padding(12).background(theme.card, in: RoundedRectangle(cornerRadius: 22))
+    }
+
+    private var metrics: some View {
+        HStack(spacing: 10) {
+            metric("MODO", item.session?.captureKind.uppercased() ?? "—")
+            metric("LENTE", item.session?.lens.uppercased() ?? "—")
+            metric("SESSÃO", String(format: "%02d", max(history.count, 1)))
+        }
+    }
+
+    private func metric(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title).font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2)).tracking(1.4).foregroundStyle(theme.muted)
+            Text(value).font(.custom("Outfit-Medium", size: 22, relativeTo: .title2)).foregroundStyle(title == "SESSÃO" ? theme.accent : theme.text).lineLimit(1).minimumScaleFactor(0.7)
+        }.frame(maxWidth: .infinity, minHeight: 60, alignment: .leading).padding(10).background(theme.card, in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    private var positionCard: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "scope").foregroundStyle(theme.accent).frame(width: 42, height: 42).background(theme.surface, in: RoundedRectangle(cornerRadius: 14))
+            VStack(alignment: .leading, spacing: 3) {
+                CameraeNextSectionLabel(title: "Posição vinculada", theme: theme)
+                Text(storeLocationName).font(.custom("Outfit-Regular", size: 16, relativeTo: .body)).foregroundStyle(theme.text)
+            }
+        }.padding(10).frame(maxWidth: .infinity, alignment: .leading).background(theme.card, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var storeLocationName: String { item.locationTitle }
+
+    private var statusTitle: String {
+        switch item.kind { case .captured: "CONCLUÍDO"; case .planned: "PLANEJADO"; case .created: "PROJETO" }
+    }
+
+    private func historyRow(_ entry: CalendarProjectAgendaItem) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Circle().fill(theme.accent).frame(width: 8, height: 8).padding(.top, 5)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.date.formatted(.dateTime.day().month(.abbreviated).hour().minute())).font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
+                Text(entry.detail).font(.custom("Outfit-Regular", size: 12, relativeTo: .caption)).foregroundStyle(theme.muted)
+            }
+        }.frame(minHeight: 42)
+    }
 }
 
 struct RecapturePlannerView: View {
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var store: TripodLocationStore
     let locationID: UUID
+    var projectID: UUID? = nil
     @State private var weeks = 4
     @State private var note = ""
     @State private var notificationDenied = false
@@ -374,7 +641,7 @@ struct RecapturePlannerView: View {
                 if notificationDenied { Label("Notificações desativadas. O plano continuará no calendário.", systemImage: "bell.slash").foregroundStyle(.orange) }
             }
             .navigationTitle("Planejar retorno")
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Salvar") { Task { let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) == true; notificationDenied = !granted; try? await store.schedule(locationID: locationID, projectID: nil, weeks: weeks, note: note.nilIfEmpty); if granted { dismiss() } } } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Salvar") { Task { let granted = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound])) == true; notificationDenied = !granted; try? await store.schedule(locationID: locationID, projectID: projectID, weeks: weeks, note: note.nilIfEmpty); if granted { dismiss() } } } } }
         }
     }
 }

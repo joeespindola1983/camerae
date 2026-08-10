@@ -30,8 +30,9 @@ test distributions do not require an entry here.
 ### Changed
 
 - Redesigned Calendar and Tripod Positions from the approved Camerae Figma
-  flows, using the Repeatable visual theme, daily agenda cards, position
-  metrics, and persistent reference and recapture actions.
+  flows, using the Repeatable visual theme, marked project dates, agenda
+  filters, read-only project summaries, position metrics, and explicit project
+  and recapture actions.
 - Replaced the visible Editor entry on Home with Calendar and Positions while
   preserving Editor projects and runtime compatibility.
 - Existing project-local spatial references now migrate non-destructively into
