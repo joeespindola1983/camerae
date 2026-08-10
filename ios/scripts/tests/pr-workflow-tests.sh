@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 WORKFLOW="$ROOT_DIR/.github/workflows/ios-build.yml"
+GITHUB_RELEASE_WORKFLOW="$ROOT_DIR/.github/workflows/github-release.yml"
 PR_TEMPLATE="$ROOT_DIR/.github/pull_request_template.md"
 FEATURE_TEMPLATE="$ROOT_DIR/.github/ISSUE_TEMPLATE/feature.yml"
 AGENT_RULES="$ROOT_DIR/AGENTS.md"
@@ -27,6 +28,7 @@ require_text() {
 }
 
 require_file "$WORKFLOW"
+require_file "$GITHUB_RELEASE_WORKFLOW"
 require_file "$PR_TEMPLATE"
 require_file "$FEATURE_TEMPLATE"
 require_file "$AGENT_RULES"
@@ -44,6 +46,18 @@ require_text "$WORKFLOW" "pull_request\\.draft == false" "full CI must wait unti
 require_text "$WORKFLOW" 'pr-workflow-tests\.sh' "CI must validate the PR workflow contract"
 require_text "$WORKFLOW" '-testLanguage pt-BR' "Swift tests must use the expected PT-BR language"
 require_text "$WORKFLOW" '-testRegion BR' "Swift tests must use the expected Brazilian region"
+
+require_text "$GITHUB_RELEASE_WORKFLOW" "tags:" "GitHub Releases must react to production tags"
+require_text "$GITHUB_RELEASE_WORKFLOW" "'v\\*'" "GitHub Releases must inspect version tags"
+require_text "$GITHUB_RELEASE_WORKFLOW" '^  contents: write$' "GitHub Releases need explicit write access"
+require_text "$GITHUB_RELEASE_WORKFLOW" 'fetch-depth: 0' "GitHub Releases must inspect full production ancestry"
+require_text "$GITHUB_RELEASE_WORKFLOW" 'v\[0-9\]\+\\\.\[0-9\]\+\\\.\[0-9\]\+' \
+  "GitHub Releases must accept final semantic versions only"
+require_text "$GITHUB_RELEASE_WORKFLOW" 'merge-base --is-ancestor' \
+  "GitHub Releases must prove the tag is reachable from main"
+require_text "$GITHUB_RELEASE_WORKFLOW" 'gh release create' "final tags must create a GitHub Release"
+require_text "$GITHUB_RELEASE_WORKFLOW" '--verify-tag' "GitHub Releases must verify the immutable tag"
+require_text "$GITHUB_RELEASE_WORKFLOW" '--generate-notes' "GitHub Releases must include generated notes"
 
 require_text "$PR_TEMPLATE" '^## O que muda$' "PR template must summarize the change"
 require_text "$PR_TEMPLATE" '^## Por que entra nesta versão$' "PR template must justify release selection"

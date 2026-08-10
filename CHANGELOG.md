@@ -27,6 +27,9 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Added an idempotent GitHub Release workflow for final `vX.Y.Z` tags that
+  verifies production ancestry in `main` and excludes QA candidates.
+
 - Spatial Guidance now hides the reconstructed wireframe after scene mapping
   so tripod definition and review focus only on the placement guides.
 - Simplified Spatial Guidance to show only the tripod's vertical axis instead
