@@ -663,3 +663,37 @@ The first releasable slice is complete when:
 
 Do not collapse these into one commit. If a phase grows too large, split by
 domain/store before SwiftUI, while keeping every commit buildable.
+
+## Execution record — 2026-08-05
+
+Status: implemented on `codex/tripod-location-hub` as an exploratory Draft PR.
+
+Canonical Figma file: `c8gsnSu31erYFG3u3QMQgN`, page
+`814:1839` (`14 · Tripod Positions & Calendar`). The page contains all sixteen
+states defined in Phase 0. Representative roots:
+
+- Home: `814:1840`
+- Positions map: `814:1841`
+- Position detail: `814:1845`
+- Calendar month: `814:1851`
+- Four-week recapture: `814:1854`
+
+Implementation decisions:
+
+- The persisted aggregate is `TripodLocationDocument` schema v1.
+- One project can belong to at most one Tripod Location; relinking moves it.
+- Reference photos and spatial packages live below
+  `Application Support/Camerae/TripodLocations/<location-id>`.
+- Legacy project spatial packages are copied, never moved or deleted.
+- Calendar history is read from real session summaries; future events are
+  stored as recapture plans and local notifications.
+- Editor remains in the model and runtime but is not exposed by Home.
+
+Automated evidence:
+
+- Generic arm64 application build: passed.
+- Generic arm64 `build-for-testing`, including CameraeCore and integration
+  capability tests: passed.
+- Simulator execution was unavailable in this environment; on-device GPS,
+  map interaction, AR relocalization, photo picking, and notification delivery
+  remain mandatory QA checks before the Draft PR can be marked ready.

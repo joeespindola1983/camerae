@@ -21,7 +21,18 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added Tripod Positions as a first-class hub for GPS, reference photos,
+  spatial-reference revisions, linked projects, map/list discovery, and quick
+  project creation with inherited positioning context.
+- Added a capture calendar that combines completed project sessions with
+  planned recaptures, including one-, two-, and four-week local reminders.
+
 ### Changed
+
+- Replaced the visible Editor entry on Home with Calendar and Positions while
+  preserving Editor projects and runtime compatibility.
+- Existing project-local spatial references now migrate non-destructively into
+  Tripod Positions; originals remain available as rollback evidence.
 
 - Spatial Guidance now maps and validates the fixed environment before asking
   for the tripod, rejects overly flat or poorly distributed scene evidence,
@@ -29,6 +40,15 @@ test distributions do not require an entry here.
   recognition.
 
 ### Fixed
+
+- The first project in the new catalog now uses the same selectable card and
+  actions as every other project, removing the legacy featured-project split
+  that could leave its navigation and menu unresponsive.
+- The Xcode `Camerae QA` run action now uses a telemetry-enabled QA Debug
+  configuration, allowing consent-controlled Analytics and Crashlytics events
+  to reach the QA Firebase project from development-signed devices.
+- Low measured height variation is now an advisory during Spatial Guidance
+  instead of blocking an otherwise well-covered and feature-rich scene map.
 
 ## [9.5.0] - 2026-08-04
 
