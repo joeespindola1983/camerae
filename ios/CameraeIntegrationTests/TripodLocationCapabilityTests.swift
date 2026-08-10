@@ -6,7 +6,10 @@ import Testing
 struct TripodLocationCapabilityTests {
     @Test("catalog actions stay reachable independently of layout")
     func catalogCapabilities() {
-        #expect(TripodPositionsCapabilityPolicy.catalog == [.create, .switchMapList, .selectMapLocation, .showSavedSummary, .openLocation])
+        #expect(TripodPositionsCapabilityPolicy.catalog == [
+            .create, .switchMapList, .selectMapLocation, .showSavedSummary,
+            .openLocation, .openProjects, .openCalendar
+        ])
     }
 
     @Test("position detail matches the approved read-only project flow")
@@ -19,6 +22,60 @@ struct TripodLocationCapabilityTests {
         #expect(TripodPositionsViewMode.allCases == [.map, .list])
         #expect(TripodPositionsViewMode.map.title == "Mapa")
         #expect(TripodPositionsViewMode.list.title == "Lista")
+        #expect(TripodPositionsCatalogPresentation.savedPositionsDestination == .list)
+    }
+
+    @Test("map projection keeps every GPS position visible and selectable")
+    func mapProjection() {
+        let firstID = UUID()
+        let secondID = UUID()
+        let withoutGPSID = UUID()
+        let locations = [
+            TripodLocation.fixture(id: firstID, latitude: -23.551, longitude: -46.634),
+            TripodLocation.fixture(id: secondID, latitude: -23.548, longitude: -46.628),
+            TripodLocation.fixture(id: withoutGPSID)
+        ]
+
+        let markers = TripodMapProjection.markers(for: locations)
+
+        #expect(markers.map(\.id) == [firstID, secondID])
+        #expect(markers.allSatisfy { (0...1).contains($0.x) && (0...1).contains($0.y) })
+        #expect(Set(markers.map { "\($0.x),\($0.y)" }).count == 2)
+    }
+
+    @Test("a single GPS position is centered in the safe map area")
+    func singleMapMarker() throws {
+        let id = UUID()
+        let marker = try #require(TripodMapProjection.markers(for: [
+            TripodLocation.fixture(id: id, latitude: -23.551, longitude: -46.634)
+        ]).first)
+
+        #expect(marker.id == id)
+        #expect(marker.x == 0.5)
+        #expect(marker.y == 0.43)
+    }
+
+    @Test("legacy positions recover GPS from the newest captured session")
+    func legacyCoordinateBackfill() throws {
+        let older = TripodCoordinateEvidence(
+            capturedAt: Date(timeIntervalSince1970: 100),
+            latitude: -23.55,
+            longitude: -46.63,
+            horizontalAccuracy: 12
+        )
+        let newer = TripodCoordinateEvidence(
+            capturedAt: Date(timeIntervalSince1970: 200),
+            latitude: -23.548,
+            longitude: -46.628,
+            horizontalAccuracy: 4
+        )
+
+        let coordinate = try #require(TripodCoordinateBackfill.resolve([older, newer]))
+
+        #expect(coordinate.latitude == newer.latitude)
+        #expect(coordinate.longitude == newer.longitude)
+        #expect(coordinate.horizontalAccuracy == newer.horizontalAccuracy)
+        #expect(TripodCoordinateBackfill.resolve([]) == nil)
     }
 
     @Test("position metrics expose persisted facts without inventing GPS accuracy")
@@ -58,6 +115,23 @@ struct TripodLocationCapabilityTests {
         #expect(CalendarProjectFilter.all.apply(to: [captured, planned, created]) == [captured, planned, created])
         #expect(CalendarProjectFilter.captures.apply(to: [captured, planned, created]) == [captured])
         #expect(CalendarProjectFilter.returns.apply(to: [captured, planned, created]) == [planned])
+    }
+}
+
+private extension TripodLocation {
+    static func fixture(id: UUID, latitude: Double? = nil, longitude: Double? = nil) -> Self {
+        let coordinate = latitude.flatMap { latitude in
+            longitude.map { longitude in
+                TripodCoordinate(latitude: latitude, longitude: longitude)
+            }
+        }
+        return .init(
+            id: id,
+            name: "Posição",
+            coordinate: coordinate,
+            createdAt: .distantPast,
+            updatedAt: .distantPast
+        )
     }
 }
 
