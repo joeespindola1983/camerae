@@ -50,6 +50,13 @@ test distributions do not require an entry here.
 - Low measured height variation is now an advisory during Spatial Guidance
   instead of blocking an otherwise well-covered and feature-rich scene map.
 
+- Kept each project card inside a group on its own explicit tap target so the
+  first thumbnail no longer opens the next project or extends into the section
+  heading.
+
+- Made new Xcode worktrees inherit automatic signing and the Camerae
+  development team, avoiding repeated manual signing setup before device runs.
+
 ## [9.5.0] - 2026-08-04
 
 **Status:** Approved local release (build 36; not submitted)

@@ -41,7 +41,7 @@ Signing files are local machine assets and must never enter Git.
 
 | Purpose | Profile | Expected behavior |
 | --- | --- | --- |
-| Run from Xcode | Camerae QA Development | Development profile containing the connected device |
+| Run from Xcode | Automatically managed | Xcode selects or creates a development profile for team `V6JPGVRWCS` |
 | Firebase App Distribution | Camerae QA Ad Hoc | Distribution profile containing every tester UDID |
 | QA TestFlight, if introduced later | Camerae QA App Store | App Store profile; not valid for direct Firebase installation |
 | Production | Existing Camerae production profiles | Used only by Release/App Store workflows |
@@ -50,7 +50,9 @@ Install downloaded profiles through Xcode or place them in Xcode's local
 Provisioning Profiles directory using their profile UUID. Keep certificates,
 private keys, `.p8`, `.p12`, and `.mobileprovision` files outside the repository.
 
-The local ignored file `ios/Config/Signing.local.xcconfig` supplies:
+The repository supplies the Camerae team and automatic-signing defaults. The
+local ignored file `ios/Config/Signing.local.xcconfig` may override them only
+when a developer intentionally needs a different team:
 
 ```text
 DEVELOPMENT_TEAM = YOUR_TEAM_ID

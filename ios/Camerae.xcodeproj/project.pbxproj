@@ -1354,6 +1354,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					45DC7A710A742AE62BE0DF9E = {
+						DevelopmentTeam = V6JPGVRWCS;
+						ProvisioningStyle = Automatic;
+					};
 					5A9E03783BFB31D21264C2B2 = {
 						TestTargetID = 45DC7A710A742AE62BE0DF9E;
 					};
@@ -2135,6 +2139,7 @@
 			baseConfigurationReference = DEFD8284BD0139903908040C /* Release.xcconfig */;
 			buildSettings = {
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				DEVELOPMENT_TEAM = V6JPGVRWCS;
 				INFOPLIST_FILE = Camerae/Info.plist;
