@@ -36,6 +36,8 @@ test distributions do not require an entry here.
   position synchronized with a shared accent treatment on marker and row.
 - Nearby tripod positions now collapse into numbered map clusters; opening a
   cluster clears selection and zooms to fit and visually separate its members.
+- Clusters that remain overlapped at maximum zoom now expand into smaller,
+  individually selectable radial markers without changing persisted GPS data.
 - Redesigned Calendar and Tripod Positions from the approved Camerae Figma
   flows, using the Repeatable visual theme, marked project dates, agenda
   filters, read-only project summaries, a selectable map/list catalog, saved

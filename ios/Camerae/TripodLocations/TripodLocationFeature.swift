@@ -10,14 +10,14 @@ enum CameraeHomeDestination: Hashable { case calendar, positions }
 
 enum TripodPositionsCapability: Hashable, Sendable {
     case returnHome, create, switchMapList, selectMapLocation, showLinkedProjects, filterProjects, openProjectSummary
-    case filterVisibleLocations, showSelectionState, openCluster
+    case filterVisibleLocations, showSelectionState, openCluster, expandOverlappingCluster
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [
         .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
         .filterProjects, .openProjectSummary, .filterVisibleLocations,
-        .showSelectionState, .openCluster, .returnHome
+        .showSelectionState, .openCluster, .expandOverlappingCluster, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -88,6 +88,44 @@ struct TripodMapCluster: Identifiable, Equatable, Sendable {
 
     var id: String { locations.map(\.id.uuidString).sorted().joined(separator: ":") }
     var count: Int { locations.count }
+}
+
+struct TripodClusterOffset: Hashable, Sendable {
+    let x: Double
+    let y: Double
+    let radius: Double
+}
+
+enum TripodClusterExpansion {
+    static let markerDiameter = 30.0
+    private static let membersPerRing = 8
+    private static let firstRadius = 34.0
+    private static let ringSpacing = 27.0
+
+    static func members(afterOpening locations: [TripodLocation]) -> Set<UUID> {
+        Set(locations.map(\.id))
+    }
+
+    static func offsets(count: Int) -> [TripodClusterOffset] {
+        guard count > 1 else { return count == 1 ? [.init(x: 0, y: 0, radius: 0)] : [] }
+        var result: [TripodClusterOffset] = []
+        result.reserveCapacity(count)
+        for index in 0..<count {
+            let ring = index / membersPerRing
+            let indexInRing = index % membersPerRing
+            let ringStart = ring * membersPerRing
+            let ringCount = min(membersPerRing, count - ringStart)
+            let radius = firstRadius + Double(ring) * ringSpacing
+            let fraction = Double(indexInRing) / Double(ringCount)
+            let angle = -Double.pi / 2 + 2 * Double.pi * fraction
+            result.append(TripodClusterOffset(
+                x: cos(angle) * radius,
+                y: sin(angle) * radius,
+                radius: radius
+            ))
+        }
+        return result
+    }
 }
 
 enum TripodMapClustering {
@@ -346,6 +384,7 @@ struct TripodPositionsView: View {
     @State private var mapPosition = MapCameraPosition.automatic
     @State private var visibleMapRegion: TripodMapCameraRegion?
     @State private var hasUserAdjustedMap = false
+    @State private var expandedClusterLocationIDs: Set<UUID> = []
     @State private var filter = CalendarProjectFilter.all
 
     var body: some View {
@@ -472,16 +511,7 @@ struct TripodPositionsView: View {
                         ),
                         anchor: .center
                     ) {
-                        Button { open(cluster) } label: {
-                            if cluster.count == 1, let location = cluster.locations.first {
-                                mapThumbnail(for: location)
-                            } else {
-                                clusterMarker(count: cluster.count)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(clusterAccessibilityLabel(cluster))
-                        .accessibilityIdentifier("tripod.positions.cluster.\(cluster.id)")
+                        clusterContent(cluster)
                     }
                     .annotationTitles(.hidden)
                 }
@@ -636,8 +666,70 @@ struct TripodPositionsView: View {
             .shadow(color: .black.opacity(0.24), radius: 4, y: 2)
     }
 
+    @ViewBuilder
+    private func clusterContent(_ cluster: TripodMapCluster) -> some View {
+        if cluster.count == 1, let location = cluster.locations.first {
+            Button { toggleSelection(location.id) } label: { mapThumbnail(for: location) }
+                .buttonStyle(.plain)
+                .accessibilityLabel(location.name)
+                .accessibilityIdentifier("tripod.positions.marker.\(location.id.uuidString)")
+        } else if isExpanded(cluster) {
+            expandedCluster(cluster)
+        } else {
+            Button { open(cluster) } label: { clusterMarker(count: cluster.count) }
+                .buttonStyle(.plain)
+                .accessibilityLabel(clusterAccessibilityLabel(cluster))
+                .accessibilityIdentifier("tripod.positions.cluster.\(cluster.id)")
+        }
+    }
+
+    private func expandedCluster(_ cluster: TripodMapCluster) -> some View {
+        let offsets = TripodClusterExpansion.offsets(count: cluster.count)
+        let maximumRadius = offsets.map(\.radius).max() ?? 0
+        let size = maximumRadius * 2 + TripodClusterExpansion.markerDiameter
+        return ZStack {
+            ForEach(Array(cluster.locations.enumerated()), id: \.element.id) { index, location in
+                let offset = offsets[index]
+                Button { toggleSelection(location.id) } label: {
+                    compactMapThumbnail(for: location)
+                }
+                .buttonStyle(.plain)
+                .offset(x: offset.x, y: offset.y)
+                .accessibilityLabel(location.name)
+                .accessibilityIdentifier("tripod.positions.expanded.\(location.id.uuidString)")
+            }
+        }
+        .frame(width: size, height: size)
+    }
+
+    @ViewBuilder
+    private func compactMapThumbnail(for location: TripodLocation) -> some View {
+        let selected = selectedLocationID == location.id
+        Group {
+            if let image = referenceImage(for: location) {
+                Image(uiImage: image).resizable().scaledToFill()
+            } else {
+                Circle()
+                    .fill(selected ? theme.accent : theme.muted)
+                    .overlay {
+                        Image(systemName: "camera.fill")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.white)
+                    }
+            }
+        }
+        .frame(
+            width: TripodClusterExpansion.markerDiameter,
+            height: TripodClusterExpansion.markerDiameter
+        )
+        .clipShape(Circle())
+        .overlay { Circle().stroke(selected ? theme.accent : Color.white, lineWidth: selected ? 3 : 2) }
+        .shadow(color: .black.opacity(0.22), radius: 3, y: 1)
+    }
+
     private func fitMapToLocations() {
         hasUserAdjustedMap = false
+        expandedClusterLocationIDs = []
         guard let fitted = TripodMapCameraFit.region(for: store.snapshot.locations) else {
             mapPosition = .automatic
             visibleMapRegion = nil
@@ -669,6 +761,7 @@ struct TripodPositionsView: View {
             return
         }
         selectedLocationID = TripodLocationSelection.afterOpeningCluster
+        expandedClusterLocationIDs = TripodClusterExpansion.members(afterOpening: cluster.locations)
         guard let fitted = TripodMapClusterZoom.region(for: cluster.locations) else { return }
         hasUserAdjustedMap = false
         visibleMapRegion = fitted
@@ -689,7 +782,15 @@ struct TripodPositionsView: View {
         return "\(cluster.count) posições de tripé. Toque para aproximar."
     }
 
+    private func isExpanded(_ cluster: TripodMapCluster) -> Bool {
+        let memberIDs = Set(cluster.locations.map(\.id))
+        return cluster.count > 1
+            && !expandedClusterLocationIDs.isEmpty
+            && memberIDs.isSubset(of: expandedClusterLocationIDs)
+    }
+
     private func updateVisibleRegion(_ region: MKCoordinateRegion) {
+        expandedClusterLocationIDs = []
         let visible = TripodMapCameraRegion(
             centerLatitude: region.center.latitude,
             centerLongitude: region.center.longitude,

@@ -9,7 +9,7 @@ struct TripodLocationCapabilityTests {
         #expect(TripodPositionsCapabilityPolicy.catalog == [
             .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
             .filterProjects, .openProjectSummary, .filterVisibleLocations,
-            .showSelectionState, .openCluster, .returnHome
+            .showSelectionState, .openCluster, .expandOverlappingCluster, .returnHome
         ])
     }
 
@@ -140,6 +140,31 @@ struct TripodLocationCapabilityTests {
         #expect(region.maximumLatitude >= -23.5500)
         #expect(region.minimumLongitude <= -46.6302)
         #expect(region.maximumLongitude >= -46.6300)
+    }
+
+    @Test("overlapping tripods become smaller individually tappable markers")
+    func overlappingClusterExpansion() {
+        let firstID = UUID()
+        let secondID = UUID()
+        let locations = [
+            TripodLocation.fixture(id: firstID, latitude: -23.5500, longitude: -46.6300),
+            TripodLocation.fixture(id: secondID, latitude: -23.5500, longitude: -46.6300)
+        ]
+        let offsets = TripodClusterExpansion.offsets(count: locations.count)
+
+        #expect(TripodClusterExpansion.markerDiameter < 44)
+        #expect(offsets.count == 2)
+        #expect(Set(offsets).count == 2)
+        #expect(TripodClusterExpansion.members(afterOpening: locations) == [firstID, secondID])
+    }
+
+    @Test("large overlapping groups use additional radial rings")
+    func largeClusterExpansion() {
+        let offsets = TripodClusterExpansion.offsets(count: 12)
+
+        #expect(offsets.count == 12)
+        #expect(Set(offsets).count == 12)
+        #expect((offsets.map(\.radius).max() ?? 0) > (offsets.map(\.radius).min() ?? 0))
     }
 
     @Test("legacy positions recover GPS from the newest captured session")
