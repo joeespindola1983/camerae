@@ -7,8 +7,8 @@ struct TripodLocationCapabilityTests {
     @Test("catalog actions stay reachable independently of layout")
     func catalogCapabilities() {
         #expect(TripodPositionsCapabilityPolicy.catalog == [
-            .create, .switchMapList, .selectMapLocation, .showSavedSummary,
-            .openLocation, .returnHome
+            .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
+            .filterProjects, .openProjectSummary, .returnHome
         ])
     }
 
@@ -105,6 +105,40 @@ struct TripodLocationCapabilityTests {
         #expect(CaptureCalendarCapabilityPolicy.summary == [.openProject, .scheduleRecapture])
     }
 
+    @Test("calendar and tripod positions share the project-list use case")
+    func sharedProjectContextCapabilities() {
+        #expect(ProjectContextCapabilityPolicy.list == [.filterProjects, .openProjectSummary])
+        #expect(ProjectContextCapabilityPolicy.summary == [.openProject, .scheduleRecapture])
+    }
+
+    @Test("a tripod position shows one latest entry for each linked project")
+    func projectsAtTripodPosition() throws {
+        let locationID = UUID()
+        let firstProjectID = UUID()
+        let secondProjectID = UUID()
+        let oldCapture = CalendarProjectAgendaItem.fixture(
+            kind: .captured, projectID: firstProjectID, locationID: locationID, date: Date(timeIntervalSince1970: 100)
+        )
+        let latestReturn = CalendarProjectAgendaItem.fixture(
+            kind: .planned, projectID: firstProjectID, locationID: locationID, date: Date(timeIntervalSince1970: 300)
+        )
+        let secondProject = CalendarProjectAgendaItem.fixture(
+            kind: .created, projectID: secondProjectID, locationID: locationID, date: Date(timeIntervalSince1970: 200)
+        )
+        let anotherLocation = CalendarProjectAgendaItem.fixture(
+            kind: .captured, projectID: UUID(), locationID: UUID(), date: Date(timeIntervalSince1970: 400)
+        )
+
+        let result = ProjectContextCatalog.projects(
+            at: locationID,
+            from: [oldCapture, latestReturn, secondProject, anotherLocation]
+        )
+
+        #expect(result.count == 2)
+        #expect(result.first(where: { $0.projectID == firstProjectID }) == latestReturn)
+        #expect(result.first(where: { $0.projectID == secondProjectID }) == secondProject)
+    }
+
     @Test("calendar project filters never invent or edit agenda items")
     func calendarProjectFilters() {
         let captured = CalendarProjectAgendaItem.fixture(kind: .captured)
@@ -135,13 +169,18 @@ private extension TripodLocation {
 }
 
 private extension CalendarProjectAgendaItem {
-    static func fixture(kind: CalendarProjectAgendaKind) -> Self {
+    static func fixture(
+        kind: CalendarProjectAgendaKind,
+        projectID: UUID = UUID(),
+        locationID: UUID = UUID(),
+        date: Date = Date(timeIntervalSince1970: 1_700_000_000)
+    ) -> Self {
         .init(
             id: UUID(),
             kind: kind,
-            date: Date(timeIntervalSince1970: 1_700_000_000),
-            projectID: UUID(),
-            locationID: UUID(),
+            date: date,
+            projectID: projectID,
+            locationID: locationID,
             locationTitle: "Posição",
             title: kind == .captured ? "Capturado" : "Planejado",
             detail: "Detalhe",

@@ -9,13 +9,13 @@ import UserNotifications
 enum CameraeHomeDestination: Hashable { case calendar, positions }
 
 enum TripodPositionsCapability: Hashable, Sendable {
-    case returnHome, create, switchMapList, selectMapLocation, showSavedSummary, openLocation
+    case returnHome, create, switchMapList, selectMapLocation, showLinkedProjects, filterProjects, openProjectSummary
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [
-        .create, .switchMapList, .selectMapLocation, .showSavedSummary,
-        .openLocation, .returnHome
+        .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
+        .filterProjects, .openProjectSummary, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -218,6 +218,7 @@ struct TripodPositionsView: View {
     @State private var selectedLocationID: UUID?
     @State private var isCreating = false
     @State private var mapPosition = MapCameraPosition.automatic
+    @State private var filter = CalendarProjectFilter.all
 
     var body: some View {
         ScrollView {
@@ -229,11 +230,10 @@ struct TripodPositionsView: View {
                     emptyState
                 } else if viewMode == .map {
                     mapCard
-                    savedPositionsSummary
                 } else {
                     LazyVStack(spacing: 12) {
                         ForEach(store.snapshot.locations) { location in
-                            NavigationLink(value: location) {
+                            Button { selectedLocationID = location.id } label: {
                                 TripodLocationCatalogRow(
                                     location: location,
                                     subtitle: listSubtitle(for: location),
@@ -244,6 +244,15 @@ struct TripodPositionsView: View {
                             .buttonStyle(.plain)
                         }
                     }
+                }
+
+                if let selectedLocation {
+                    ProjectContextListSection(
+                        title: selectedLocation.name,
+                        items: linkedProjectItems,
+                        filter: $filter,
+                        theme: theme
+                    )
                 }
             }
             .padding(.horizontal, 20)
@@ -256,6 +265,12 @@ struct TripodPositionsView: View {
         .tint(theme.accent)
         .preferredColorScheme(.light)
         .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
+        .navigationDestination(for: CalendarProjectAgendaItem.self) { item in
+            CalendarProjectSummaryView(
+                item: item,
+                history: agendaItems.filter { $0.projectID == item.projectID }.sorted { $0.date > $1.date }
+            )
+        }
         .sheet(isPresented: $isCreating) { TripodLocationEditorView() }
         .onAppear {
             store.reload()
@@ -356,14 +371,11 @@ struct TripodPositionsView: View {
             }
 
             if let selectedLocation {
-                NavigationLink(value: selectedLocation) {
-                    selectedLocationBadge(selectedLocation)
-                }
-                .buttonStyle(.plain)
+                selectedLocationBadge(selectedLocation)
                 .padding(16)
             }
         }
-        .frame(height: 380)
+        .frame(height: 270)
         .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
@@ -414,6 +426,15 @@ struct TripodPositionsView: View {
 
     private var locationsWithGPS: [TripodLocation] {
         store.snapshot.locations.filter { $0.coordinate != nil }
+    }
+
+    private var agendaItems: [CalendarProjectAgendaItem] {
+        ProjectContextCatalog.agenda(snapshot: store.snapshot, projects: projects.projects)
+    }
+
+    private var linkedProjectItems: [CalendarProjectAgendaItem] {
+        guard let selectedLocationID else { return [] }
+        return ProjectContextCatalog.projects(at: selectedLocationID, from: agendaItems)
     }
 
     @ViewBuilder
@@ -833,29 +854,12 @@ struct CaptureCalendarView: View {
                     theme: theme
                 )
 
-                HStack {
-                    CameraeNextSectionLabel(
-                        title: selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)),
-                        theme: theme
-                    )
-                    Spacer()
-                    Text("\(selectedItems.count) PROJETOS")
-                        .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
-                        .tracking(2.2)
-                        .foregroundStyle(theme.muted)
-                }
-
-                filterPicker
-
-                if filteredItems.isEmpty {
-                    ContentUnavailableView("Nenhum projeto nesta data", systemImage: "calendar")
-                        .foregroundStyle(theme.text)
-                } else {
-                    ForEach(filteredItems) { item in
-                        NavigationLink(value: item) { CalendarProjectAgendaRow(item: item, theme: theme) }
-                            .buttonStyle(.plain)
-                    }
-                }
+                ProjectContextListSection(
+                    title: selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)),
+                    items: selectedItems,
+                    filter: $filter,
+                    theme: theme
+                )
             }
             .padding()
         }
@@ -877,31 +881,33 @@ struct CaptureCalendarView: View {
 
     private let theme = CameraeNextTheme(workflow: .repeatable)
 
-    private var filterPicker: some View {
-        HStack(spacing: 8) {
-            ForEach(CalendarProjectFilter.allCases) { candidate in
-                Button(candidate.title) { filter = candidate }
-                    .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
-                    .foregroundStyle(filter == candidate ? Color.white : theme.text)
-                    .padding(.horizontal, 18)
-                    .frame(height: 34)
-                    .background(filter == candidate ? theme.accent : theme.surface, in: RoundedRectangle(cornerRadius: 14))
-                    .buttonStyle(.plain)
-            }
-        }
-    }
-
     private var selectedItems: [CalendarProjectAgendaItem] {
         agendaItems.filter { Calendar.current.isDate($0.date, inSameDayAs: selectedDate) }
     }
 
-    private var filteredItems: [CalendarProjectAgendaItem] { filter.apply(to: selectedItems) }
-
     private var agendaItems: [CalendarProjectAgendaItem] {
-        let planned = store.snapshot.calendarEntries.compactMap { entry -> CalendarProjectAgendaItem? in
+        ProjectContextCatalog.agenda(snapshot: store.snapshot, projects: projects.projects)
+    }
+}
+
+enum ProjectContextCapability: Hashable, Sendable {
+    case filterProjects, openProjectSummary, openProject, scheduleRecapture
+}
+
+enum ProjectContextCapabilityPolicy {
+    static let list: Set<ProjectContextCapability> = [.filterProjects, .openProjectSummary]
+    static let summary: Set<ProjectContextCapability> = [.openProject, .scheduleRecapture]
+}
+
+enum ProjectContextCatalog {
+    static func agenda(
+        snapshot: TripodLocationSnapshot,
+        projects: [CameraProject]
+    ) -> [CalendarProjectAgendaItem] {
+        let planned = snapshot.calendarEntries.compactMap { entry -> CalendarProjectAgendaItem? in
             guard entry.kind == .planned,
-                  let location = store.snapshot.location(id: entry.locationID) else { return nil }
-            let project = entry.projectID.flatMap { id in projects.projects.first { $0.id == id } }
+                  let location = snapshot.location(id: entry.locationID) else { return nil }
+            let project = entry.projectID.flatMap { id in projects.first { $0.id == id } }
             return CalendarProjectAgendaItem(
                 id: entry.id,
                 kind: .planned,
@@ -914,8 +920,8 @@ struct CaptureCalendarView: View {
                 session: nil
             )
         }
-        let captured = projects.projects.flatMap { project -> [CalendarProjectAgendaItem] in
-            guard let location = store.snapshot.location(forProjectID: project.id) else { return [] }
+        let captured = projects.flatMap { project -> [CalendarProjectAgendaItem] in
+            guard let location = snapshot.location(forProjectID: project.id) else { return [] }
             return TimelapseSessionStore(project: project).sessionSummaries().map { summary in
                 CalendarProjectAgendaItem(
                     id: summary.id,
@@ -935,8 +941,8 @@ struct CaptureCalendarView: View {
                 )
             }
         }
-        let created = projects.projects.compactMap { project -> CalendarProjectAgendaItem? in
-            guard let location = store.snapshot.location(forProjectID: project.id) else { return nil }
+        let created = projects.compactMap { project -> CalendarProjectAgendaItem? in
+            guard let location = snapshot.location(forProjectID: project.id) else { return nil }
             return CalendarProjectAgendaItem(
                 id: project.id,
                 kind: .created,
@@ -950,6 +956,17 @@ struct CaptureCalendarView: View {
             )
         }
         return (planned + captured + created).sorted { $0.date < $1.date }
+    }
+
+    static func projects(
+        at locationID: UUID,
+        from items: [CalendarProjectAgendaItem]
+    ) -> [CalendarProjectAgendaItem] {
+        let linked = items.filter { $0.locationID == locationID && $0.projectID != nil }
+        let latestByProject = Dictionary(grouping: linked, by: \.projectID).compactMap { _, entries in
+            entries.max { $0.date < $1.date }
+        }
+        return latestByProject.sorted { $0.date > $1.date }
     }
 }
 
@@ -1045,6 +1062,50 @@ private struct CameraeCalendarMonthGrid: View {
         guard let next = calendar.date(byAdding: .month, value: offset, to: visibleMonth) else { return }
         visibleMonth = next
         selectedDate = next
+    }
+}
+
+private struct ProjectContextListSection: View {
+    let title: String
+    let items: [CalendarProjectAgendaItem]
+    @Binding var filter: CalendarProjectFilter
+    let theme: CameraeNextTheme
+
+    private var filteredItems: [CalendarProjectAgendaItem] { filter.apply(to: items) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                CameraeNextSectionLabel(title: title, theme: theme)
+                Spacer()
+                Text("\(items.count) PROJETOS")
+                    .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                    .tracking(2.2)
+                    .foregroundStyle(theme.muted)
+            }
+
+            HStack(spacing: 8) {
+                ForEach(CalendarProjectFilter.allCases) { candidate in
+                    Button(candidate.title) { filter = candidate }
+                        .font(.custom("Outfit-Regular", size: 12, relativeTo: .caption))
+                        .foregroundStyle(filter == candidate ? Color.white : theme.text)
+                        .padding(.horizontal, 18)
+                        .frame(height: 34)
+                        .background(filter == candidate ? theme.accent : theme.surface, in: RoundedRectangle(cornerRadius: 14))
+                        .buttonStyle(.plain)
+                }
+            }
+
+            if filteredItems.isEmpty {
+                ContentUnavailableView("Nenhum projeto neste contexto", systemImage: "rectangle.stack")
+                    .foregroundStyle(theme.text)
+            } else {
+                ForEach(filteredItems) { item in
+                    NavigationLink(value: item) { CalendarProjectAgendaRow(item: item, theme: theme) }
+                        .buttonStyle(.plain)
+                }
+            }
+        }
     }
 }
 
