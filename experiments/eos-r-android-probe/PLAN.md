@@ -6,6 +6,25 @@ Determinar com evidência de hardware se um Android pode detectar, controlar e i
 
 O MVP termina quando um único fluxo manual consegue disparar a câmera e mostrar no celular a fotografia recém-capturada. Live View, ajustes avançados e integração com projetos Camerae ficam fora da primeira prova.
 
+## Direção do produto experimental: Astro Hub
+
+Depois de provar captura e importação, o app temporário evolui para um controlador de sequências astro. O modelo de sequência deverá separar claramente:
+
+- atraso antes de iniciar;
+- quantidade de capturas;
+- duração da exposição ou velocidade do obturador;
+- intervalo entre o início de duas capturas;
+- ISO;
+- white balance;
+- abertura, quando a lente/câmera permitir controle;
+- formato de gravação e importação: JPEG, CR3 ou ambos;
+- política de download: após cada captura ou ao fim da sequência;
+- cancelamento seguro e retomada após erro.
+
+Os valores não serão hardcoded. A interface deverá mostrar somente propriedades, modos e opções que a câmera declarar como suportados e graváveis. Live View continua posterior ao primeiro intervalômetro funcional.
+
+O processamento astro e a geração de MP4 só começam quando captura, eventos e importação forem confiáveis em uma sequência longa. A primeira saída de vídeo poderá usar previews JPEG; RAW/CR3 e alinhamento entram depois.
+
 ## Princípios
 
 - Aplicação separada e descartável.
@@ -31,13 +50,14 @@ O MVP termina quando um único fluxo manual consegue disparar a câmera e mostra
 - preservação opcional do CR3;
 - exportação de log técnico copiável/compartilhável.
 
-### Fora do escopo
+### Fora do primeiro fluxo de captura, mas previstos depois
 
 - Live View;
 - vídeo;
 - foco por toque;
-- bulb e intervalômetro;
-- alteração de ISO, abertura ou velocidade;
+- bulb avançado;
+- sequências longas e retomada;
+- alteração de ISO, abertura ou velocidade antes da câmera declarar capacidades;
 - processamento RAW;
 - importação para projetos Camerae;
 - operação em segundo plano;
@@ -58,7 +78,7 @@ Entregas:
 
 Aceite: `./gradlew assembleDebug` terminou com sucesso em 11 de agosto de 2026 e gerou `app/build/outputs/apk/debug/app-debug.apk`.
 
-### M1 — Descoberta e permissão USB — implementado; aceite físico pendente
+### M1 — Descoberta e permissão USB — concluído e validado fisicamente
 
 Implementar com `UsbManager`:
 
@@ -73,7 +93,7 @@ Aceite físico: ao conectar a EOS R, o Android oferece abrir o app, solicita per
 
 Saída obrigatória: salvar no log o product ID observado da EOS R e a interface que expõe PTP.
 
-### M2 — Sessão PTP e diagnóstico
+### M2 — Sessão PTP e diagnóstico — implementado; aceite físico pendente
 
 Primeiro tentar APIs públicas de alto nível:
 
@@ -110,7 +130,24 @@ Opção B: integrar `libgphoto2` via NDK se a quantidade de extensões Canon ou 
 
 Aceite físico: cinco capturas consecutivas, iniciadas pelo app, resultam em cinco JPEGs válidos no Android sem reconectar o cabo.
 
-### M4 — Fluxo demonstrável
+Antes da captura sequencial, registrar descritores e valores atuais de ISO, white balance, abertura, velocidade e modo de exposição. Só habilitar escrita para propriedades que a EOS R confirmar como configuráveis na sessão remota.
+
+### M4 — Sequência astro mínima
+
+Depois do aceite do M3, implementar:
+
+- quantidade de fotos;
+- intervalo entre capturas;
+- velocidade/duração de exposição suportada;
+- ISO e white balance suportados;
+- iniciar, acompanhar e cancelar sequência;
+- download após cada captura;
+- contadores de planejadas, capturadas, baixadas e falhas;
+- proteção contra iniciar nova exposição enquanto a anterior ainda está ocupada ou transferindo.
+
+Aceite: executar uma sequência de 20 capturas com cadência definida, baixar todos os arquivos e produzir um manifesto local que associe ordem, horário, parâmetros, handle PTP e arquivo importado.
+
+### M5 — Fluxo demonstrável
 
 Tela única com:
 
@@ -124,7 +161,7 @@ Tela única com:
 
 Aceite: uma pessoa consegue conectar, autorizar, capturar e ver a foto sem usar `adb` ou Android Studio.
 
-### M5 — Relatório e decisão
+### M6 — Relatório e decisão
 
 Produzir `RESULTS.md` contendo:
 
@@ -188,4 +225,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. O marco M1 está implementado e compilado, mas depende do teste físico. Analise primeiro o log real da Canon EOS R conectada ao Android. Só depois implemente o marco M2 para leitura PTP/MTP; não avance para comandos proprietários antes de provar a sessão padrão. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. O M1 foi validado fisicamente. O M2 está implementado no APK `0.2.0` e aguarda teste real de leitura/download. Analise o novo log e confirme o arquivo importado antes de implementar M3. Para captura e propriedades, use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.

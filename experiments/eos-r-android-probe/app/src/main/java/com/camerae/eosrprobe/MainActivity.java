@@ -2,6 +2,7 @@ package com.camerae.eosrprobe;
 
 import android.app.Activity;
 import android.app.PendingIntent;
+import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
@@ -9,18 +10,26 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
+import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public final class MainActivity extends Activity {
     static final String ACTION_USB_PERMISSION_RESULT =
@@ -28,10 +37,16 @@ public final class MainActivity extends Activity {
     private static final int CANON_VENDOR_ID = 0x04A9;
 
     private final StringBuilder eventLog = new StringBuilder();
+    private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
     private UsbManager usbManager;
     private TextView statusView;
     private TextView logView;
     private Button authorizeButton;
+    private Button inspectMtpButton;
+    private Button downloadLatestButton;
+    private ImageView previewView;
+    private String mtpReport = "MTP/PTP ainda não consultado.\n";
+    private boolean mtpBusy;
     private boolean receiverRegistered;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
@@ -53,6 +68,8 @@ public final class MainActivity extends Activity {
                 refreshProbe();
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 appendEvent("Dispositivo desconectado" + deviceSuffix(device));
+                mtpReport = "MTP/PTP desconectado.\n";
+                previewView.setVisibility(View.GONE);
                 refreshProbe();
             }
         }
@@ -67,12 +84,17 @@ public final class MainActivity extends Activity {
         statusView = findViewById(R.id.status);
         logView = findViewById(R.id.log);
         authorizeButton = findViewById(R.id.authorize);
+        inspectMtpButton = findViewById(R.id.inspect_mtp);
+        downloadLatestButton = findViewById(R.id.download_latest);
+        previewView = findViewById(R.id.preview);
 
         findViewById(R.id.refresh).setOnClickListener(view -> {
             appendEvent("Varredura manual solicitada");
             refreshProbe();
         });
         authorizeButton.setOnClickListener(view -> requestUsbPermission());
+        inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
+        downloadLatestButton.setOnClickListener(view -> runMtpProbe(true));
         findViewById(R.id.copy_log).setOnClickListener(view -> copyLog());
         findViewById(R.id.share_log).setOnClickListener(view -> shareLog());
 
@@ -83,6 +105,7 @@ public final class MainActivity extends Activity {
     }
 
     @Override
+    @SuppressLint("InlinedApi")
     protected void onStart() {
         super.onStart();
         IntentFilter filter = new IntentFilter(ACTION_USB_PERMISSION_RESULT);
@@ -110,6 +133,12 @@ public final class MainActivity extends Activity {
         refreshProbe();
     }
 
+    @Override
+    protected void onDestroy() {
+        cameraExecutor.shutdownNow();
+        super.onDestroy();
+    }
+
     private void handleLaunchIntent(Intent intent) {
         if (intent != null && UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) {
             appendEvent("Aberto pelo Android após conexão USB" + deviceSuffix(readUsbDevice(intent)));
@@ -125,7 +154,9 @@ public final class MainActivity extends Activity {
 
         boolean hasUsbHost = getPackageManager().hasSystemFeature(PackageManager.FEATURE_USB_HOST);
         UsbDevice selected = selectCamera();
-        if (!hasUsbHost) {
+        if (mtpBusy) {
+            statusView.setText(R.string.status_reading_camera);
+        } else if (!hasUsbHost) {
             statusView.setText(R.string.status_usb_host_missing);
         } else if (selected == null) {
             statusView.setText(R.string.status_waiting);
@@ -134,7 +165,10 @@ public final class MainActivity extends Activity {
         } else {
             statusView.setText(getString(R.string.status_permission_required, deviceLabel(selected)));
         }
-        authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected));
+        boolean cameraReady = selected != null && usbManager.hasPermission(selected);
+        authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !mtpBusy);
+        inspectMtpButton.setEnabled(cameraReady && !mtpBusy);
+        downloadLatestButton.setEnabled(cameraReady && !mtpBusy);
 
         StringBuilder report = new StringBuilder();
         report.append("CAMERAE EOS R USB PROBE\n");
@@ -145,7 +179,87 @@ public final class MainActivity extends Activity {
         report.append("USB Host declarado pelo aparelho: ").append(hasUsbHost).append("\n\n");
         report.append("EVENTOS\n").append(eventLog).append('\n');
         report.append(UsbTopologyFormatter.describe(usbManager));
+        report.append('\n').append(mtpReport);
         logView.setText(report.toString());
+    }
+
+    private void runMtpProbe(boolean downloadLatest) {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)) {
+            appendEvent("MTP não iniciado: câmera ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+
+        mtpBusy = true;
+        appendEvent(downloadLatest
+                ? "Iniciando inventário MTP e download da última imagem"
+                : "Iniciando inventário MTP somente leitura");
+        refreshProbe();
+        File destination = downloadDirectory();
+
+        cameraExecutor.execute(() -> {
+            try {
+                MtpCameraClient.Result result = MtpCameraClient.inspect(
+                        usbManager,
+                        device,
+                        destination,
+                        downloadLatest
+                );
+                runOnUiThread(() -> {
+                    mtpBusy = false;
+                    mtpReport = result.report;
+                    appendEvent("MTP concluído: " + result.objectCount + " arquivos, "
+                            + result.imageCount + " imagens");
+                    if (result.downloadedFile != null) {
+                        appendEvent("Download concluído: " + result.downloadedFile.getAbsolutePath());
+                        showPreview(result.downloadedFile);
+                    }
+                    refreshProbe();
+                });
+            } catch (MtpCameraClient.ProbeException error) {
+                runOnUiThread(() -> {
+                    mtpBusy = false;
+                    mtpReport = "SESSÃO MTP/PTP\nERRO: " + error.getMessage() + "\n";
+                    appendEvent("MTP falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
+    }
+
+    private File downloadDirectory() {
+        File root = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        if (root == null) {
+            root = getFilesDir();
+        }
+        return new File(root, "EOSRProbe");
+    }
+
+    private void showPreview(File file) {
+        String name = file.getName().toUpperCase(Locale.US);
+        if (!name.endsWith(".JPG") && !name.endsWith(".JPEG")) {
+            previewView.setVisibility(View.GONE);
+            return;
+        }
+
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(file.getAbsolutePath(), bounds);
+        int sampleSize = 1;
+        while (bounds.outWidth / sampleSize > 1600 || bounds.outHeight / sampleSize > 1600) {
+            sampleSize *= 2;
+        }
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = sampleSize;
+        Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        if (bitmap == null) {
+            previewView.setVisibility(View.GONE);
+            appendEvent("JPEG baixado, mas o preview não pôde ser decodificado");
+            return;
+        }
+        previewView.setImageBitmap(bitmap);
+        previewView.setVisibility(View.VISIBLE);
     }
 
     private void requestUsbPermission() {

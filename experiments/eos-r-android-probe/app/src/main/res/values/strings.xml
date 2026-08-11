@@ -6,9 +6,13 @@
     <string name="status_ready">%1$s pronta para diagnóstico.</string>
     <string name="status_usb_host_missing">Este Android não declara suporte a USB Host/OTG.</string>
     <string name="status_usb_service_missing">O serviço USB do Android não está disponível.</string>
+    <string name="status_reading_camera">Lendo câmera e cartão via MTP/PTP…</string>
     <string name="refresh">Varrer</string>
     <string name="authorize_usb">Autorizar USB</string>
+    <string name="inspect_mtp">Ler câmera</string>
+    <string name="download_latest">Baixar última</string>
     <string name="copy_log">Copiar log</string>
     <string name="share_log">Compartilhar log</string>
     <string name="log_copied">Log copiado</string>
+    <string name="latest_image_preview">Prévia da última imagem baixada</string>
 </resources>

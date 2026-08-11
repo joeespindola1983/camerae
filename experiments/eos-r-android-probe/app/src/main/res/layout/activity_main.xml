@@ -46,6 +46,20 @@
                 android:text="@string/authorize_usb" />
 
             <Button
+                android:id="@+id/inspect_mtp"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/inspect_mtp" />
+
+            <Button
+                android:id="@+id/download_latest"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/download_latest" />
+
+            <Button
                 android:id="@+id/copy_log"
                 style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"
@@ -60,6 +74,15 @@
                 android:text="@string/share_log" />
         </LinearLayout>
     </HorizontalScrollView>
+
+    <ImageView
+        android:id="@+id/preview"
+        android:layout_width="match_parent"
+        android:layout_height="180dp"
+        android:layout_marginTop="8dp"
+        android:contentDescription="@string/latest_image_preview"
+        android:scaleType="centerInside"
+        android:visibility="gone" />
 
     <ScrollView
         android:layout_width="match_parent"
