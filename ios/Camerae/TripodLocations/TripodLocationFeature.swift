@@ -29,6 +29,14 @@ enum TripodPositionsViewMode: String, CaseIterable, Identifiable, Sendable {
     var title: String { self == .map ? "Mapa" : "Lista" }
 }
 
+enum TripodLocationSelection {
+    static let initial: UUID? = nil
+
+    static func toggle(current: UUID?, tapped: UUID) -> UUID? {
+        current == tapped ? nil : tapped
+    }
+}
+
 enum TripodPositionsCatalogPresentation {
     static let savedPositionsDestination = TripodPositionsViewMode.list
 }
@@ -246,10 +254,11 @@ struct TripodPositionsView: View {
     @EnvironmentObject private var store: TripodLocationStore
     @EnvironmentObject private var projects: ProjectStore
     @State private var viewMode = TripodPositionsViewMode.map
-    @State private var selectedLocationID: UUID?
+    @State private var selectedLocationID = TripodLocationSelection.initial
     @State private var isCreating = false
     @State private var mapPosition = MapCameraPosition.automatic
     @State private var visibleMapRegion: TripodMapCameraRegion?
+    @State private var hasUserAdjustedMap = false
     @State private var filter = CalendarProjectFilter.all
 
     var body: some View {
@@ -272,7 +281,7 @@ struct TripodPositionsView: View {
                                 .foregroundStyle(theme.muted)
                         }
                         ForEach(visibleLocations) { location in
-                            Button { selectedLocationID = location.id } label: {
+                            Button { toggleSelection(location.id) } label: {
                                 TripodLocationCatalogRow(
                                     location: location,
                                     subtitle: listSubtitle(for: location),
@@ -314,11 +323,9 @@ struct TripodPositionsView: View {
         .sheet(isPresented: $isCreating) { TripodLocationEditorView() }
         .onAppear {
             store.reload()
-            selectInitialLocationIfNeeded()
             fitMapToLocations()
         }
         .onChange(of: store.snapshot.locations) { _, _ in
-            selectInitialLocationIfNeeded()
             fitMapToLocations()
         }
     }
@@ -379,7 +386,7 @@ struct TripodPositionsView: View {
                             ),
                             anchor: .center
                         ) {
-                            Button { selectedLocationID = location.id } label: {
+                            Button { toggleSelection(location.id) } label: {
                                 mapThumbnail(for: location)
                             }
                             .buttonStyle(.plain)
@@ -396,8 +403,15 @@ struct TripodPositionsView: View {
                 MapScaleView()
             }
             .onMapCameraChange(frequency: .onEnd) { context in
+                guard hasUserAdjustedMap else { return }
                 updateVisibleRegion(context.region)
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 1).onChanged { _ in hasUserAdjustedMap = true }
+            )
+            .simultaneousGesture(
+                MagnifyGesture().onChanged { _ in hasUserAdjustedMap = true }
+            )
 
             if locationsWithGPS.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -514,8 +528,10 @@ struct TripodPositionsView: View {
     }
 
     private func fitMapToLocations() {
+        hasUserAdjustedMap = false
         guard let fitted = TripodMapCameraFit.region(for: store.snapshot.locations) else {
             mapPosition = .automatic
+            visibleMapRegion = nil
             return
         }
         mapPosition = .region(MKCoordinateRegion(
@@ -529,6 +545,13 @@ struct TripodPositionsView: View {
             )
         ))
         visibleMapRegion = fitted
+    }
+
+    private func toggleSelection(_ locationID: UUID) {
+        selectedLocationID = TripodLocationSelection.toggle(
+            current: selectedLocationID,
+            tapped: locationID
+        )
     }
 
     private func updateVisibleRegion(_ region: MKCoordinateRegion) {
@@ -560,11 +583,6 @@ struct TripodPositionsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(width: 250, height: 64)
         .background(theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func selectInitialLocationIfNeeded() {
-        guard selectedLocation == nil else { return }
-        selectedLocationID = store.snapshot.locations.first(where: { $0.coordinate != nil })?.id
     }
 
     private var mapSummaryText: String {

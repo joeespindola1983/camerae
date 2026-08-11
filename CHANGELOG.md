@@ -51,6 +51,9 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Tripod Positions now opens with no implicit selection, allows a second tap
+  to deselect a marker or row, and ignores transient MapKit camera updates
+  during the initial fit so every fitted position remains available in List.
 - Tripod Positions now uses a real Apple map that fits every persisted GPS
   point, exposes selectable photo thumbnails, opens the complete saved-position
   list from its summary card, and idempotently recovers GPS coordinates from

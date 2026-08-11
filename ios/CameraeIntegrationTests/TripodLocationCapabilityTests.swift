@@ -26,6 +26,17 @@ struct TripodLocationCapabilityTests {
         #expect(TripodPositionsCatalogPresentation.savedPositionsDestination == .list)
     }
 
+    @Test("map opens without a selected tripod and a second tap deselects")
+    func tripodSelectionToggle() {
+        let first = UUID()
+        let second = UUID()
+
+        #expect(TripodLocationSelection.initial == nil)
+        #expect(TripodLocationSelection.toggle(current: nil, tapped: first) == first)
+        #expect(TripodLocationSelection.toggle(current: first, tapped: first) == nil)
+        #expect(TripodLocationSelection.toggle(current: first, tapped: second) == second)
+    }
+
     @Test("map camera fits every GPS position and ignores positions without GPS")
     func mapCameraFit() throws {
         let locations = [
