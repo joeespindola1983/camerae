@@ -42,11 +42,13 @@ public final class MainActivity extends Activity {
     private TextView statusView;
     private TextView logView;
     private Button authorizeButton;
+    private Button captureButton;
     private Button inspectMtpButton;
     private Button downloadLatestButton;
     private ImageView previewView;
     private String mtpReport = "MTP/PTP ainda não consultado.\n";
-    private boolean mtpBusy;
+    private String captureReport = "Captura remota ainda não testada.\n";
+    private boolean cameraBusy;
     private boolean receiverRegistered;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
@@ -69,6 +71,7 @@ public final class MainActivity extends Activity {
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 appendEvent("Dispositivo desconectado" + deviceSuffix(device));
                 mtpReport = "MTP/PTP desconectado.\n";
+                captureReport = "Captura remota desconectada.\n";
                 previewView.setVisibility(View.GONE);
                 refreshProbe();
             }
@@ -84,6 +87,7 @@ public final class MainActivity extends Activity {
         statusView = findViewById(R.id.status);
         logView = findViewById(R.id.log);
         authorizeButton = findViewById(R.id.authorize);
+        captureButton = findViewById(R.id.capture_test);
         inspectMtpButton = findViewById(R.id.inspect_mtp);
         downloadLatestButton = findViewById(R.id.download_latest);
         previewView = findViewById(R.id.preview);
@@ -93,6 +97,7 @@ public final class MainActivity extends Activity {
             refreshProbe();
         });
         authorizeButton.setOnClickListener(view -> requestUsbPermission());
+        captureButton.setOnClickListener(view -> runRemoteCapture());
         inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
         downloadLatestButton.setOnClickListener(view -> runMtpProbe(true));
         findViewById(R.id.copy_log).setOnClickListener(view -> copyLog());
@@ -154,7 +159,7 @@ public final class MainActivity extends Activity {
 
         boolean hasUsbHost = getPackageManager().hasSystemFeature(PackageManager.FEATURE_USB_HOST);
         UsbDevice selected = selectCamera();
-        if (mtpBusy) {
+        if (cameraBusy) {
             statusView.setText(R.string.status_reading_camera);
         } else if (!hasUsbHost) {
             statusView.setText(R.string.status_usb_host_missing);
@@ -166,9 +171,10 @@ public final class MainActivity extends Activity {
             statusView.setText(getString(R.string.status_permission_required, deviceLabel(selected)));
         }
         boolean cameraReady = selected != null && usbManager.hasPermission(selected);
-        authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !mtpBusy);
-        inspectMtpButton.setEnabled(cameraReady && !mtpBusy);
-        downloadLatestButton.setEnabled(cameraReady && !mtpBusy);
+        authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
+        captureButton.setEnabled(cameraReady && !cameraBusy);
+        inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
+        downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
 
         StringBuilder report = new StringBuilder();
         report.append("CAMERAE EOS R USB PROBE\n");
@@ -179,8 +185,42 @@ public final class MainActivity extends Activity {
         report.append("USB Host declarado pelo aparelho: ").append(hasUsbHost).append("\n\n");
         report.append("EVENTOS\n").append(eventLog).append('\n');
         report.append(UsbTopologyFormatter.describe(usbManager));
+        report.append('\n').append(captureReport);
         report.append('\n').append(mtpReport);
         logView.setText(report.toString());
+    }
+
+    private void runRemoteCapture() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)) {
+            appendEvent("Captura não iniciada: câmera ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+
+        cameraBusy = true;
+        appendEvent("Iniciando disparo remoto único; use foco manual na lente/câmera");
+        refreshProbe();
+        cameraExecutor.execute(() -> {
+            try {
+                CanonEosRemoteClient.Result result = CanonEosRemoteClient.capture(usbManager, device);
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    captureReport = result.report;
+                    appendEvent(result.captureCommandCompleted
+                            ? "Sequência de disparo aceita; aguarde a gravação no cartão"
+                            : "Sequência de disparo terminou sem confirmação");
+                    refreshProbe();
+                });
+            } catch (CanonEosRemoteClient.CaptureException error) {
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    captureReport = error.report;
+                    appendEvent("Captura remota falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
     }
 
     private void runMtpProbe(boolean downloadLatest) {
@@ -191,7 +231,7 @@ public final class MainActivity extends Activity {
             return;
         }
 
-        mtpBusy = true;
+        cameraBusy = true;
         appendEvent(downloadLatest
                 ? "Iniciando inventário MTP e download da última imagem"
                 : "Iniciando inventário MTP somente leitura");
@@ -207,7 +247,7 @@ public final class MainActivity extends Activity {
                         downloadLatest
                 );
                 runOnUiThread(() -> {
-                    mtpBusy = false;
+                    cameraBusy = false;
                     mtpReport = result.report;
                     appendEvent("MTP concluído: " + result.objectCount + " arquivos, "
                             + result.imageCount + " imagens");
@@ -219,7 +259,7 @@ public final class MainActivity extends Activity {
                 });
             } catch (MtpCameraClient.ProbeException error) {
                 runOnUiThread(() -> {
-                    mtpBusy = false;
+                    cameraBusy = false;
                     mtpReport = "SESSÃO MTP/PTP\nERRO: " + error.getMessage() + "\n";
                     appendEvent("MTP falhou: " + error.getMessage());
                     refreshProbe();

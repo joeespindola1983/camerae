@@ -53,6 +53,13 @@
                 android:text="@string/inspect_mtp" />
 
             <Button
+                android:id="@+id/capture_test"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/capture_test" />
+
+            <Button
                 android:id="@+id/download_latest"
                 style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"

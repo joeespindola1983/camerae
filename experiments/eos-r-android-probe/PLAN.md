@@ -93,7 +93,7 @@ Aceite físico: ao conectar a EOS R, o Android oferece abrir o app, solicita per
 
 Saída obrigatória: salvar no log o product ID observado da EOS R e a interface que expõe PTP.
 
-### M2 — Sessão PTP e diagnóstico — implementado; aceite físico pendente
+### M2 — Sessão PTP e diagnóstico — concluído e validado fisicamente
 
 Primeiro tentar APIs públicas de alto nível:
 
@@ -104,7 +104,7 @@ Primeiro tentar APIs públicas de alto nível:
 
 Em paralelo, validar acesso de baixo nível com `UsbDeviceConnection` à interface e aos endpoints bulk/event necessários. Não enviar comandos proprietários nesta fase.
 
-Aceite físico: o app mostra modelo/serial quando disponíveis, lista o cartão e copia uma imagem existente para armazenamento privado do app.
+Aceite físico: o app identificou a Canon EOS R, listou o cartão e copiou integralmente um CR3 de 32.312.487 bytes para o armazenamento privado do app em aproximadamente 2,2 segundos.
 
 Gate técnico:
 
@@ -112,7 +112,7 @@ Gate técnico:
 - se o Android ou a câmera bloquear a sessão necessária, testar uma integração nativa com `libgphoto2` antes de investir em protocolo próprio;
 - documentar o erro exato, não apenas “não funcionou”.
 
-### M3 — Captura remota
+### M3 — Captura remota — primeiro disparo implementado; aceite físico pendente
 
 Opção A, preferida após M2: cliente PTP mínimo com somente as operações requeridas pela EOS R.
 
@@ -125,6 +125,8 @@ Opção A, preferida após M2: cliente PTP mínimo com somente as operações re
 - consumir eventos até identificar o novo objeto;
 - baixar a imagem;
 - fechar sessão em `finally` e em detach.
+
+O APK `0.3.0` implementa a primeira metade desse marco com containers little-endian, sessão/transações, `EOS_SetRemoteMode`, `EOS_SetEventMode`, consumo limitado de `EOS_GetEvent`, sequência segura de `EOS_RemoteReleaseOn/Off` e log de cada resposta. O primeiro teste mantém o destino PTP atual da câmera e separa o disparo do inventário/download MTP. Detecção automática do novo handle e importação em um único toque entram depois que o disparo for comprovado no hardware.
 
 Opção B: integrar `libgphoto2` via NDK se a quantidade de extensões Canon ou a negociação de sessão tornar a opção A desproporcional.
 
@@ -225,4 +227,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. O M1 foi validado fisicamente. O M2 está implementado no APK `0.2.0` e aguarda teste real de leitura/download. Analise o novo log e confirme o arquivo importado antes de implementar M3. Para captura e propriedades, use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1 e M2 foram validados fisicamente; o download CR3 funcionou. O APK `0.3.0` contém o primeiro disparo remoto Canon EOS e aguarda o log do teste real com foco manual. Analise a sequência PTP completa antes de automatizar detecção/download do novo handle. Para captura e propriedades, use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
