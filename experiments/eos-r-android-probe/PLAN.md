@@ -130,7 +130,7 @@ O APK `0.3.0` comprovou no hardware containers little-endian, sessão/transaçõ
 
 O APK `0.4.0` reuniu o fluxo em um toque, mas o teste físico encontrou uma corrida na troca MTP → PTP. O APK `0.4.1` conseguiu concluir uma captura e importar `5S8A9568.CR3` com 40.316.045 bytes exatos, porém só depois de duas falhas de abertura PTP e reconexões físicas; atraso fixo não é confiável.
 
-O APK `0.4.2` remove a transição causadora: abre PTP diretamente, mantém a sessão enquanto consulta `EOS_GetEvent`, extrai com limites rígidos o handle/nome/tamanho do evento Canon `ObjectAddedEx` e só depois abre MTP para importar diretamente esse handle. O reteste e as cinco repetições do aceite ainda estão pendentes.
+O APK `0.4.2` removeu a transição causadora e comprovou sessões PTP estáveis. O teste mostrou que a EOS R emite `0xC1A7 ObjectAddedEx64` cerca de 3,5 s depois do disparo, não o `0xC181 ObjectAddedEx` inicialmente decodificado. O APK `0.4.3` aceita ambas as estruturas com offsets e limites próprios antes de importar o handle exato via MTP. O reteste e as cinco repetições do aceite ainda estão pendentes.
 
 Opção B: integrar `libgphoto2` via NDK se a quantidade de extensões Canon ou a negociação de sessão tornar a opção A desproporcional.
 
@@ -231,4 +231,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1, M2, disparo PTP e uma importação automática foram validados fisicamente. O fluxo com baseline MTP era instável; o APK `0.4.2` o substitui por captura PTP direta, espera pelo evento Canon `ObjectAddedEx` e importação MTP do handle exato. Aguarde o reteste antes de iniciar cinco repetições, a interface de sequência ou parâmetros. Use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1, M2, disparo PTP e uma importação automática foram validados fisicamente. A EOS R reportou o novo CR3 pelo evento `0xC1A7 ObjectAddedEx64`; o APK `0.4.3` agora decodifica essa variante e importa o handle exato. Aguarde o reteste antes de iniciar cinco repetições, a interface de sequência ou parâmetros. Use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.

@@ -227,7 +227,7 @@ public final class MainActivity extends Activity {
                     cameraBusy = false;
                     captureReport = capture.report;
                     mtpReport = "IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\n"
-                            + "ERRO: a câmera disparou, mas não informou ObjectAddedEx.\n";
+                            + "ERRO: a câmera disparou, mas não informou ObjectAddedEx/64.\n";
                     appendEvent("A câmera disparou, mas não informou o handle do novo objeto");
                     refreshProbe();
                 });

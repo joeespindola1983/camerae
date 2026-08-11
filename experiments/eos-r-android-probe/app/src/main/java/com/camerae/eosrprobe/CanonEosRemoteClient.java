@@ -65,7 +65,7 @@ final class CanonEosRemoteClient {
             }
             report.append("Resultado: sequência de disparo aceita pela câmera\n");
             if (capturedObject == null) {
-                report.append("Resultado do objeto: evento ObjectAddedEx não recebido no prazo\n");
+                report.append("Resultado do objeto: evento ObjectAddedEx/64 não recebido no prazo\n");
             } else {
                 report.append("Resultado do objeto: handle=").append(capturedObject.handle)
                         .append(" name=").append(capturedObject.name)
@@ -127,9 +127,9 @@ final class CanonEosRemoteClient {
             SystemClock.sleep(OBJECT_EVENT_POLL_MS);
             polls++;
             CanonEosEventParser.CapturedObject captured =
-                    drainEvents(transport, report, "aguardando ObjectAddedEx #" + polls);
+                    drainEvents(transport, report, "aguardando ObjectAddedEx/64 #" + polls);
             if (captured != null) {
-                report.append("ObjectAddedEx recebido após ")
+                report.append("ObjectAddedEx/64 recebido após ")
                         .append(SystemClock.elapsedRealtime() - startedAt)
                         .append(" ms em ").append(polls).append(" consultas\n");
                 return captured;

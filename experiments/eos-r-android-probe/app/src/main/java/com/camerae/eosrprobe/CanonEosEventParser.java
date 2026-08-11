@@ -6,8 +6,10 @@ import java.nio.charset.StandardCharsets;
 
 final class CanonEosEventParser {
     private static final int EVENT_OBJECT_ADDED_EX = 0xC181;
+    private static final int EVENT_OBJECT_ADDED_EX_64 = 0xC1A7;
     private static final int RECORD_HEADER_LENGTH = 8;
     private static final int OBJECT_NAME_OFFSET = 0x28;
+    private static final int OBJECT_64_NAME_OFFSET = 0x2C;
 
     private CanonEosEventParser() {
     }
@@ -27,15 +29,19 @@ final class CanonEosEventParser {
             }
 
             int recordSize = (int) recordSizeLong;
-            if (eventCode == EVENT_OBJECT_ADDED_EX && recordSize > OBJECT_NAME_OFFSET) {
+            boolean objectAdded = eventCode == EVENT_OBJECT_ADDED_EX;
+            boolean objectAdded64 = eventCode == EVENT_OBJECT_ADDED_EX_64;
+            int nameOffset = objectAdded64 ? OBJECT_64_NAME_OFFSET : OBJECT_NAME_OFFSET;
+            if ((objectAdded || objectAdded64) && recordSize > nameOffset) {
                 int handle = (int) uint32(data, offset + 0x08);
                 int storageId = (int) uint32(data, offset + 0x0C);
                 int format = uint16(data, offset + 0x10);
                 long objectSize = uint32(data, offset + 0x1C);
-                int parent = (int) uint32(data, offset + 0x20);
+                int parentOffset = objectAdded64 ? 0x24 : 0x20;
+                int parent = (int) uint32(data, offset + parentOffset);
                 String name = nullTerminatedString(
                         data,
-                        offset + OBJECT_NAME_OFFSET,
+                        offset + nameOffset,
                         offset + recordSize
                 );
                 return new CapturedObject(

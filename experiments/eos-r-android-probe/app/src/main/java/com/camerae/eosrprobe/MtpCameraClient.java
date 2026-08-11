@@ -157,7 +157,7 @@ final class MtpCameraClient {
                             File downloaded = importObject(mtpDevice, candidate, downloadDirectory);
                             long elapsed = SystemClock.elapsedRealtime() - startedAt;
                             StringBuilder report = new StringBuilder();
-                            report.append("IMPORTAÇÃO PELO EVENTO CANON ObjectAddedEx\n");
+                            report.append("IMPORTAÇÃO PELO EVENTO CANON ObjectAddedEx/64\n");
                             report.append("Tentativas MTP: ").append(attempts).append('\n');
                             report.append("Tempo até importação: ").append(elapsed).append(" ms\n");
                             report.append("Handle do evento: ").append(expected.handle).append('\n');
