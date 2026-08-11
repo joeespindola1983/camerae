@@ -32,6 +32,9 @@ test distributions do not require an entry here.
 - Corrected Android `MtpDevice` connection ownership and added bounded MTP/PTP
   transition delays after a physical test exposed an immediate bulk-IN
   failure during automatic capture.
+- Removed the unstable pre-capture MTP baseline and now resolve the newly
+  captured file from the bounded Canon `ObjectAddedEx` event before importing
+  its exact handle through MTP.
 
 ## [9.5.0] - 2026-08-04
 

@@ -37,7 +37,6 @@ public final class MainActivity extends Activity {
             "com.camerae.eosrprobe.action.USB_PERMISSION_RESULT";
     private static final int CANON_VENDOR_ID = 0x04A9;
     private static final long NEW_IMAGE_TIMEOUT_MS = 30_000;
-    private static final long MTP_TO_PTP_SETTLE_MS = 1_500;
     private static final long PTP_TO_MTP_SETTLE_MS = 1_000;
 
     private final StringBuilder eventLog = new StringBuilder();
@@ -107,7 +106,8 @@ public final class MainActivity extends Activity {
         findViewById(R.id.copy_log).setOnClickListener(view -> copyLog());
         findViewById(R.id.share_log).setOnClickListener(view -> shareLog());
 
-        appendEvent("Aplicativo iniciado em " + Build.MANUFACTURER + " " + Build.MODEL
+        appendEvent("Aplicativo " + BuildConfig.VERSION_NAME + " iniciado em "
+                + Build.MANUFACTURER + " " + Build.MODEL
                 + ", Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")");
         handleLaunchIntent(getIntent());
         refreshProbe();
@@ -183,6 +183,8 @@ public final class MainActivity extends Activity {
         StringBuilder report = new StringBuilder();
         report.append("CAMERAE EOS R USB PROBE\n");
         report.append("Gerado: ").append(timestamp()).append('\n');
+        report.append("App: ").append(BuildConfig.VERSION_NAME)
+                .append(" (code ").append(BuildConfig.VERSION_CODE).append(")\n");
         report.append("Aparelho: ").append(Build.MANUFACTURER).append(' ').append(Build.MODEL).append('\n');
         report.append("Android: ").append(Build.VERSION.RELEASE)
                 .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
@@ -207,20 +209,6 @@ public final class MainActivity extends Activity {
         refreshProbe();
         File destination = downloadDirectory();
         cameraExecutor.execute(() -> {
-            MtpCameraClient.ImageSnapshot baseline;
-            try {
-                baseline = MtpCameraClient.snapshotImages(usbManager, device);
-                SystemClock.sleep(MTP_TO_PTP_SETTLE_MS);
-            } catch (MtpCameraClient.ProbeException error) {
-                runOnUiThread(() -> {
-                    cameraBusy = false;
-                    mtpReport = "BASELINE MTP\nERRO: " + error.getMessage() + "\n";
-                    appendEvent("Captura cancelada: não foi possível ler o baseline MTP");
-                    refreshProbe();
-                });
-                return;
-            }
-
             CanonEosRemoteClient.Result capture;
             try {
                 capture = CanonEosRemoteClient.capture(usbManager, device);
@@ -234,13 +222,25 @@ public final class MainActivity extends Activity {
                 return;
             }
 
+            if (capture.capturedObject == null) {
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    captureReport = capture.report;
+                    mtpReport = "IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\n"
+                            + "ERRO: a câmera disparou, mas não informou ObjectAddedEx.\n";
+                    appendEvent("A câmera disparou, mas não informou o handle do novo objeto");
+                    refreshProbe();
+                });
+                return;
+            }
+
             try {
                 SystemClock.sleep(PTP_TO_MTP_SETTLE_MS);
                 MtpCameraClient.AutoImportResult imported =
-                        MtpCameraClient.waitForNewImageAndDownload(
+                        MtpCameraClient.waitForCapturedObjectAndDownload(
                                 usbManager,
                                 device,
-                                baseline,
+                                capture.capturedObject,
                                 destination,
                                 NEW_IMAGE_TIMEOUT_MS
                         );

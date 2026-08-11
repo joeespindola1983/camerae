@@ -20,10 +20,10 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - Marco M1 validado na EOS R: detecção, permissão e topologia USB.
 - Marco M2 validado na EOS R: sessão MTP/PTP, inventário do cartão e download de um CR3 de 32.312.487 bytes.
 - Marco M3 validado para um disparo: a sequência Canon EOS criou `5S8A9566.CR3` e o Android importou os 40.307.117 bytes.
-- O primeiro teste do APK `0.4.0` revelou que 75 ms não bastam para trocar do cliente MTP do Android para o transporte PTP próprio: `OpenSession` ficou sem resposta e o storage temporariamente indisponível.
-- APK `0.4.1` implementado: respeita a propriedade da conexão assumida por `MtpDevice` e adiciona estabilização limitada antes e depois da sessão PTP.
-- Build debug `0.4.1` verificado com sucesso em 11 de agosto de 2026.
-- O fluxo automático corrigido e as cinco capturas consecutivas do aceite M3 ainda aguardam validação física; alteração de parâmetros não foi implementada.
+- O APK `0.4.1` conseguiu importar automaticamente `5S8A9568.CR3` com os 40.316.045 bytes exatos, mas somente após duas falhas `MTP → PTP` e reconexões físicas.
+- APK `0.4.2` implementado: remove o baseline MTP anterior ao disparo, mantém a sessão PTP enquanto aguarda `ObjectAddedEx` e usa o handle informado pela própria EOS R para importar via MTP.
+- Build debug `0.4.2` e parser sintético de `ObjectAddedEx` verificados com sucesso em 11 de agosto de 2026.
+- O novo fluxo orientado a eventos e as cinco capturas consecutivas do aceite M3 ainda aguardam validação física; alteração de parâmetros não foi implementada.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
 
@@ -52,7 +52,7 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 9. `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
 10. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.4.1`, o botão integrado primeiro registra todos os handles MTP existentes, fecha essa sessão, aguarda 1,5 segundo, dispara pela sessão PTP Canon, aguarda mais 1 segundo e então consulta o cartão a cada 500 ms por até 30 segundos. Apenas um handle ausente do baseline pode ser importado, com preferência por CR3, e o tamanho final precisa coincidir com o tamanho informado pela câmera. O app não altera o destino de captura: espera que a configuração atual continue salvando no cartão.
+No APK `0.4.2`, o botão integrado abre diretamente a sessão PTP Canon, dispara e consulta `EOS_GetEvent` por até 15 segundos até receber `ObjectAddedEx`. Depois de fechar PTP, o app abre MTP e busca diretamente esse handle por até 30 segundos, sem varrer ou comparar o cartão antes da captura. O tamanho final precisa coincidir com o tamanho informado pelo MTP. O app não altera o destino de captura: espera que a configuração atual continue salvando no cartão.
 
 ## Preparação do teste físico
 

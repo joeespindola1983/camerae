@@ -112,53 +112,10 @@ final class MtpCameraClient {
         }
     }
 
-    static ImageSnapshot snapshotImages(
-            UsbManager usbManager,
-            UsbDevice usbDevice
-    ) throws ProbeException {
-        UsbDeviceConnection connection = null;
-        MtpDevice mtpDevice = null;
-        try {
-            connection = usbManager.openDevice(usbDevice);
-            if (connection == null) {
-                throw new ProbeException("UsbManager.openDevice retornou null no baseline");
-            }
-            mtpDevice = new MtpDevice(usbDevice);
-            boolean opened = mtpDevice.open(connection);
-            connection = null;
-            if (!opened) {
-                throw new ProbeException("MtpDevice.open falhou no baseline");
-            }
-            List<Candidate> candidates = scanAllImages(mtpDevice);
-            Set<Integer> handles = new HashSet<>();
-            for (Candidate candidate : candidates) {
-                handles.add(candidate.handle);
-            }
-            Candidate latest = candidates.isEmpty() ? null : candidates.get(0);
-            return new ImageSnapshot(
-                    handles,
-                    latest == null ? "<cartão sem imagens>" : latest.name,
-                    latest == null ? 0 : latest.handle
-            );
-        } catch (ProbeException error) {
-            throw error;
-        } catch (RuntimeException error) {
-            throw new ProbeException(error.getClass().getSimpleName() + ": "
-                    + error.getMessage(), error);
-        } finally {
-            if (mtpDevice != null) {
-                mtpDevice.close();
-            }
-            if (connection != null) {
-                connection.close();
-            }
-        }
-    }
-
-    static AutoImportResult waitForNewImageAndDownload(
+    static AutoImportResult waitForCapturedObjectAndDownload(
             UsbManager usbManager,
             UsbDevice usbDevice,
-            ImageSnapshot baseline,
+            CanonEosEventParser.CapturedObject expected,
             File downloadDirectory,
             long timeoutMs
     ) throws ProbeException {
@@ -180,31 +137,45 @@ final class MtpCameraClient {
                     boolean opened = mtpDevice.open(connection);
                     connection = null;
                     if (!opened) {
-                        lastTransientError = "MtpDevice.open falhou enquanto a câmera gravava";
+                        lastTransientError = "MtpDevice.open falhou após a sessão PTP";
                     } else {
-                        List<Candidate> candidates = scanAllImages(mtpDevice);
-                        Candidate fresh = firstNewCandidate(candidates, baseline.handles);
-                        if (fresh != null) {
-                            File downloaded = importObject(mtpDevice, fresh, downloadDirectory);
+                        MtpObjectInfo info = mtpDevice.getObjectInfo(expected.handle);
+                        if (info == null) {
+                            lastTransientError = "handle ainda não visível via MTP";
+                        } else if (!isImageCandidate(info)) {
+                            throw new ProbeException("Handle capturado não é uma imagem: format="
+                                    + hex4(info.getFormat()));
+                        } else {
+                            Candidate candidate = new Candidate(
+                                    expected.handle,
+                                    value(info.getName()),
+                                    info.getFormat(),
+                                    info.getCompressedSizeLong(),
+                                    info.getDateCreated(),
+                                    info.getDateModified()
+                            );
+                            File downloaded = importObject(mtpDevice, candidate, downloadDirectory);
                             long elapsed = SystemClock.elapsedRealtime() - startedAt;
                             StringBuilder report = new StringBuilder();
-                            report.append("IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\n");
-                            report.append("Baseline: ").append(baseline.handles.size())
-                                    .append(" imagens; última=").append(baseline.latestName)
-                                    .append(" handle=").append(baseline.latestHandle).append('\n');
+                            report.append("IMPORTAÇÃO PELO EVENTO CANON ObjectAddedEx\n");
                             report.append("Tentativas MTP: ").append(attempts).append('\n');
                             report.append("Tempo até importação: ").append(elapsed).append(" ms\n");
-                            report.append("Novo handle: ").append(fresh.handle).append('\n');
-                            report.append("Origem: ").append(fresh.name).append('\n');
-                            report.append("Tamanho esperado: ").append(fresh.size).append(" bytes\n");
+                            report.append("Handle do evento: ").append(expected.handle).append('\n');
+                            report.append("Nome do evento: ").append(expected.name).append('\n');
+                            report.append("Tamanho do evento: ").append(expected.size).append(" bytes\n");
+                            report.append("Nome MTP: ").append(candidate.name).append('\n');
+                            report.append("Tamanho MTP: ").append(candidate.size).append(" bytes\n");
                             report.append("Destino: ").append(downloaded.getAbsolutePath()).append('\n');
                             report.append("Bytes gravados: ").append(downloaded.length()).append('\n');
-                            return new AutoImportResult(report.toString(), downloaded, fresh.name);
+                            return new AutoImportResult(
+                                    report.toString(),
+                                    downloaded,
+                                    candidate.name
+                            );
                         }
-                        lastTransientError = "nenhum handle novo visível";
                     }
                 }
-            } catch (RuntimeException | ProbeException error) {
+            } catch (RuntimeException error) {
                 lastTransientError = error.getClass().getSimpleName() + ": " + error.getMessage();
             } finally {
                 if (mtpDevice != null) {
@@ -220,21 +191,8 @@ final class MtpCameraClient {
                 SystemClock.sleep(Math.min(NEW_IMAGE_POLL_INTERVAL_MS, remaining));
             }
         }
-        throw new ProbeException("Timeout aguardando nova imagem após " + timeoutMs
-                + " ms; último estado: " + lastTransientError);
-    }
-
-    private static List<Candidate> scanAllImages(MtpDevice mtpDevice) throws ProbeException {
-        int[] storageIds = mtpDevice.getStorageIds();
-        if (storageIds == null) {
-            throw new ProbeException("A câmera não retornou a lista de storages");
-        }
-        List<Candidate> candidates = new ArrayList<>();
-        for (int storageId : storageIds) {
-            candidates.addAll(scanStorage(mtpDevice, storageId).candidates);
-        }
-        candidates.sort(Candidate.NEWEST_FIRST);
-        return candidates;
+        throw new ProbeException("Timeout aguardando o handle " + expected.handle
+                + " após " + timeoutMs + " ms; último estado: " + lastTransientError);
     }
 
     private static void appendDeviceInfo(StringBuilder report, MtpDeviceInfo info)
@@ -382,24 +340,6 @@ final class MtpCameraClient {
         return candidates.isEmpty() ? null : candidates.get(0);
     }
 
-    private static Candidate firstNewCandidate(
-            List<Candidate> candidates,
-            Set<Integer> baselineHandles
-    ) {
-        for (Candidate candidate : candidates) {
-            if (!baselineHandles.contains(candidate.handle)
-                    && candidate.name.toUpperCase(Locale.US).endsWith(".CR3")) {
-                return candidate;
-            }
-        }
-        for (Candidate candidate : candidates) {
-            if (!baselineHandles.contains(candidate.handle)) {
-                return candidate;
-            }
-        }
-        return null;
-    }
-
     private static File importObject(
             MtpDevice device,
             Candidate candidate,
@@ -530,18 +470,6 @@ final class MtpCameraClient {
             this.downloadedFile = downloadedFile;
             this.objectCount = objectCount;
             this.imageCount = imageCount;
-        }
-    }
-
-    static final class ImageSnapshot {
-        final Set<Integer> handles;
-        final String latestName;
-        final int latestHandle;
-
-        ImageSnapshot(Set<Integer> handles, String latestName, int latestHandle) {
-            this.handles = handles;
-            this.latestName = latestName;
-            this.latestHandle = latestHandle;
         }
     }
 

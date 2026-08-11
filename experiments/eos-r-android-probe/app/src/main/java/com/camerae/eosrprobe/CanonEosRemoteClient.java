@@ -2,6 +2,7 @@ package com.camerae.eosrprobe;
 
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbManager;
+import android.os.SystemClock;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -14,6 +15,8 @@ final class CanonEosRemoteClient {
     private static final int EOS_GET_EVENT = 0x9116;
     private static final int EOS_REMOTE_RELEASE_ON = 0x9128;
     private static final int EOS_REMOTE_RELEASE_OFF = 0x9129;
+    private static final long OBJECT_EVENT_TIMEOUT_MS = 15_000;
+    private static final long OBJECT_EVENT_POLL_MS = 500;
 
     private CanonEosRemoteClient() {
     }
@@ -29,6 +32,7 @@ final class CanonEosRemoteClient {
         boolean halfPressed = false;
         boolean fullPressed = false;
         boolean captureCommandCompleted = false;
+        CanonEosEventParser.CapturedObject capturedObject = null;
         String failureMessage = null;
         Throwable failureCause = null;
         try {
@@ -48,11 +52,25 @@ final class CanonEosRemoteClient {
             fullPressed = false;
             captureCommandCompleted = true;
 
-            drainEvents(transport, report, "após disparo");
+            capturedObject = drainEvents(transport, report, "após disparo");
             transport.command("EOS_HalfRelease", EOS_REMOTE_RELEASE_OFF, 1);
             halfPressed = false;
-            drainEvents(transport, report, "após liberação");
+            CanonEosEventParser.CapturedObject releaseObject =
+                    drainEvents(transport, report, "após liberação");
+            if (capturedObject == null) {
+                capturedObject = releaseObject;
+            }
+            if (capturedObject == null) {
+                capturedObject = waitForObjectAdded(transport, report);
+            }
             report.append("Resultado: sequência de disparo aceita pela câmera\n");
+            if (capturedObject == null) {
+                report.append("Resultado do objeto: evento ObjectAddedEx não recebido no prazo\n");
+            } else {
+                report.append("Resultado do objeto: handle=").append(capturedObject.handle)
+                        .append(" name=").append(capturedObject.name)
+                        .append(" size=").append(capturedObject.size).append(" bytes\n");
+            }
         } catch (PtpUsbTransport.TransportException error) {
             failureMessage = error.getMessage();
             failureCause = error;
@@ -85,10 +103,10 @@ final class CanonEosRemoteClient {
         if (failureCause != null) {
             throw new CaptureException(failureMessage, report.toString(), failureCause);
         }
-        return new Result(report.toString(), captureCommandCompleted);
+        return new Result(report.toString(), captureCommandCompleted, capturedObject);
     }
 
-    private static void drainEvents(
+    private static CanonEosEventParser.CapturedObject drainEvents(
             PtpUsbTransport transport,
             StringBuilder report,
             String phase
@@ -96,6 +114,28 @@ final class CanonEosRemoteClient {
         byte[] data = transport.commandWithData("EOS_GetEvent", EOS_GET_EVENT);
         report.append("GetEvent ").append(phase).append(": ")
                 .append(data.length).append(" bytes\n");
+        return CanonEosEventParser.findObjectAdded(data);
+    }
+
+    private static CanonEosEventParser.CapturedObject waitForObjectAdded(
+            PtpUsbTransport transport,
+            StringBuilder report
+    ) throws PtpUsbTransport.TransportException {
+        long startedAt = SystemClock.elapsedRealtime();
+        int polls = 0;
+        while (SystemClock.elapsedRealtime() - startedAt < OBJECT_EVENT_TIMEOUT_MS) {
+            SystemClock.sleep(OBJECT_EVENT_POLL_MS);
+            polls++;
+            CanonEosEventParser.CapturedObject captured =
+                    drainEvents(transport, report, "aguardando ObjectAddedEx #" + polls);
+            if (captured != null) {
+                report.append("ObjectAddedEx recebido após ")
+                        .append(SystemClock.elapsedRealtime() - startedAt)
+                        .append(" ms em ").append(polls).append(" consultas\n");
+                return captured;
+            }
+        }
+        return null;
     }
 
     private static void releaseQuietly(
@@ -120,10 +160,16 @@ final class CanonEosRemoteClient {
     static final class Result {
         final String report;
         final boolean captureCommandCompleted;
+        final CanonEosEventParser.CapturedObject capturedObject;
 
-        Result(String report, boolean captureCommandCompleted) {
+        Result(
+                String report,
+                boolean captureCommandCompleted,
+                CanonEosEventParser.CapturedObject capturedObject
+        ) {
             this.report = report;
             this.captureCommandCompleted = captureCommandCompleted;
+            this.capturedObject = capturedObject;
         }
     }
 
