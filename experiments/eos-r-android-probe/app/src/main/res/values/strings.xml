@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Camerae EOS R Probe</string>
+    <string name="title">Canon EOS R USB Probe</string>
+    <string name="status_scaffold">Estrutura pronta. Próximo passo: detectar a câmera e solicitar permissão USB.</string>
+</resources>
