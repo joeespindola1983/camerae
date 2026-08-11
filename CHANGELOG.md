@@ -29,6 +29,10 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Corrected Android `MtpDevice` connection ownership and added bounded MTP/PTP
+  transition delays after a physical test exposed an immediate bulk-IN
+  failure during automatic capture.
+
 ## [9.5.0] - 2026-08-04
 
 **Status:** Approved local release (build 36; not submitted)

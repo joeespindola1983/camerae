@@ -18,6 +18,7 @@ import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
@@ -36,6 +37,8 @@ public final class MainActivity extends Activity {
             "com.camerae.eosrprobe.action.USB_PERMISSION_RESULT";
     private static final int CANON_VENDOR_ID = 0x04A9;
     private static final long NEW_IMAGE_TIMEOUT_MS = 30_000;
+    private static final long MTP_TO_PTP_SETTLE_MS = 1_500;
+    private static final long PTP_TO_MTP_SETTLE_MS = 1_000;
 
     private final StringBuilder eventLog = new StringBuilder();
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
@@ -207,6 +210,7 @@ public final class MainActivity extends Activity {
             MtpCameraClient.ImageSnapshot baseline;
             try {
                 baseline = MtpCameraClient.snapshotImages(usbManager, device);
+                SystemClock.sleep(MTP_TO_PTP_SETTLE_MS);
             } catch (MtpCameraClient.ProbeException error) {
                 runOnUiThread(() -> {
                     cameraBusy = false;
@@ -231,6 +235,7 @@ public final class MainActivity extends Activity {
             }
 
             try {
+                SystemClock.sleep(PTP_TO_MTP_SETTLE_MS);
                 MtpCameraClient.AutoImportResult imported =
                         MtpCameraClient.waitForNewImageAndDownload(
                                 usbManager,

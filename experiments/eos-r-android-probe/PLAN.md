@@ -128,7 +128,7 @@ Opção A, preferida após M2: cliente PTP mínimo com somente as operações re
 
 O APK `0.3.0` comprovou no hardware containers little-endian, sessão/transações, `EOS_SetRemoteMode`, `EOS_SetEventMode`, consumo limitado de `EOS_GetEvent` e a sequência segura de `EOS_RemoteReleaseOn/Off`. O disparo criou `5S8A9566.CR3`; o inventário seguinte encontrou o novo handle e importou integralmente 40.307.117 bytes.
 
-O APK `0.4.0` reúne o fluxo em um toque: registra todos os handles do cartão antes da captura, dispara, reabre MTP em polling limitado e só importa um objeto ausente do baseline. O tamanho local deve coincidir com o tamanho declarado pela câmera. O primeiro teste automático e as cinco repetições do aceite ainda estão pendentes.
+O APK `0.4.0` reuniu o fluxo em um toque, mas o teste físico encontrou uma corrida na troca MTP → PTP: aproximadamente 75 ms após fechar o baseline, a EOS R não respondeu ao `OpenSession` e deixou o storage temporariamente indisponível. O APK `0.4.1` deixa `MtpDevice` encerrar a conexão que ele próprio assume e inclui janelas limitadas de estabilização de 1,5 s antes do PTP e 1 s antes de reabrir MTP. O reteste e as cinco repetições do aceite ainda estão pendentes.
 
 Opção B: integrar `libgphoto2` via NDK se a quantidade de extensões Canon ou a negociação de sessão tornar a opção A desproporcional.
 
@@ -229,4 +229,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1, M2 e um disparo M3 foram validados fisicamente; o CR3 criado foi importado integralmente. O APK `0.4.0` automatiza baseline, disparo, polling do novo handle e download e aguarda o teste real. Analise o log automático antes de iniciar cinco repetições ou implementar parâmetros. Use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1, M2 e um disparo M3 foram validados fisicamente; o CR3 criado foi importado integralmente. O primeiro fluxo automático expôs uma corrida MTP → PTP; o APK `0.4.1` corrige ownership e adiciona estabilização limitada, aguardando o reteste real. Analise esse log antes de iniciar cinco repetições, a interface de sequência ou parâmetros. Use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.

@@ -47,7 +47,9 @@ final class MtpCameraClient {
             }
 
             mtpDevice = new MtpDevice(usbDevice);
-            if (!mtpDevice.open(connection)) {
+            boolean opened = mtpDevice.open(connection);
+            connection = null;
+            if (!opened) {
                 throw new ProbeException("MtpDevice.open falhou");
             }
 
@@ -122,7 +124,9 @@ final class MtpCameraClient {
                 throw new ProbeException("UsbManager.openDevice retornou null no baseline");
             }
             mtpDevice = new MtpDevice(usbDevice);
-            if (!mtpDevice.open(connection)) {
+            boolean opened = mtpDevice.open(connection);
+            connection = null;
+            if (!opened) {
                 throw new ProbeException("MtpDevice.open falhou no baseline");
             }
             List<Candidate> candidates = scanAllImages(mtpDevice);
@@ -173,7 +177,9 @@ final class MtpCameraClient {
                     lastTransientError = "UsbManager.openDevice retornou null";
                 } else {
                     mtpDevice = new MtpDevice(usbDevice);
-                    if (!mtpDevice.open(connection)) {
+                    boolean opened = mtpDevice.open(connection);
+                    connection = null;
+                    if (!opened) {
                         lastTransientError = "MtpDevice.open falhou enquanto a câmera gravava";
                     } else {
                         List<Candidate> candidates = scanAllImages(mtpDevice);
