@@ -55,6 +55,10 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Tripod Positions now keeps its project list populated from every tripod point
+  represented in the current map viewport during initial fit, drag, zoom,
+  cluster expansion, and spiderfy; selecting a project only highlights its row
+  and no longer collapses the visible-project set.
 - Tripod list now mirrors every location represented by the rendered map,
   including cluster members and spiderfy markers, after stabilized zoom-in,
   zoom-out, drag, and programmatic cluster camera updates.

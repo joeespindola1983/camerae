@@ -398,6 +398,7 @@ struct TripodPositionsView: View {
     @State private var cameraUpdateRevision = UUID()
     @State private var protectedExpansionCameraTarget: TripodMapCameraRegion?
     @State private var filter = CalendarProjectFilter.all
+    @State private var selectedProjectContextID: UUID?
 
     var body: some View {
         ScrollView {
@@ -433,14 +434,13 @@ struct TripodPositionsView: View {
                     }
                 }
 
-                if let selectedLocation {
-                    ProjectContextListSection(
-                        title: selectedLocation.name,
-                        items: linkedProjectItems,
-                        filter: $filter,
-                        theme: theme
-                    )
-                }
+                ProjectContextListSection(
+                    title: "Projetos visíveis",
+                    items: visibleProjectItems,
+                    filter: $filter,
+                    selectedProjectID: $selectedProjectContextID,
+                    theme: theme
+                )
             }
             .padding(.horizontal, 20)
             .padding(.bottom, 16)
@@ -635,9 +635,11 @@ struct TripodPositionsView: View {
         ProjectContextCatalog.agenda(snapshot: store.snapshot, projects: projects.projects)
     }
 
-    private var linkedProjectItems: [CalendarProjectAgendaItem] {
-        guard let selectedLocationID else { return [] }
-        return ProjectContextCatalog.projects(at: selectedLocationID, from: agendaItems)
+    private var visibleProjectItems: [CalendarProjectAgendaItem] {
+        ProjectContextCatalog.projects(
+            at: Set(displayedMapLocations.map(\.id)),
+            from: agendaItems
+        )
     }
 
     @ViewBuilder
@@ -1199,6 +1201,7 @@ struct CaptureCalendarView: View {
     @State private var selectedDate = Date()
     @State private var visibleMonth = Date()
     @State private var filter = CalendarProjectFilter.all
+    @State private var selectedProjectContextID: UUID?
 
     var body: some View {
         ScrollView {
@@ -1223,6 +1226,7 @@ struct CaptureCalendarView: View {
                     title: selectedDate.formatted(.dateTime.weekday(.wide).day().month(.abbreviated)),
                     items: selectedItems,
                     filter: $filter,
+                    selectedProjectID: $selectedProjectContextID,
                     theme: theme
                 )
             }
@@ -1256,11 +1260,16 @@ struct CaptureCalendarView: View {
 }
 
 enum ProjectContextCapability: Hashable, Sendable {
-    case filterProjects, openProjectSummary, openProject, scheduleRecapture
+    case filterProjects, highlightProject, preserveVisibleProjects, openProjectSummary, openProject, scheduleRecapture
 }
 
 enum ProjectContextCapabilityPolicy {
-    static let list: Set<ProjectContextCapability> = [.filterProjects, .openProjectSummary]
+    static let list: Set<ProjectContextCapability> = [
+        .filterProjects,
+        .highlightProject,
+        .preserveVisibleProjects,
+        .openProjectSummary
+    ]
     static let summary: Set<ProjectContextCapability> = [.openProject, .scheduleRecapture]
 }
 
@@ -1327,11 +1336,28 @@ enum ProjectContextCatalog {
         at locationID: UUID,
         from items: [CalendarProjectAgendaItem]
     ) -> [CalendarProjectAgendaItem] {
-        let linked = items.filter { $0.locationID == locationID && $0.projectID != nil }
+        projects(at: [locationID], from: items)
+    }
+
+    static func projects(
+        at locationIDs: Set<UUID>,
+        from items: [CalendarProjectAgendaItem]
+    ) -> [CalendarProjectAgendaItem] {
+        let linked = items.filter { locationIDs.contains($0.locationID) && $0.projectID != nil }
         let latestByProject = Dictionary(grouping: linked, by: \.projectID).compactMap { _, entries in
             entries.max { $0.date < $1.date }
         }
         return latestByProject.sorted { $0.date > $1.date }
+    }
+}
+
+enum ProjectContextSelection {
+    static func id(for item: CalendarProjectAgendaItem) -> UUID {
+        item.projectID ?? item.id
+    }
+
+    static func isSelected(_ item: CalendarProjectAgendaItem, selectedID: UUID?) -> Bool {
+        id(for: item) == selectedID
     }
 }
 
@@ -1434,6 +1460,7 @@ private struct ProjectContextListSection: View {
     let title: String
     let items: [CalendarProjectAgendaItem]
     @Binding var filter: CalendarProjectFilter
+    @Binding var selectedProjectID: UUID?
     let theme: CameraeNextTheme
 
     private var filteredItems: [CalendarProjectAgendaItem] { filter.apply(to: items) }
@@ -1466,8 +1493,17 @@ private struct ProjectContextListSection: View {
                     .foregroundStyle(theme.text)
             } else {
                 ForEach(filteredItems) { item in
-                    NavigationLink(value: item) { CalendarProjectAgendaRow(item: item, theme: theme) }
-                        .buttonStyle(.plain)
+                    NavigationLink(value: item) {
+                        CalendarProjectAgendaRow(
+                            item: item,
+                            isSelected: ProjectContextSelection.isSelected(item, selectedID: selectedProjectID),
+                            theme: theme
+                        )
+                    }
+                    .simultaneousGesture(TapGesture().onEnded {
+                        selectedProjectID = ProjectContextSelection.id(for: item)
+                    })
+                    .buttonStyle(.plain)
                 }
             }
         }
@@ -1476,6 +1512,7 @@ private struct ProjectContextListSection: View {
 
 private struct CalendarProjectAgendaRow: View {
     let item: CalendarProjectAgendaItem
+    let isSelected: Bool
     let theme: CameraeNextTheme
     var body: some View {
         HStack(spacing: 10) {
@@ -1487,7 +1524,14 @@ private struct CalendarProjectAgendaRow: View {
             Spacer(); Image(systemName: "chevron.right").foregroundStyle(theme.muted)
         }
         .padding(12)
-        .background(theme.card, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+        .background(
+            isSelected ? theme.accent.opacity(0.08) : theme.card,
+            in: RoundedRectangle(cornerRadius: 17, style: .continuous)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 17, style: .continuous)
+                .stroke(isSelected ? theme.accent : Color.clear, lineWidth: 2)
+        }
     }
 }
 

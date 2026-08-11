@@ -240,7 +240,12 @@ struct TripodLocationCapabilityTests {
 
     @Test("calendar and tripod positions share the project-list use case")
     func sharedProjectContextCapabilities() {
-        #expect(ProjectContextCapabilityPolicy.list == [.filterProjects, .openProjectSummary])
+        #expect(ProjectContextCapabilityPolicy.list == [
+            .filterProjects,
+            .highlightProject,
+            .preserveVisibleProjects,
+            .openProjectSummary
+        ])
         #expect(ProjectContextCapabilityPolicy.summary == [.openProject, .scheduleRecapture])
     }
 
@@ -270,6 +275,63 @@ struct TripodLocationCapabilityTests {
         #expect(result.count == 2)
         #expect(result.first(where: { $0.projectID == firstProjectID }) == latestReturn)
         #expect(result.first(where: { $0.projectID == secondProjectID }) == secondProject)
+    }
+
+    @Test("map-visible tripod positions expose every linked project without duplicates")
+    func projectsAtVisibleTripodPositions() throws {
+        let firstLocationID = UUID()
+        let secondLocationID = UUID()
+        let outsideLocationID = UUID()
+        let sharedProjectID = UUID()
+        let secondProjectID = UUID()
+        let outsideProjectID = UUID()
+        let olderSharedEntry = CalendarProjectAgendaItem.fixture(
+            kind: .captured,
+            projectID: sharedProjectID,
+            locationID: firstLocationID,
+            date: Date(timeIntervalSince1970: 100)
+        )
+        let latestSharedEntry = CalendarProjectAgendaItem.fixture(
+            kind: .planned,
+            projectID: sharedProjectID,
+            locationID: secondLocationID,
+            date: Date(timeIntervalSince1970: 400)
+        )
+        let secondProject = CalendarProjectAgendaItem.fixture(
+            kind: .created,
+            projectID: secondProjectID,
+            locationID: secondLocationID,
+            date: Date(timeIntervalSince1970: 300)
+        )
+        let outsideProject = CalendarProjectAgendaItem.fixture(
+            kind: .captured,
+            projectID: outsideProjectID,
+            locationID: outsideLocationID,
+            date: Date(timeIntervalSince1970: 500)
+        )
+
+        let result = ProjectContextCatalog.projects(
+            at: [firstLocationID, secondLocationID],
+            from: [olderSharedEntry, latestSharedEntry, secondProject, outsideProject]
+        )
+
+        #expect(result.count == 2)
+        #expect(result.first(where: { $0.projectID == sharedProjectID }) == latestSharedEntry)
+        #expect(result.first(where: { $0.projectID == secondProjectID }) == secondProject)
+        #expect(result.contains(where: { $0.projectID == outsideProjectID }) == false)
+    }
+
+    @Test("selecting a project identifies its highlight without filtering visible projects")
+    func projectSelectionPreservesVisibleProjects() {
+        let selectedProjectID = UUID()
+        let selected = CalendarProjectAgendaItem.fixture(kind: .captured, projectID: selectedProjectID)
+        let another = CalendarProjectAgendaItem.fixture(kind: .created, projectID: UUID())
+        let visibleProjects = [selected, another]
+
+        #expect(ProjectContextSelection.id(for: selected) == selectedProjectID)
+        #expect(ProjectContextSelection.isSelected(selected, selectedID: selectedProjectID))
+        #expect(ProjectContextSelection.isSelected(another, selectedID: selectedProjectID) == false)
+        #expect(visibleProjects.count == 2)
     }
 
     @Test("calendar project filters never invent or edit agenda items")
