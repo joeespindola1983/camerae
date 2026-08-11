@@ -9,6 +9,8 @@ import java.util.Set;
 final class CanonEosExposureCapabilities {
     private static final int EVENT_PROP_VALUE_CHANGED = 0xC189;
     private static final int EVENT_AVAILABLE_LIST_CHANGED = 0xC18A;
+    private static final int PROP_AUTO_EXPOSURE_MODE = 0xD105;
+    private static final int PROP_AUTO_EXPOSURE_MODE_DIAL = 0xD138;
     private static final int PROP_SHUTTER_SPEED = 0xD102;
     private static final int PROP_ISO_SPEED = 0xD103;
     private static final int PROP_WHITE_BALANCE = 0xD109;
@@ -21,6 +23,10 @@ final class CanonEosExposureCapabilities {
             new PropertyCapability(PROP_ISO_SPEED, "ISO");
     private final PropertyCapability whiteBalance =
             new PropertyCapability(PROP_WHITE_BALANCE, "White balance");
+    private final PropertyCapability exposureMode =
+            new PropertyCapability(PROP_AUTO_EXPOSURE_MODE, "Modo de exposição");
+    private final PropertyCapability exposureModeDial =
+            new PropertyCapability(PROP_AUTO_EXPOSURE_MODE_DIAL, "Seletor de exposição");
 
     void accept(byte[] data) {
         int offset = 0;
@@ -64,20 +70,35 @@ final class CanonEosExposureCapabilities {
         }
     }
 
-    boolean isComplete() {
-        return shutter.isConfirmed() && iso.isConfirmed() && whiteBalance.isConfirmed();
+    boolean isUsable() {
+        boolean shutterExpectedToBeLocked = isBulbMode() && shutter.currentValue != null;
+        return exposureMode.currentValue != null
+                && iso.isConfirmed()
+                && whiteBalance.isConfirmed()
+                && (shutter.isConfirmed() || shutterExpectedToBeLocked);
     }
 
     String summary() {
-        return shutter.summary() + "\n" + iso.summary() + "\n" + whiteBalance.summary();
+        return "Modo: " + exposureModeLabel(exposureMode.currentValue) + "\n"
+                + shutter.summary(isBulbMode()) + "\n"
+                + iso.summary(false) + "\n"
+                + whiteBalance.summary(false);
     }
 
     String report() {
         StringBuilder report = new StringBuilder("CONTROLES DE EXPOSIÇÃO EOS R\n");
+        report.append("Modo atual: ").append(exposureModeLabel(exposureMode.currentValue))
+                .append(" (").append(nullableHex(exposureMode.currentValue)).append(")\n");
+        report.append("Seletor atual: ").append(exposureModeLabel(exposureModeDial.currentValue))
+                .append(" (").append(nullableHex(exposureModeDial.currentValue)).append(")\n");
         appendPropertyReport(report, shutter);
         appendPropertyReport(report, iso);
         appendPropertyReport(report, whiteBalance);
         report.append("Escrita habilitada: não; esta build valida somente capabilities\n");
+        if (isBulbMode() && shutter.availableValues.isEmpty()) {
+            report.append("Diagnóstico shutter: lista indisponível é esperada no modo Bulb; ")
+                    .append("a duração deve ser controlada pelo tempo entre FullPress e FullRelease\n");
+        }
         return report.toString();
     }
 
@@ -109,9 +130,17 @@ final class CanonEosExposureCapabilities {
                 return iso;
             case PROP_WHITE_BALANCE:
                 return whiteBalance;
+            case PROP_AUTO_EXPOSURE_MODE:
+                return exposureMode;
+            case PROP_AUTO_EXPOSURE_MODE_DIAL:
+                return exposureModeDial;
             default:
                 return null;
         }
+    }
+
+    private boolean isBulbMode() {
+        return exposureMode.currentValue != null && exposureMode.currentValue == 0x0004;
     }
 
     private static String label(int propertyCode, int value) {
@@ -220,6 +249,36 @@ final class CanonEosExposureCapabilities {
         }
     }
 
+    private static String exposureModeLabel(Integer value) {
+        if (value == null) {
+            return "não informado";
+        }
+        switch (value) {
+            case 0x0000:
+                return "P";
+            case 0x0001:
+                return "Tv";
+            case 0x0002:
+                return "Av";
+            case 0x0003:
+                return "Manual";
+            case 0x0004:
+                return "Bulb";
+            case 0x0008:
+                return "Lock";
+            case 0x0014:
+                return "Vídeo";
+            case 0x0016:
+                return "Auto";
+            case 0x0019:
+                return "SCN";
+            case 0x0037:
+                return "Fv";
+            default:
+                return "Modo desconhecido";
+        }
+    }
+
     private static String lookup(
             int[] codes,
             String[] labels,
@@ -244,6 +303,10 @@ final class CanonEosExposureCapabilities {
         return String.format(Locale.US, "0x%04X", value & 0xFFFF);
     }
 
+    private static String nullableHex(Integer value) {
+        return value == null ? "<ausente>" : hex4(value);
+    }
+
     private static final class PropertyCapability {
         final int code;
         final String name;
@@ -259,10 +322,13 @@ final class CanonEosExposureCapabilities {
             return currentValue != null && !availableValues.isEmpty();
         }
 
-        String summary() {
+        String summary(boolean expectedLocked) {
             String current = currentValue == null
                     ? "não informado"
                     : label(code, currentValue);
+            if (expectedLocked && availableValues.isEmpty()) {
+                return name + ": " + current + " • controlado pela duração Bulb";
+            }
             return name + ": " + current + " • " + availableValues.size() + " opções";
         }
     }

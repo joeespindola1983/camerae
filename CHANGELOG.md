@@ -51,6 +51,9 @@ test distributions do not require an entry here.
 - Added atomic JSON manifests for Android astro sequences and read-only Canon
   EOS capability discovery for current and available ISO, white-balance, and
   shutter values.
+- Recognized the Canon EOS exposure mode during capability discovery so a
+  missing shutter enumeration in Bulb mode is reported as duration-controlled
+  remote release instead of a USB or capability failure.
 
 ## [9.5.0] - 2026-08-04
 

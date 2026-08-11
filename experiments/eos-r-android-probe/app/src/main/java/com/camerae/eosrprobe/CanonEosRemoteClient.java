@@ -129,15 +129,15 @@ final class CanonEosRemoteClient {
                 capabilities.accept(events);
                 report.append("Capabilities poll ").append(poll).append(": ")
                         .append(events.length).append(" bytes\n");
-                if (capabilities.isComplete()) {
+                if (capabilities.isUsable()) {
                     break;
                 }
                 SystemClock.sleep(200);
             }
             report.append('\n').append(capabilities.report());
-            if (!capabilities.isComplete()) {
+            if (!capabilities.isUsable()) {
                 throw new PtpUsbTransport.TransportException(
-                        "a câmera não anunciou valor atual e lista para todos os controles"
+                        "a câmera não anunciou capabilities suficientes para o modo atual"
                 );
             }
         } catch (PtpUsbTransport.TransportException | RuntimeException error) {
