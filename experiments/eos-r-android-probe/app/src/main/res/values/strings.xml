@@ -1,5 +1,14 @@
 <resources>
     <string name="app_name">Camerae EOS R Probe</string>
     <string name="title">Canon EOS R USB Probe</string>
-    <string name="status_scaffold">Estrutura pronta. Próximo passo: detectar a câmera e solicitar permissão USB.</string>
+    <string name="status_waiting">Conecte a Canon EOS R por USB.</string>
+    <string name="status_permission_required">%1$s encontrada. Autorize o acesso USB.</string>
+    <string name="status_ready">%1$s pronta para diagnóstico.</string>
+    <string name="status_usb_host_missing">Este Android não declara suporte a USB Host/OTG.</string>
+    <string name="status_usb_service_missing">O serviço USB do Android não está disponível.</string>
+    <string name="refresh">Varrer</string>
+    <string name="authorize_usb">Autorizar USB</string>
+    <string name="copy_log">Copiar log</string>
+    <string name="share_log">Compartilhar log</string>
+    <string name="log_copied">Log copiado</string>
 </resources>

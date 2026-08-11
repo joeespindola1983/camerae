@@ -58,7 +58,7 @@ Entregas:
 
 Aceite: `./gradlew assembleDebug` terminou com sucesso em 11 de agosto de 2026 e gerou `app/build/outputs/apk/debug/app-debug.apk`.
 
-### M1 — Descoberta e permissão USB
+### M1 — Descoberta e permissão USB — implementado; aceite físico pendente
 
 Implementar com `UsbManager`:
 
@@ -188,4 +188,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. Implemente somente o marco M1, compile o APK debug e deixe instruções exatas para o teste físico. Não avance para comandos PTP proprietários sem receber os logs reais da Canon EOS R conectada ao Android. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. O marco M1 está implementado e compilado, mas depende do teste físico. Analise primeiro o log real da Canon EOS R conectada ao Android. Só depois implemente o marco M2 para leitura PTP/MTP; não avance para comandos proprietários antes de provar a sessão padrão. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
