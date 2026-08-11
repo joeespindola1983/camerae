@@ -9,7 +9,7 @@ struct TripodLocationCapabilityTests {
         #expect(TripodPositionsCapabilityPolicy.catalog == [
             .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
             .filterProjects, .openProjectSummary, .filterVisibleLocations,
-            .showSelectionState, .returnHome
+            .showSelectionState, .openCluster, .returnHome
         ])
     }
 
@@ -94,6 +94,52 @@ struct TripodLocationCapabilityTests {
         )
 
         #expect(TripodMapViewport.locations(in: region, from: [east, west, outside]) == [east, west])
+    }
+
+    @Test("nearby tripods cluster at a wide zoom and separate after zooming in")
+    func tripodMapClustering() {
+        let first = TripodLocation.fixture(id: UUID(), latitude: -23.5500, longitude: -46.6300)
+        let second = TripodLocation.fixture(id: UUID(), latitude: -23.5502, longitude: -46.6302)
+        let far = TripodLocation.fixture(id: UUID(), latitude: -23.5700, longitude: -46.6500)
+        let wide = TripodMapCameraRegion(
+            centerLatitude: -23.56,
+            centerLongitude: -46.64,
+            latitudeDelta: 0.04,
+            longitudeDelta: 0.04
+        )
+
+        let wideClusters = TripodMapClustering.clusters(
+            locations: [first, second, far],
+            region: wide,
+            viewport: .init(width: 353, height: 270)
+        )
+        let nearbyCluster = wideClusters.first { $0.locations.contains(first) }
+
+        #expect(nearbyCluster?.count == 2)
+        #expect(wideClusters.count == 2)
+
+        let zoomed = TripodMapClusterZoom.region(for: [first, second])
+        let zoomedClusters = zoomed.map {
+            TripodMapClustering.clusters(
+                locations: [first, second],
+                region: $0,
+                viewport: .init(width: 353, height: 270)
+            )
+        }
+        #expect(zoomedClusters?.count == 2)
+    }
+
+    @Test("opening a cluster clears selection and fits every member")
+    func clusterInteraction() throws {
+        let first = TripodLocation.fixture(id: UUID(), latitude: -23.5500, longitude: -46.6300)
+        let second = TripodLocation.fixture(id: UUID(), latitude: -23.5502, longitude: -46.6302)
+        let region = try #require(TripodMapClusterZoom.region(for: [first, second]))
+
+        #expect(TripodLocationSelection.afterOpeningCluster == nil)
+        #expect(region.minimumLatitude <= -23.5502)
+        #expect(region.maximumLatitude >= -23.5500)
+        #expect(region.minimumLongitude <= -46.6302)
+        #expect(region.maximumLongitude >= -46.6300)
     }
 
     @Test("legacy positions recover GPS from the newest captured session")

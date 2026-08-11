@@ -10,14 +10,14 @@ enum CameraeHomeDestination: Hashable { case calendar, positions }
 
 enum TripodPositionsCapability: Hashable, Sendable {
     case returnHome, create, switchMapList, selectMapLocation, showLinkedProjects, filterProjects, openProjectSummary
-    case filterVisibleLocations, showSelectionState
+    case filterVisibleLocations, showSelectionState, openCluster
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [
         .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
         .filterProjects, .openProjectSummary, .filterVisibleLocations,
-        .showSelectionState, .returnHome
+        .showSelectionState, .openCluster, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -31,6 +31,7 @@ enum TripodPositionsViewMode: String, CaseIterable, Identifiable, Sendable {
 
 enum TripodLocationSelection {
     static let initial: UUID? = nil
+    static let afterOpeningCluster: UUID? = nil
 
     static func toggle(current: UUID?, tapped: UUID) -> UUID? {
         current == tapped ? nil : tapped
@@ -56,6 +57,92 @@ struct TripodMapCameraRegion: Equatable, Sendable {
 enum TripodMapCameraFit {
     static let minimumSpan = 0.006
     private static let padding = 1.45
+
+    static func region(for locations: [TripodLocation]) -> TripodMapCameraRegion? {
+        let coordinates = locations.compactMap(\.coordinate)
+        guard let first = coordinates.first else { return nil }
+        let latitudes = coordinates.map(\.latitude)
+        let longitudes = coordinates.map(\.longitude)
+        let minimumLatitude = latitudes.min() ?? first.latitude
+        let maximumLatitude = latitudes.max() ?? first.latitude
+        let minimumLongitude = longitudes.min() ?? first.longitude
+        let maximumLongitude = longitudes.max() ?? first.longitude
+        return TripodMapCameraRegion(
+            centerLatitude: (minimumLatitude + maximumLatitude) / 2,
+            centerLongitude: (minimumLongitude + maximumLongitude) / 2,
+            latitudeDelta: max((maximumLatitude - minimumLatitude) * padding, minimumSpan),
+            longitudeDelta: max((maximumLongitude - minimumLongitude) * padding, minimumSpan)
+        )
+    }
+}
+
+struct TripodMapViewportSize: Equatable, Sendable {
+    let width: Double
+    let height: Double
+}
+
+struct TripodMapCluster: Identifiable, Equatable, Sendable {
+    let locations: [TripodLocation]
+    let latitude: Double
+    let longitude: Double
+
+    var id: String { locations.map(\.id.uuidString).sorted().joined(separator: ":") }
+    var count: Int { locations.count }
+}
+
+enum TripodMapClustering {
+    static let markerCollisionDistance = 56.0
+
+    static func clusters(
+        locations: [TripodLocation],
+        region: TripodMapCameraRegion,
+        viewport: TripodMapViewportSize
+    ) -> [TripodMapCluster] {
+        let positioned = locations.filter { $0.coordinate != nil }
+        guard !positioned.isEmpty,
+              region.latitudeDelta > 0,
+              region.longitudeDelta > 0 else { return [] }
+        var parents = Array(positioned.indices)
+
+        func root(_ index: Int) -> Int {
+            var value = index
+            while parents[value] != value { value = parents[value] }
+            return value
+        }
+
+        for first in positioned.indices {
+            guard let firstCoordinate = positioned[first].coordinate else { continue }
+            for second in positioned.indices where second > first {
+                guard let secondCoordinate = positioned[second].coordinate else { continue }
+                let latitudePixels = abs(firstCoordinate.latitude - secondCoordinate.latitude)
+                    / region.latitudeDelta * viewport.height
+                let rawLongitude = abs(firstCoordinate.longitude - secondCoordinate.longitude)
+                let longitudeDistance = min(rawLongitude, 360 - rawLongitude)
+                let longitudePixels = longitudeDistance / region.longitudeDelta * viewport.width
+                guard hypot(latitudePixels, longitudePixels) <= markerCollisionDistance else { continue }
+                let firstRoot = root(first)
+                let secondRoot = root(second)
+                if firstRoot != secondRoot { parents[secondRoot] = firstRoot }
+            }
+        }
+
+        let grouped = Dictionary(grouping: positioned.indices, by: { root($0) })
+        return grouped.values.map { indices in
+            let members = indices.map { positioned[$0] }.sorted { $0.id.uuidString < $1.id.uuidString }
+            let coordinates = members.compactMap(\.coordinate)
+            return TripodMapCluster(
+                locations: members,
+                latitude: coordinates.map(\.latitude).reduce(0, +) / Double(coordinates.count),
+                longitude: coordinates.map(\.longitude).reduce(0, +) / Double(coordinates.count)
+            )
+        }
+        .sorted { $0.id < $1.id }
+    }
+}
+
+enum TripodMapClusterZoom {
+    private static let minimumSpan = 0.0003
+    private static let padding = 3.0
 
     static func region(for locations: [TripodLocation]) -> TripodMapCameraRegion? {
         let coordinates = locations.compactMap(\.coordinate)
@@ -376,25 +463,27 @@ struct TripodPositionsView: View {
     private var mapCard: some View {
         ZStack(alignment: .bottomLeading) {
             Map(position: $mapPosition) {
-                ForEach(locationsWithGPS) { location in
-                    if let coordinate = location.coordinate {
-                        Annotation(
-                            location.name,
-                            coordinate: CLLocationCoordinate2D(
-                                latitude: coordinate.latitude,
-                                longitude: coordinate.longitude
-                            ),
-                            anchor: .center
-                        ) {
-                            Button { toggleSelection(location.id) } label: {
+                ForEach(mapClusters) { cluster in
+                    Annotation(
+                        cluster.count == 1 ? cluster.locations[0].name : "\(cluster.count) posições",
+                        coordinate: CLLocationCoordinate2D(
+                            latitude: cluster.latitude,
+                            longitude: cluster.longitude
+                        ),
+                        anchor: .center
+                    ) {
+                        Button { open(cluster) } label: {
+                            if cluster.count == 1, let location = cluster.locations.first {
                                 mapThumbnail(for: location)
+                            } else {
+                                clusterMarker(count: cluster.count)
                             }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(location.name)
-                            .accessibilityIdentifier("tripod.positions.marker.\(location.id.uuidString)")
                         }
-                        .annotationTitles(.hidden)
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(clusterAccessibilityLabel(cluster))
+                        .accessibilityIdentifier("tripod.positions.cluster.\(cluster.id)")
                     }
+                    .annotationTitles(.hidden)
                 }
             }
             .mapStyle(.standard(elevation: .flat))
@@ -490,6 +579,16 @@ struct TripodPositionsView: View {
         return TripodMapViewport.locations(in: visibleMapRegion, from: store.snapshot.locations)
     }
 
+    private var mapClusters: [TripodMapCluster] {
+        let region = visibleMapRegion ?? TripodMapCameraFit.region(for: locationsWithGPS)
+        guard let region else { return [] }
+        return TripodMapClustering.clusters(
+            locations: visibleLocations,
+            region: region,
+            viewport: .init(width: 353, height: 270)
+        )
+    }
+
     private var agendaItems: [CalendarProjectAgendaItem] {
         ProjectContextCatalog.agenda(snapshot: store.snapshot, projects: projects.projects)
     }
@@ -527,6 +626,16 @@ struct TripodPositionsView: View {
         .animation(.easeOut(duration: 0.16), value: selectedLocationID)
     }
 
+    private func clusterMarker(count: Int) -> some View {
+        Text("\(count)")
+            .font(.custom("DMMono-Medium", size: 13, relativeTo: .caption))
+            .foregroundStyle(Color.white)
+            .frame(width: 48, height: 48)
+            .background(theme.accent, in: Circle())
+            .overlay { Circle().stroke(Color.white, lineWidth: 3) }
+            .shadow(color: .black.opacity(0.24), radius: 4, y: 2)
+    }
+
     private func fitMapToLocations() {
         hasUserAdjustedMap = false
         guard let fitted = TripodMapCameraFit.region(for: store.snapshot.locations) else {
@@ -552,6 +661,32 @@ struct TripodPositionsView: View {
             current: selectedLocationID,
             tapped: locationID
         )
+    }
+
+    private func open(_ cluster: TripodMapCluster) {
+        guard cluster.count > 1 else {
+            if let locationID = cluster.locations.first?.id { toggleSelection(locationID) }
+            return
+        }
+        selectedLocationID = TripodLocationSelection.afterOpeningCluster
+        guard let fitted = TripodMapClusterZoom.region(for: cluster.locations) else { return }
+        hasUserAdjustedMap = false
+        visibleMapRegion = fitted
+        mapPosition = .region(MKCoordinateRegion(
+            center: CLLocationCoordinate2D(
+                latitude: fitted.centerLatitude,
+                longitude: fitted.centerLongitude
+            ),
+            span: MKCoordinateSpan(
+                latitudeDelta: fitted.latitudeDelta,
+                longitudeDelta: fitted.longitudeDelta
+            )
+        ))
+    }
+
+    private func clusterAccessibilityLabel(_ cluster: TripodMapCluster) -> String {
+        guard cluster.count > 1 else { return cluster.locations.first?.name ?? "Posição de tripé" }
+        return "\(cluster.count) posições de tripé. Toque para aproximar."
     }
 
     private func updateVisibleRegion(_ region: MKCoordinateRegion) {

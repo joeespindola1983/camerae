@@ -34,6 +34,8 @@ test distributions do not require an entry here.
   project rows, read-only summary, project navigation, and recapture planning.
 - Tripod list mode now follows the map's visible region and keeps the selected
   position synchronized with a shared accent treatment on marker and row.
+- Nearby tripod positions now collapse into numbered map clusters; opening a
+  cluster clears selection and zooms to fit and visually separate its members.
 - Redesigned Calendar and Tripod Positions from the approved Camerae Figma
   flows, using the Repeatable visual theme, marked project dates, agenda
   filters, read-only project summaries, a selectable map/list catalog, saved
