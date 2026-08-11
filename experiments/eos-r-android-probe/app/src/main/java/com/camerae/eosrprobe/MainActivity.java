@@ -21,6 +21,7 @@ import android.os.Environment;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -32,6 +33,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+@SuppressLint("SetTextI18n")
 public final class MainActivity extends Activity {
     static final String ACTION_USB_PERMISSION_RESULT =
             "com.camerae.eosrprobe.action.USB_PERMISSION_RESULT";
@@ -48,10 +50,20 @@ public final class MainActivity extends Activity {
     private Button captureButton;
     private Button inspectMtpButton;
     private Button downloadLatestButton;
+    private Button startSequenceButton;
+    private Button cancelSequenceButton;
+    private Button copyLogButton;
+    private Button shareLogButton;
+    private EditText sequenceCountInput;
+    private EditText sequenceDelayInput;
+    private EditText sequenceIntervalInput;
+    private TextView sequenceProgressView;
     private ImageView previewView;
     private String mtpReport = "MTP/PTP ainda não consultado.\n";
     private String captureReport = "Captura remota ainda não testada.\n";
     private boolean cameraBusy;
+    private volatile boolean sequenceRunning;
+    private volatile boolean sequenceCancelRequested;
     private boolean receiverRegistered;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
@@ -73,8 +85,10 @@ public final class MainActivity extends Activity {
                 refreshProbe();
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
                 appendEvent("Dispositivo desconectado" + deviceSuffix(device));
+                sequenceCancelRequested = true;
                 mtpReport = "MTP/PTP desconectado.\n";
                 captureReport = "Captura remota desconectada.\n";
+                sequenceProgressView.setText("Sequência interrompida: câmera desconectada");
                 previewView.setVisibility(View.GONE);
                 refreshProbe();
             }
@@ -98,6 +112,14 @@ public final class MainActivity extends Activity {
         captureButton = findViewById(R.id.capture_test);
         inspectMtpButton = findViewById(R.id.inspect_mtp);
         downloadLatestButton = findViewById(R.id.download_latest);
+        startSequenceButton = findViewById(R.id.start_sequence);
+        cancelSequenceButton = findViewById(R.id.cancel_sequence);
+        copyLogButton = findViewById(R.id.copy_log);
+        shareLogButton = findViewById(R.id.share_log);
+        sequenceCountInput = findViewById(R.id.sequence_count);
+        sequenceDelayInput = findViewById(R.id.sequence_delay);
+        sequenceIntervalInput = findViewById(R.id.sequence_interval);
+        sequenceProgressView = findViewById(R.id.sequence_progress);
         previewView = findViewById(R.id.preview);
 
         findViewById(R.id.refresh).setOnClickListener(view -> {
@@ -106,10 +128,12 @@ public final class MainActivity extends Activity {
         });
         authorizeButton.setOnClickListener(view -> requestUsbPermission());
         captureButton.setOnClickListener(view -> runRemoteCapture());
+        startSequenceButton.setOnClickListener(view -> startAstroSequence());
+        cancelSequenceButton.setOnClickListener(view -> cancelAstroSequence());
         inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
         downloadLatestButton.setOnClickListener(view -> runMtpProbe(true));
-        findViewById(R.id.copy_log).setOnClickListener(view -> copyLog());
-        findViewById(R.id.share_log).setOnClickListener(view -> shareLog());
+        copyLogButton.setOnClickListener(view -> copyLog());
+        shareLogButton.setOnClickListener(view -> shareLog());
 
         appendEvent("Aplicativo " + BuildConfig.VERSION_NAME + " iniciado em "
                 + Build.MANUFACTURER + " " + Build.MODEL
@@ -149,6 +173,7 @@ public final class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        sequenceCancelRequested = true;
         cameraExecutor.shutdownNow();
         super.onDestroy();
     }
@@ -163,6 +188,8 @@ public final class MainActivity extends Activity {
         if (usbManager == null) {
             statusView.setText(R.string.status_usb_service_missing);
             authorizeButton.setEnabled(false);
+            captureButton.setEnabled(false);
+            startSequenceButton.setEnabled(false);
             return;
         }
 
@@ -184,6 +211,13 @@ public final class MainActivity extends Activity {
         captureButton.setEnabled(cameraReady && !cameraBusy);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
+        startSequenceButton.setEnabled(cameraReady && !cameraBusy);
+        cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
+        sequenceCountInput.setEnabled(!cameraBusy);
+        sequenceDelayInput.setEnabled(!cameraBusy);
+        sequenceIntervalInput.setEnabled(!cameraBusy);
+        copyLogButton.setEnabled(!cameraBusy);
+        shareLogButton.setEnabled(!cameraBusy);
 
         StringBuilder report = new StringBuilder();
         report.append("CAMERAE EOS R USB PROBE\n");
@@ -211,64 +245,214 @@ public final class MainActivity extends Activity {
 
         cameraBusy = true;
         appendEvent("Iniciando captura e importação automática; use foco manual");
+        sequenceProgressView.setText("Captura única em andamento…");
         refreshProbe();
         File destination = downloadDirectory();
         cameraExecutor.execute(() -> {
-            CanonEosRemoteClient.Result capture;
             try {
-                capture = CanonEosRemoteClient.capture(usbManager, device);
-            } catch (CanonEosRemoteClient.CaptureException error) {
+                CaptureFlowResult result = performCaptureAndImport(device, destination);
                 runOnUiThread(() -> {
                     cameraBusy = false;
-                    captureReport = error.report;
-                    appendEvent("Captura remota falhou: " + error.getMessage());
+                    captureReport = result.captureReport;
+                    mtpReport = result.importReport;
+                    sequenceProgressView.setText("Captura única concluída: " + result.cameraFileName);
+                    appendEvent("Captura e download concluídos: " + result.cameraFileName);
+                    showPreview(result.downloadedFile);
                     refreshProbe();
                 });
-                return;
-            }
-
-            if (capture.capturedObject == null) {
+            } catch (CaptureFlowException error) {
                 runOnUiThread(() -> {
                     cameraBusy = false;
-                    captureReport = capture.report;
-                    mtpReport = "IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\n"
-                            + "ERRO: a câmera disparou, mas não informou ObjectAddedEx/64.\n";
-                    appendEvent("A câmera disparou, mas não informou o handle do novo objeto");
-                    refreshProbe();
-                });
-                return;
-            }
-
-            try {
-                SystemClock.sleep(PTP_TO_MTP_SETTLE_MS);
-                MtpCameraClient.AutoImportResult imported =
-                        MtpCameraClient.waitForCapturedObjectAndDownload(
-                                usbManager,
-                                device,
-                                capture.capturedObject,
-                                destination,
-                                NEW_IMAGE_TIMEOUT_MS
-                        );
-                runOnUiThread(() -> {
-                    cameraBusy = false;
-                    captureReport = capture.report;
-                    mtpReport = imported.report;
-                    appendEvent("Captura e download concluídos: " + imported.cameraFileName);
-                    showPreview(imported.downloadedFile);
-                    refreshProbe();
-                });
-            } catch (MtpCameraClient.ProbeException error) {
-                runOnUiThread(() -> {
-                    cameraBusy = false;
-                    captureReport = capture.report;
-                    mtpReport = "IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\nERRO: "
-                            + error.getMessage() + "\n";
-                    appendEvent("A câmera disparou, mas a importação automática falhou: "
-                            + error.getMessage());
+                    captureReport = error.captureReport;
+                    mtpReport = error.importReport;
+                    sequenceProgressView.setText("Captura única falhou: " + error.getMessage());
+                    appendEvent("Captura/importação falhou: " + error.getMessage());
                     refreshProbe();
                 });
             }
         });
+    }
+
+    private void startAstroSequence() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)) {
+            appendEvent("Sequência não iniciada: câmera ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+
+        Integer photoCount = readSequenceValue(sequenceCountInput, 1, 100, "Fotos");
+        Integer initialDelaySeconds = readSequenceValue(
+                sequenceDelayInput, 0, 3600, "Atraso"
+        );
+        Integer intervalSeconds = readSequenceValue(
+                sequenceIntervalInput, 1, 86400, "Intervalo"
+        );
+        if (photoCount == null || initialDelaySeconds == null || intervalSeconds == null) {
+            return;
+        }
+
+        cameraBusy = true;
+        sequenceRunning = true;
+        sequenceCancelRequested = false;
+        appendEvent("Sequência astro iniciada: fotos=" + photoCount
+                + " atraso=" + initialDelaySeconds + "s intervalo=" + intervalSeconds + "s");
+        sequenceProgressView.setText("Preparando sequência de " + photoCount + " fotos…");
+        refreshProbe();
+
+        File destination = downloadDirectory();
+        long initialDelayMs = initialDelaySeconds * 1000L;
+        long intervalMs = intervalSeconds * 1000L;
+        cameraExecutor.execute(() -> {
+            long firstCaptureAt = SystemClock.elapsedRealtime() + initialDelayMs;
+            int completed = 0;
+            for (int index = 0; index < photoCount; index++) {
+                long scheduledAt = firstCaptureAt + index * intervalMs;
+                if (!waitUntilOrCanceled(scheduledAt)) {
+                    break;
+                }
+
+                int captureNumber = index + 1;
+                runOnUiThread(() -> {
+                    sequenceProgressView.setText("Capturando " + captureNumber + "/" + photoCount + "…");
+                    refreshProbe();
+                });
+
+                CaptureFlowResult result;
+                try {
+                    result = performCaptureAndImport(device, destination);
+                } catch (CaptureFlowException error) {
+                    runOnUiThread(() -> finishSequenceWithError(captureNumber, error));
+                    return;
+                }
+
+                completed++;
+                int completedCount = completed;
+                runOnUiThread(() -> {
+                    captureReport = result.captureReport;
+                    mtpReport = result.importReport;
+                    sequenceProgressView.setText("Concluídas " + completedCount + "/"
+                            + photoCount + " • última: " + result.cameraFileName);
+                    appendEvent("Sequência " + completedCount + "/" + photoCount
+                            + " concluída: " + result.cameraFileName);
+                    showPreview(result.downloadedFile);
+                    refreshProbe();
+                });
+            }
+
+            int finalCompleted = completed;
+            boolean canceled = sequenceCancelRequested;
+            runOnUiThread(() -> {
+                cameraBusy = false;
+                sequenceRunning = false;
+                sequenceCancelRequested = false;
+                if (canceled) {
+                    sequenceProgressView.setText("Sequência cancelada: " + finalCompleted
+                            + "/" + photoCount + " concluídas");
+                    appendEvent("Sequência cancelada após " + finalCompleted + "/"
+                            + photoCount + " capturas");
+                } else {
+                    sequenceProgressView.setText("Sequência concluída: " + finalCompleted
+                            + "/" + photoCount);
+                    appendEvent("Sequência astro concluída: " + finalCompleted + "/"
+                            + photoCount + " capturas baixadas");
+                }
+                refreshProbe();
+            });
+        });
+    }
+
+    private void cancelAstroSequence() {
+        if (!sequenceRunning) {
+            return;
+        }
+        sequenceCancelRequested = true;
+        sequenceProgressView.setText("Cancelamento solicitado; aguardando operação atual…");
+        appendEvent("Cancelamento da sequência solicitado");
+        refreshProbe();
+    }
+
+    private CaptureFlowResult performCaptureAndImport(UsbDevice device, File destination)
+            throws CaptureFlowException {
+        CanonEosRemoteClient.Result capture;
+        try {
+            capture = CanonEosRemoteClient.capture(usbManager, device);
+        } catch (CanonEosRemoteClient.CaptureException error) {
+            throw new CaptureFlowException(
+                    "captura remota: " + error.getMessage(),
+                    error.report,
+                    "IMPORTAÇÃO AUTOMÁTICA\nNão iniciada.\n"
+            );
+        }
+
+        if (capture.capturedObject == null) {
+            throw new CaptureFlowException(
+                    "a câmera não informou o handle do novo objeto",
+                    capture.report,
+                    "IMPORTAÇÃO AUTOMÁTICA\nERRO: ObjectAddedEx/64 ausente.\n"
+            );
+        }
+
+        try {
+            SystemClock.sleep(PTP_TO_MTP_SETTLE_MS);
+            MtpCameraClient.AutoImportResult imported =
+                    MtpCameraClient.waitForCapturedObjectAndDownload(
+                            usbManager,
+                            device,
+                            capture.capturedObject,
+                            destination,
+                            NEW_IMAGE_TIMEOUT_MS
+                    );
+            return new CaptureFlowResult(
+                    capture.report,
+                    imported.report,
+                    imported.downloadedFile,
+                    imported.cameraFileName
+            );
+        } catch (MtpCameraClient.ProbeException error) {
+            throw new CaptureFlowException(
+                    "importação automática: " + error.getMessage(),
+                    capture.report,
+                    "IMPORTAÇÃO AUTOMÁTICA\nERRO: " + error.getMessage() + "\n"
+            );
+        }
+    }
+
+    private boolean waitUntilOrCanceled(long targetElapsedTime) {
+        while (!sequenceCancelRequested) {
+            long remaining = targetElapsedTime - SystemClock.elapsedRealtime();
+            if (remaining <= 0) {
+                return true;
+            }
+            SystemClock.sleep(Math.min(remaining, 200));
+        }
+        return false;
+    }
+
+    private Integer readSequenceValue(EditText input, int minimum, int maximum, String label) {
+        try {
+            int value = Integer.parseInt(input.getText().toString().trim());
+            if (value < minimum || value > maximum) {
+                throw new NumberFormatException();
+            }
+            return value;
+        } catch (NumberFormatException error) {
+            Toast.makeText(this, label + " deve estar entre " + minimum + " e " + maximum,
+                    Toast.LENGTH_LONG).show();
+            return null;
+        }
+    }
+
+    private void finishSequenceWithError(int captureNumber, CaptureFlowException error) {
+        cameraBusy = false;
+        sequenceRunning = false;
+        sequenceCancelRequested = false;
+        captureReport = error.captureReport;
+        mtpReport = error.importReport;
+        sequenceProgressView.setText("Sequência falhou na foto " + captureNumber + ": "
+                + error.getMessage());
+        appendEvent("Sequência falhou na foto " + captureNumber + ": " + error.getMessage());
+        refreshProbe();
     }
 
     private void runMtpProbe(boolean downloadLatest) {
@@ -437,6 +621,36 @@ public final class MainActivity extends Activity {
     private static String deviceLabel(UsbDevice device) {
         return String.format(Locale.US, "%s [VID=0x%04X PID=0x%04X]",
                 device.getDeviceName(), device.getVendorId(), device.getProductId());
+    }
+
+    private static final class CaptureFlowResult {
+        final String captureReport;
+        final String importReport;
+        final File downloadedFile;
+        final String cameraFileName;
+
+        CaptureFlowResult(
+                String captureReport,
+                String importReport,
+                File downloadedFile,
+                String cameraFileName
+        ) {
+            this.captureReport = captureReport;
+            this.importReport = importReport;
+            this.downloadedFile = downloadedFile;
+            this.cameraFileName = cameraFileName;
+        }
+    }
+
+    private static final class CaptureFlowException extends Exception {
+        final String captureReport;
+        final String importReport;
+
+        CaptureFlowException(String message, String captureReport, String importReport) {
+            super(message);
+            this.captureReport = captureReport;
+            this.importReport = importReport;
+        }
     }
 
     @SuppressWarnings("deprecation")

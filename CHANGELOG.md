@@ -39,6 +39,9 @@ test distributions do not require an entry here.
   by the EOS R for the newly captured CR3.
 - Added a permanently visible app version and build number to the Android probe
   screen so hardware-test logs and installed APKs are easy to distinguish.
+- Added the first Android astro-sequence controls for photo count, initial
+  delay, start-to-start interval, progress, between-shot cancellation, and
+  per-capture download.
 
 ## [9.5.0] - 2026-08-04
 

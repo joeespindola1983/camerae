@@ -112,7 +112,7 @@ Gate técnico:
 - se o Android ou a câmera bloquear a sessão necessária, testar uma integração nativa com `libgphoto2` antes de investir em protocolo próprio;
 - documentar o erro exato, não apenas “não funcionou”.
 
-### M3 — Captura remota — disparo único validado; fluxo automático em validação
+### M3 — Captura remota — fluxo único validado fisicamente
 
 Opção A, preferida após M2: cliente PTP mínimo com somente as operações requeridas pela EOS R.
 
@@ -132,13 +132,15 @@ O APK `0.4.0` reuniu o fluxo em um toque, mas o teste físico encontrou uma corr
 
 O APK `0.4.2` removeu a transição causadora e comprovou sessões PTP estáveis. O teste mostrou que a EOS R emite `0xC1A7 ObjectAddedEx64` cerca de 3,5 s depois do disparo, não o `0xC181 ObjectAddedEx` inicialmente decodificado. O APK `0.4.3` aceita ambas as estruturas com offsets e limites próprios antes de importar o handle exato via MTP. O reteste e as cinco repetições do aceite ainda estão pendentes.
 
+O APK `0.4.4` fechou o fluxo: recebeu `ObjectAddedEx64` em 3,021 s, abriu MTP uma vez e importou `5S8A9571.CR3` com os 40.415.295 bytes declarados tanto pelo evento quanto pelo MTP.
+
 Opção B: integrar `libgphoto2` via NDK se a quantidade de extensões Canon ou a negociação de sessão tornar a opção A desproporcional.
 
 Aceite físico: cinco capturas consecutivas, iniciadas pelo app, resultam em cinco JPEGs válidos no Android sem reconectar o cabo.
 
 Antes da captura sequencial, registrar descritores e valores atuais de ISO, white balance, abertura, velocidade e modo de exposição. Só habilitar escrita para propriedades que a EOS R confirmar como configuráveis na sessão remota.
 
-### M4 — Sequência astro mínima
+### M4 — Sequência astro mínima — interface inicial implementada; aceite pendente
 
 Depois do aceite do M3, implementar:
 
@@ -152,6 +154,8 @@ Depois do aceite do M3, implementar:
 - proteção contra iniciar nova exposição enquanto a anterior ainda está ocupada ou transferindo.
 
 Aceite: executar uma sequência de 20 capturas com cadência definida, baixar todos os arquivos e produzir um manifesto local que associe ordem, horário, parâmetros, handle PTP e arquivo importado.
+
+O APK `0.5.0` entrega o primeiro subconjunto funcional: quantidade, atraso inicial, intervalo entre inícios, progresso, cancelamento seguro entre operações e download de cada captura. A sequência é estritamente serial; ISO, white balance, shutter configurável e manifesto persistente continuam pendentes.
 
 ### M5 — Fluxo demonstrável
 
@@ -231,4 +235,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1, M2, disparo PTP e uma importação automática foram validados fisicamente. A EOS R reportou o novo CR3 pelo evento `0xC1A7 ObjectAddedEx64`; o APK `0.4.3` agora decodifica essa variante e importa o handle exato. Aguarde o reteste antes de iniciar cinco repetições, a interface de sequência ou parâmetros. Use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md` e `PLAN.md`. M1, M2 e o fluxo M3 completo foram validados fisicamente; a EOS R reporta o novo CR3 por `0xC1A7 ObjectAddedEx64` e o app importa o handle com tamanho exato. O APK `0.5.0` adiciona a primeira sequência astro serial e aguarda o teste de cinco fotos. Analise esse log antes de implementar parâmetros ou manifesto. Use somente operações e descritores efetivamente reportados pela EOS R. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.

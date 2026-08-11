@@ -27,6 +27,139 @@
         android:text="@string/status_waiting"
         android:textAppearance="?android:attr/textAppearanceMedium" />
 
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:background="#EEF3F8"
+        android:orientation="vertical"
+        android:padding="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/astro_sequence_title"
+            android:textAppearance="?android:attr/textAppearanceMedium"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="@string/camera_settings_notice"
+            android:textAppearance="?android:attr/textAppearanceSmall" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:baselineAligned="false"
+            android:orientation="horizontal">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:labelFor="@id/sequence_count"
+                    android:text="@string/photo_count" />
+
+                <EditText
+                    android:id="@+id/sequence_count"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:maxLines="1"
+                    android:text="@string/default_photo_count" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginHorizontal="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:labelFor="@id/sequence_delay"
+                    android:text="@string/initial_delay_seconds" />
+
+                <EditText
+                    android:id="@+id/sequence_delay"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:maxLines="1"
+                    android:text="@string/default_initial_delay" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:labelFor="@id/sequence_interval"
+                    android:text="@string/start_interval_seconds" />
+
+                <EditText
+                    android:id="@+id/sequence_interval"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:importantForAutofill="no"
+                    android:inputType="number"
+                    android:maxLines="1"
+                    android:text="@string/default_start_interval" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <LinearLayout
+            style="?android:attr/buttonBarStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <Button
+                android:id="@+id/start_sequence"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/start_sequence" />
+
+            <Button
+                android:id="@+id/cancel_sequence"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="@string/cancel_sequence" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/sequence_progress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="@string/sequence_idle"
+            android:textStyle="bold" />
+    </LinearLayout>
+
     <HorizontalScrollView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

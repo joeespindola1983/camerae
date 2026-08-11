@@ -22,9 +22,10 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - Marco M3 validado para um disparo: a sequência Canon EOS criou `5S8A9566.CR3` e o Android importou os 40.307.117 bytes.
 - O APK `0.4.1` conseguiu importar automaticamente `5S8A9568.CR3` com os 40.316.045 bytes exatos, mas somente após duas falhas `MTP → PTP` e reconexões físicas.
 - O teste `0.4.2` confirmou transporte estável e revelou que a EOS R emite `0xC1A7 ObjectAddedEx64` cerca de 3,5 s após o disparo, em vez da variante `0xC181` inicialmente implementada.
-- APK `0.4.4` implementado: decodifica com limites rígidos tanto `ObjectAddedEx` quanto `ObjectAddedEx64`, usa o handle informado pela câmera para importar via MTP e exibe versão/build permanentemente abaixo do título.
-- Build debug `0.4.4` e parser sintético do evento verificados com sucesso em 11 de agosto de 2026.
-- A importação orientada a `ObjectAddedEx64` e as cinco capturas consecutivas do aceite M3 ainda aguardam validação física; alteração de parâmetros não foi implementada.
+- O APK `0.4.4` validou o fluxo definitivo: `ObjectAddedEx64` em 3,021 s, importação MTP em uma tentativa e 40.415.295 bytes exatos de `5S8A9571.CR3`.
+- APK `0.5.0` implementado: primeira interface astro com quantidade, atraso inicial, intervalo entre inícios, progresso, cancelamento entre fotos e download após cada captura.
+- Build debug `0.5.0` verificado com sucesso em 11 de agosto de 2026.
+- A sequência de cinco capturas ainda aguarda validação física; alteração de ISO, shutter e white balance não foi implementada.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
 
@@ -48,12 +49,13 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 4. Toque em `Autorizar USB` caso a permissão ainda não esteja concedida.
 5. Confirme que o estado mostra a câmera pronta para diagnóstico.
 6. Coloque a lente/câmera em foco manual (`MF`).
-7. Toque uma vez em `Capturar + baixar (MF)` e aguarde o fluxo terminar.
-8. Confirme no log a sequência de disparo, o `Novo handle` e `Bytes gravados`.
-9. `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
-10. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
+7. Para captura única, toque em `Capturar + baixar (MF)` e aguarde o fluxo terminar.
+8. Para sequência, defina `Fotos`, `Atraso` e `Intervalo` e toque em `Iniciar sequência`.
+9. Aguarde `Sequência concluída`; o cancelamento é aplicado com segurança entre operações de câmera.
+10. Confirme no log o nome/handle e os bytes de cada etapa; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
+11. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.4.4`, o botão integrado abre diretamente a sessão PTP Canon, dispara e consulta `EOS_GetEvent` por até 15 segundos até receber `ObjectAddedEx` ou `ObjectAddedEx64`. Depois de fechar PTP, o app abre MTP e busca diretamente esse handle por até 30 segundos, sem varrer ou comparar o cartão antes da captura. O tamanho final precisa coincidir com o tamanho informado pelo MTP. O app não altera o destino de captura: espera que a configuração atual continue salvando no cartão.
+No APK `0.5.0`, cada foto abre diretamente a sessão PTP Canon, dispara e consulta `EOS_GetEvent` por até 15 segundos até receber `ObjectAddedEx` ou `ObjectAddedEx64`. Depois de fechar PTP, o app abre MTP e busca diretamente esse handle por até 30 segundos. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. O app não altera parâmetros nem o destino de captura.
 
 ## Preparação do teste físico
 
