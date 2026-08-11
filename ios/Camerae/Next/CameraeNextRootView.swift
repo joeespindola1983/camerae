@@ -2,6 +2,7 @@ import SwiftUI
 
 struct CameraeNextRootView: View {
     @StateObject private var projectStore = ProjectStore()
+    @StateObject private var tripodLocationStore = TripodLocationStore()
     @StateObject private var settings = CameraeSettingsStore.shared
     @State private var path = NavigationPath()
 
@@ -17,10 +18,22 @@ struct CameraeNextRootView: View {
                 .navigationDestination(for: ProjectOrganizationRoute.self) { route in
                     CameraeNextProjectOrganizationRouteView(route: route, path: $path)
                 }
+                .navigationDestination(for: CameraeHomeDestination.self) { destination in
+                    switch destination {
+                    case .calendar: CaptureCalendarView()
+                    case .positions: TripodPositionsView()
+                    }
+                }
         }
         .environmentObject(projectStore)
+        .environmentObject(tripodLocationStore)
         .environmentObject(settings)
         .onAppear { AppOrientationLock.shared.restorePortrait() }
+        .task {
+            await projectStore.reloadNow()
+            await tripodLocationStore.reloadNow()
+            await tripodLocationStore.migrateLegacyProjects(projectStore.projects)
+        }
     }
 }
 
@@ -64,14 +77,17 @@ struct CameraeNextHomeView: View {
                 }
                 .position(x: proxy.size.width / 2, y: max(proxy.safeAreaInsets.top + 150, proxy.size.height * 0.28))
 
-                VStack(spacing: 12) {
-                    HStack(spacing: 40) {
+                VStack(spacing: 18) {
+                    HStack(spacing: 28) {
                         workflowButton(.repeatable, compact: false)
                         workflowButton(.astrophotography, compact: false)
                     }
-                    workflowButton(.edit, compact: true)
+                    HStack(spacing: 28) {
+                        destinationButton(.calendar, title: "Calendário", systemImage: "calendar")
+                        destinationButton(.positions, title: "Posições", systemImage: "mappin.and.ellipse")
+                    }
                 }
-                .position(x: proxy.size.width / 2, y: proxy.size.height - max(130, proxy.safeAreaInsets.bottom + 110))
+                .position(x: proxy.size.width / 2, y: proxy.size.height - max(190, proxy.safeAreaInsets.bottom + 170))
 
                 Button {
                     isShowingSettings = true
@@ -129,6 +145,26 @@ struct CameraeNextHomeView: View {
         .accessibilityLabel(CameraeL10n.openModule(module.title))
         .accessibilityValue(CameraeL10n.projectCount(projectStore.projects(for: module).count))
         .accessibilityIdentifier(CameraeAccessibility.openModule(module))
+    }
+
+    private func destinationButton(_ destination: CameraeHomeDestination, title: String, systemImage: String) -> some View {
+        Button {
+            path.append(destination)
+        } label: {
+            VStack(spacing: 10) {
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(CameraeColor.accentRepeatable.opacity(0.15))
+                    .frame(width: 46, height: 46)
+                    .overlay { Image(systemName: systemImage).foregroundStyle(CameraeColor.accentRepeatable) }
+                Text(title)
+                    .font(.custom("Outfit-Regular", size: 13, relativeTo: .caption))
+                    .foregroundStyle(CameraeColor.textPrimary.opacity(0.78))
+            }
+            .frame(width: 120, height: 96)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Abrir \(title)")
+        .accessibilityIdentifier("home.open.\(title.lowercased())")
     }
 }
 

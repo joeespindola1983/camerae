@@ -472,6 +472,28 @@ struct ProjectListRowLayout: Equatable {
     }
 }
 
+struct ProjectListStackLayout: Equatable {
+    let cardHeight: CGFloat
+    let spacing: CGFloat
+
+    init(
+        cardHeight: CGFloat = ProjectListRowLayout(containerWidth: 361).minimumHeight,
+        spacing: CGFloat = 10
+    ) {
+        self.cardHeight = cardHeight
+        self.spacing = spacing
+    }
+
+    func cardIndex(at y: CGFloat, count: Int) -> Int? {
+        guard y >= 0, count > 0, cardHeight > 0, spacing >= 0 else { return nil }
+        let stride = cardHeight + spacing
+        let index = Int(y / stride)
+        guard index < count else { return nil }
+        let localY = y - CGFloat(index) * stride
+        return localY < cardHeight ? index : nil
+    }
+}
+
 enum ProjectListCardRegion: Equatable {
     case thumbnail
     case information

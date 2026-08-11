@@ -21,9 +21,73 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added Tripod Positions as a first-class hub for GPS, reference photos,
+  spatial-reference revisions, linked projects, map/list discovery, and quick
+  project creation with inherited positioning context.
+- Added a capture calendar that combines completed project sessions with
+  planned recaptures, including one-, two-, and four-week local reminders.
+
 ### Changed
 
+- Unified Calendar and Tripod Positions around the same contextual project
+  list: selecting a date or saved tripod point now exposes the same filters,
+  project rows, read-only summary, project navigation, and recapture planning.
+- Tripod list mode now follows the map's visible region and keeps the selected
+  position synchronized with a shared accent treatment on marker and row.
+- Nearby tripod positions now collapse into numbered map clusters; opening a
+  cluster clears selection and zooms to fit and visually separate its members.
+- Clusters that remain overlapped at maximum zoom now expand into smaller,
+  individually selectable radial markers without changing persisted GPS data.
+- Redesigned Calendar and Tripod Positions from the approved Camerae Figma
+  flows, using the Repeatable visual theme, marked project dates, agenda
+  filters, read-only project summaries, a selectable map/list catalog, saved
+  position summaries, GPS/reference metrics, linked-project history, Apple Maps
+  handoff, and explicit reference and recapture actions.
+- Replaced the visible Editor entry on Home with Calendar and Positions while
+  preserving Editor projects and runtime compatibility.
+- Existing project-local spatial references now migrate non-destructively into
+  Tripod Positions; originals remain available as rollback evidence.
+
+- Spatial Guidance now maps and validates the fixed environment before asking
+  for the tripod, rejects overly flat or poorly distributed scene evidence,
+  and saves a clean world map that does not depend on the tripod for later
+  recognition.
+
 ### Fixed
+
+- Tripod Positions now keeps its project list populated from every tripod point
+  represented in the current map viewport during initial fit, drag, zoom,
+  cluster expansion, and spiderfy; selecting a project only highlights its row
+  and no longer collapses the visible-project set.
+- Tripod Positions now clears the highlighted project after zooming out or
+  tapping the map background, while marker taps remain selectable; selected
+  project rows use the Repeatable accent token for their tint and outline.
+- Tripod list now mirrors every location represented by the rendered map,
+  including cluster members and spiderfy markers, after stabilized zoom-in,
+  zoom-out, drag, and programmatic cluster camera updates.
+- Tripod Positions now opens with no implicit selection, allows a second tap
+  to deselect a marker or row, and ignores transient MapKit camera updates
+  during the initial fit so every fitted position remains available in List.
+- Tripod Positions now uses a real Apple map that fits every persisted GPS
+  point, exposes selectable photo thumbnails, opens the complete saved-position
+  list from its summary card, and idempotently recovers GPS coordinates from
+  the newest legacy project session. Calendar and Positions now return directly
+  to Home instead of presenting an internal bottom tab bar.
+- The first project in the new catalog now uses the same selectable card and
+  actions as every other project, removing the legacy featured-project split
+  that could leave its navigation and menu unresponsive.
+- The Xcode `Camerae QA` run action now uses a telemetry-enabled QA Debug
+  configuration, allowing consent-controlled Analytics and Crashlytics events
+  to reach the QA Firebase project from development-signed devices.
+- Low measured height variation is now an advisory during Spatial Guidance
+  instead of blocking an otherwise well-covered and feature-rich scene map.
+
+- Kept each project card inside a group on its own explicit tap target so the
+  first thumbnail no longer opens the next project or extends into the section
+  heading.
+
+- Made new Xcode worktrees inherit automatic signing and the Camerae
+  development team, avoiding repeated manual signing setup before device runs.
 
 ## [9.5.0] - 2026-08-04
 

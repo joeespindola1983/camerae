@@ -18,9 +18,23 @@ struct CameraeNextProjectCatalogTests {
             filter: .recent
         )
 
-        #expect(catalog.featuredProject?.name == "Latest")
-        #expect(catalog.remainingProjects.map(\.name) == ["Older"])
+        #expect(catalog.selectableProjects.map(\.name) == ["Latest", "Older"])
         #expect(catalog.projectCount == 2)
+    }
+
+    @Test("the first project remains in the same selectable collection as every other project")
+    func firstProjectIsSelectable() {
+        let first = makeProject(name: "First", module: .repeatable, day: 3)
+        let second = makeProject(name: "Second", module: .repeatable, day: 2)
+
+        let catalog = CameraeNextProjectCatalogModel(
+            projects: [second, first],
+            module: .repeatable,
+            filter: .recent
+        )
+
+        #expect(catalog.selectableProjects.map(\.id) == [first.id, second.id])
+        #expect(catalog.selectableProjects.count == catalog.projectCount)
     }
 
     @Test("capture and archive filters keep archived projects out of active results")
@@ -124,6 +138,20 @@ struct CameraeNextProjectCatalogTests {
         #expect(layout.thumbnailSize == CGSize(width: 361, height: 160))
         #expect(layout.minimumHeight == 244)
         #expect(layout.thumbnailRange.upperBound <= layout.informationRange.lowerBound)
+    }
+
+    @Test("stacked project cards keep independent non-overlapping tap targets")
+    func stackedProjectCardHitTargets() {
+        let layout = ProjectListStackLayout(cardHeight: 244, spacing: 10)
+
+        #expect(layout.cardIndex(at: -1, count: 2) == nil)
+        #expect(layout.cardIndex(at: 0, count: 2) == 0)
+        #expect(layout.cardIndex(at: 243, count: 2) == 0)
+        #expect(layout.cardIndex(at: 244, count: 2) == nil)
+        #expect(layout.cardIndex(at: 253, count: 2) == nil)
+        #expect(layout.cardIndex(at: 254, count: 2) == 1)
+        #expect(layout.cardIndex(at: 497, count: 2) == 1)
+        #expect(layout.cardIndex(at: 498, count: 2) == nil)
     }
 
     @Test("project cards summarize only durable captures by type")

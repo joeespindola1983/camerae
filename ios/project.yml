@@ -6,6 +6,7 @@ options:
     iOS: "17.0"
 configs:
   Debug: debug
+  QADebug: debug
   QA: release
   Release: release
 settings:
@@ -82,6 +83,7 @@ targets:
           - DeepSNRDenoiser.swift
     configFiles:
       Debug: Config/Debug.xcconfig
+      QADebug: Config/QADebug.xcconfig
       QA: Config/QA.xcconfig
       Release: Config/Release.xcconfig
     info:
@@ -115,15 +117,18 @@ targets:
         SWIFT_OBJC_BRIDGING_HEADER: Camerae/Camerae-Bridging-Header.h
         OTHER_LDFLAGS: $(inherited) -ObjC
         DEBUG_INFORMATION_FORMAT: dwarf-with-dsym
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: V6JPGVRWCS
       configs:
         Debug:
-          CODE_SIGN_STYLE: Manual
           CODE_SIGN_IDENTITY: Apple Development
-          PROVISIONING_PROFILE_SPECIFIER: Camerae QA Dev
+          PROVISIONING_PROFILE_SPECIFIER: ""
+        QADebug:
+          CODE_SIGN_IDENTITY: Apple Development
+          PROVISIONING_PROFILE_SPECIFIER: ""
         QA:
-          CODE_SIGN_STYLE: Manual
-          CODE_SIGN_IDENTITY: iPhone Distribution
-          PROVISIONING_PROFILE_SPECIFIER: Camerae Ad Hoc
+          CODE_SIGN_IDENTITY: Apple Development
+          PROVISIONING_PROFILE_SPECIFIER: ""
     dependencies:
       - target: CameraeCore
       - target: CameraeMedia
@@ -229,9 +234,11 @@ schemes:
       targets:
         Camerae: all
     run:
-      config: Debug
+      config: QADebug
+      commandLineArguments:
+        "-FIRDebugEnabled": true
     test:
-      config: Debug
+      config: QADebug
       targets:
         - CameraeCoreTests
         - CameraeMediaTests

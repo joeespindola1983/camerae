@@ -330,6 +330,7 @@ private struct CameraeNextProjectOrganizationDetailView: View {
     }
 
     private var theme: ProjectListTheme { .init(module: module) }
+    private let projectStackLayout = ProjectListStackLayout()
 
     private var model: CameraeNextProjectOrganizationModel {
         .init(
@@ -358,7 +359,7 @@ private struct CameraeNextProjectOrganizationDetailView: View {
             theme.background.ignoresSafeArea()
 
             ScrollView {
-                LazyVStack(spacing: 10) {
+                LazyVStack(spacing: projectStackLayout.spacing) {
                     if !currentNode.isSubgroup {
                         sectionHeader(
                             CameraeL10n.organizationSubgroups,
@@ -377,12 +378,23 @@ private struct CameraeNextProjectOrganizationDetailView: View {
 
                     ForEach(model.directProjects(in: currentNode.id)) { project in
                         ZStack(alignment: .topTrailing) {
-                            NavigationLink(value: project) {
+                            Button {
+                                path.append(project)
+                            } label: {
                                 ProjectListRow(project: project, theme: theme)
+                                    .frame(height: projectStackLayout.cardHeight)
+                                    .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            projectMenu(project).padding(10)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: projectStackLayout.cardHeight)
+
+                            projectMenu(project)
+                                .padding(10)
+                                .zIndex(1)
                         }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: projectStackLayout.cardHeight)
                     }
 
                     if model.directProjects(in: currentNode.id).isEmpty {

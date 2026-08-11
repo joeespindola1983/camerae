@@ -4,6 +4,7 @@ use_frameworks!
 
 project 'Camerae',
         'Debug' => :debug,
+        'QADebug' => :debug,
         'QA' => :release,
         'Release' => :release
 
