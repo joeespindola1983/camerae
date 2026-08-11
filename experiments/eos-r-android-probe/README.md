@@ -24,9 +24,10 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O teste `0.4.2` confirmou transporte estável e revelou que a EOS R emite `0xC1A7 ObjectAddedEx64` cerca de 3,5 s após o disparo, em vez da variante `0xC181` inicialmente implementada.
 - O APK `0.4.4` validou o fluxo definitivo: `ObjectAddedEx64` em 3,021 s, importação MTP em uma tentativa e 40.415.295 bytes exatos de `5S8A9571.CR3`.
 - O primeiro teste do `0.5.0` iniciou 3,9 s após o attach e encontrou o endpoint PTP ainda indisponível antes de `OpenSession`.
-- APK `0.5.2` implementado: usa `GetDeviceInfo` padrão como handshake de readiness com retry limitado, remove respostas PTP antigas antes do handshake e ignora de forma limitada containers de transações anteriores.
-- Build debug `0.5.2` verificado com sucesso em 11 de agosto de 2026.
-- A sequência de cinco capturas ainda aguarda validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
+- O APK `0.5.2` validou uma sequência física de cinco capturas e downloads, com cadência de 10 segundos, readiness na primeira tentativa e nenhum desalinhamento PTP.
+- APK `0.6.0` implementado: cria pasta e manifesto JSON persistente por sequência e adiciona descoberta somente leitura das capabilities anunciadas pela EOS R para ISO, white balance e shutter.
+- Build debug `0.6.0` verificado com sucesso em 11 de agosto de 2026.
+- A descoberta de controles e o manifesto da sequência ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
 A política de suporte por modelo está em [COMPATIBILITY.md](COMPATIBILITY.md).
@@ -52,12 +53,13 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 5. Confirme que o estado mostra a câmera pronta para diagnóstico.
 6. Coloque a lente/câmera em foco manual (`MF`).
 7. Para captura única, toque em `Capturar + baixar (MF)` e aguarde o fluxo terminar.
-8. Para sequência, defina `Fotos`, `Atraso` e `Intervalo` e toque em `Iniciar sequência`.
-9. Aguarde `Sequência concluída`; o cancelamento é aplicado com segurança entre operações de câmera.
-10. Confirme no log o nome/handle e os bytes de cada etapa; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
-11. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
+8. Toque em `Ler ISO, WB e shutter` e confirme que os três controles mostram valor atual e quantidade de opções; esta versão ainda não escreve propriedades.
+9. Para sequência, defina `Fotos`, `Atraso` e `Intervalo` e toque em `Iniciar sequência`.
+10. Aguarde `Sequência concluída`; o cancelamento é aplicado com segurança entre operações de câmera.
+11. Confirme no log o nome/handle, os bytes de cada etapa e o caminho do `manifest.json`; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
+12. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.5.2`, cada foto primeiro remove respostas antigas da fila bulk IN e confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Durante a sessão, containers atrasados de outras transações são registrados e ignorados com um limite de segurança. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. O app não altera parâmetros nem o destino de captura.
+No APK `0.6.0`, cada foto primeiro remove respostas antigas da fila bulk IN e confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Durante a sessão, containers atrasados de outras transações são registrados e ignorados com um limite de segurança. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. Cada sequência recebe uma pasta própria contendo os arquivos baixados e um `manifest.json` atualizado atomicamente após cada foto. A descoberta de controles interpreta `PropValueChanged` e `AvailListChanged`, mas o app ainda não altera parâmetros nem o destino de captura.
 
 ## Preparação do teste físico
 

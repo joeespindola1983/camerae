@@ -11,7 +11,9 @@
     <string name="status_usb_service_missing">O serviço USB do Android não está disponível.</string>
     <string name="status_reading_camera">Operando a câmera via USB/PTP…</string>
     <string name="astro_sequence_title">Sequência astro</string>
-    <string name="camera_settings_notice">Exposição, ISO e WB: usar os valores atuais da câmera.</string>
+    <string name="camera_settings_notice">Primeiro confirme os controles anunciados pela câmera; esta build ainda não altera valores.</string>
+    <string name="inspect_controls">Ler ISO, WB e shutter</string>
+    <string name="exposure_capabilities_idle">Controles ainda não consultados.</string>
     <string name="photo_count">Fotos</string>
     <string name="initial_delay_seconds">Atraso (s)</string>
     <string name="start_interval_seconds">Intervalo (s)</string>

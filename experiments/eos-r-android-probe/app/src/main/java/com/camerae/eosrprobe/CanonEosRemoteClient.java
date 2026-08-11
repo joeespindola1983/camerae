@@ -18,6 +18,7 @@ final class CanonEosRemoteClient {
     private static final long OBJECT_EVENT_TIMEOUT_MS = 15_000;
     private static final long OBJECT_EVENT_POLL_MS = 500;
     private static final int READINESS_ATTEMPTS = 6;
+    private static final int CAPABILITY_POLLS = 3;
 
     private CanonEosRemoteClient() {
     }
@@ -105,6 +106,54 @@ final class CanonEosRemoteClient {
             throw new CaptureException(failureMessage, report.toString(), failureCause);
         }
         return new Result(report.toString(), captureCommandCompleted, capturedObject);
+    }
+
+    static CapabilityResult inspectExposureCapabilities(
+            UsbManager usbManager,
+            UsbDevice device
+    ) throws CapabilityException {
+        StringBuilder report = new StringBuilder();
+        report.append("DESCOBERTA DE CONTROLES CANON EOS\n");
+        report.append("Início: ").append(timestamp()).append('\n');
+        PtpUsbTransport transport = null;
+        CanonEosExposureCapabilities capabilities = new CanonEosExposureCapabilities();
+        String failureMessage = null;
+        Throwable failureCause = null;
+        try {
+            transport = openReadyTransport(usbManager, device, report);
+            transport.openSession(OPEN_SESSION_ID);
+            transport.command("EOS_SetRemoteMode", EOS_SET_REMOTE_MODE, 1);
+            transport.command("EOS_SetEventMode", EOS_SET_EVENT_MODE, 1);
+            for (int poll = 1; poll <= CAPABILITY_POLLS; poll++) {
+                byte[] events = transport.commandWithData("EOS_GetEvent", EOS_GET_EVENT);
+                capabilities.accept(events);
+                report.append("Capabilities poll ").append(poll).append(": ")
+                        .append(events.length).append(" bytes\n");
+                if (capabilities.isComplete()) {
+                    break;
+                }
+                SystemClock.sleep(200);
+            }
+            report.append('\n').append(capabilities.report());
+            if (!capabilities.isComplete()) {
+                throw new PtpUsbTransport.TransportException(
+                        "a câmera não anunciou valor atual e lista para todos os controles"
+                );
+            }
+        } catch (PtpUsbTransport.TransportException | RuntimeException error) {
+            failureMessage = error.getMessage();
+            failureCause = error;
+            report.append("ERRO: ").append(error.getMessage()).append('\n');
+        } finally {
+            if (transport != null) {
+                transport.close();
+            }
+            report.append("Fim: ").append(timestamp()).append('\n');
+        }
+        if (failureCause != null) {
+            throw new CapabilityException(failureMessage, report.toString(), failureCause);
+        }
+        return new CapabilityResult(report.toString(), capabilities.summary());
     }
 
     private static PtpUsbTransport openReadyTransport(
@@ -210,6 +259,25 @@ final class CanonEosRemoteClient {
         final String report;
 
         CaptureException(String message, String report, Throwable cause) {
+            super(message, cause);
+            this.report = report;
+        }
+    }
+
+    static final class CapabilityResult {
+        final String report;
+        final String summary;
+
+        CapabilityResult(String report, String summary) {
+            this.report = report;
+            this.summary = summary;
+        }
+    }
+
+    static final class CapabilityException extends Exception {
+        final String report;
+
+        CapabilityException(String message, String report, Throwable cause) {
             super(message, cause);
             this.report = report;
         }

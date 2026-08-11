@@ -48,6 +48,9 @@ test distributions do not require an entry here.
 - Resynchronized the Android PTP bulk input before readiness checks and across
   commands so delayed responses from a failed capture cannot shift subsequent
   transaction IDs.
+- Added atomic JSON manifests for Android astro sequences and read-only Canon
+  EOS capability discovery for current and available ISO, white-balance, and
+  shutter values.
 
 ## [9.5.0] - 2026-08-04
 

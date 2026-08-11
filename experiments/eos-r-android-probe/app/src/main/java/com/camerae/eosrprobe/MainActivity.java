@@ -27,6 +27,7 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -50,6 +51,7 @@ public final class MainActivity extends Activity {
     private Button authorizeButton;
     private Button captureButton;
     private Button inspectMtpButton;
+    private Button inspectControlsButton;
     private Button downloadLatestButton;
     private Button startSequenceButton;
     private Button cancelSequenceButton;
@@ -59,9 +61,12 @@ public final class MainActivity extends Activity {
     private EditText sequenceDelayInput;
     private EditText sequenceIntervalInput;
     private TextView sequenceProgressView;
+    private TextView exposureCapabilitiesView;
     private ImageView previewView;
     private String mtpReport = "MTP/PTP ainda não consultado.\n";
     private String captureReport = "Captura remota ainda não testada.\n";
+    private String exposureReport = "Controles de exposição ainda não consultados.\n";
+    private String sequenceReport = "Manifesto de sequência ainda não criado.\n";
     private boolean cameraBusy;
     private volatile boolean sequenceRunning;
     private volatile boolean sequenceCancelRequested;
@@ -112,6 +117,7 @@ public final class MainActivity extends Activity {
         authorizeButton = findViewById(R.id.authorize);
         captureButton = findViewById(R.id.capture_test);
         inspectMtpButton = findViewById(R.id.inspect_mtp);
+        inspectControlsButton = findViewById(R.id.inspect_controls);
         downloadLatestButton = findViewById(R.id.download_latest);
         startSequenceButton = findViewById(R.id.start_sequence);
         cancelSequenceButton = findViewById(R.id.cancel_sequence);
@@ -121,6 +127,7 @@ public final class MainActivity extends Activity {
         sequenceDelayInput = findViewById(R.id.sequence_delay);
         sequenceIntervalInput = findViewById(R.id.sequence_interval);
         sequenceProgressView = findViewById(R.id.sequence_progress);
+        exposureCapabilitiesView = findViewById(R.id.exposure_capabilities);
         previewView = findViewById(R.id.preview);
 
         findViewById(R.id.refresh).setOnClickListener(view -> {
@@ -132,6 +139,7 @@ public final class MainActivity extends Activity {
         startSequenceButton.setOnClickListener(view -> startAstroSequence());
         cancelSequenceButton.setOnClickListener(view -> cancelAstroSequence());
         inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
+        inspectControlsButton.setOnClickListener(view -> inspectExposureCapabilities());
         downloadLatestButton.setOnClickListener(view -> runMtpProbe(true));
         copyLogButton.setOnClickListener(view -> copyLog());
         shareLogButton.setOnClickListener(view -> shareLog());
@@ -214,6 +222,7 @@ public final class MainActivity extends Activity {
         authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
         captureButton.setEnabled(captureValidated && !cameraBusy);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
+        inspectControlsButton.setEnabled(captureValidated && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
         startSequenceButton.setEnabled(captureValidated && !cameraBusy);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
@@ -238,7 +247,46 @@ public final class MainActivity extends Activity {
         report.append(UsbTopologyFormatter.describe(usbManager));
         report.append('\n').append(captureReport);
         report.append('\n').append(mtpReport);
+        report.append('\n').append(exposureReport);
+        report.append('\n').append(sequenceReport);
         logView.setText(report.toString());
+    }
+
+    private void inspectExposureCapabilities() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)
+                || !isValidatedCaptureDevice(device)) {
+            appendEvent("Controles não consultados: EOS R ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+
+        cameraBusy = true;
+        appendEvent("Lendo capabilities de ISO, white balance e shutter");
+        exposureCapabilitiesView.setText("Consultando controles anunciados pela câmera…");
+        refreshProbe();
+        cameraExecutor.execute(() -> {
+            try {
+                CanonEosRemoteClient.CapabilityResult result =
+                        CanonEosRemoteClient.inspectExposureCapabilities(usbManager, device);
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    exposureReport = result.report;
+                    exposureCapabilitiesView.setText(result.summary);
+                    appendEvent("Capabilities de exposição confirmadas pela EOS R");
+                    refreshProbe();
+                });
+            } catch (CanonEosRemoteClient.CapabilityException error) {
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    exposureReport = error.report;
+                    exposureCapabilitiesView.setText("Leitura de controles falhou: "
+                            + error.getMessage());
+                    appendEvent("Leitura de controles falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
     }
 
     private void runRemoteCapture() {
@@ -308,22 +356,43 @@ public final class MainActivity extends Activity {
             return;
         }
 
+        AstroSequenceManifest manifest;
+        try {
+            manifest = AstroSequenceManifest.create(
+                    downloadDirectory(),
+                    device,
+                    photoCount,
+                    initialDelaySeconds,
+                    intervalSeconds
+            );
+        } catch (IOException error) {
+            sequenceProgressView.setText("Não foi possível criar o manifesto: "
+                    + error.getMessage());
+            appendEvent("Sequência não iniciada: manifesto falhou: " + error.getMessage());
+            refreshProbe();
+            return;
+        }
+
         cameraBusy = true;
         sequenceRunning = true;
         sequenceCancelRequested = false;
         appendEvent("Sequência astro iniciada: fotos=" + photoCount
                 + " atraso=" + initialDelaySeconds + "s intervalo=" + intervalSeconds + "s");
         sequenceProgressView.setText("Preparando sequência de " + photoCount + " fotos…");
+        sequenceReport = manifestReport(manifest.path(), "running", 0, photoCount, null);
         refreshProbe();
 
-        File destination = downloadDirectory();
+        File destination = manifest.sequenceDirectory();
         long initialDelayMs = initialDelaySeconds * 1000L;
         long intervalMs = intervalSeconds * 1000L;
+        long sequenceStartedAtMillis = System.currentTimeMillis();
         cameraExecutor.execute(() -> {
             long firstCaptureAt = SystemClock.elapsedRealtime() + initialDelayMs;
+            long firstCaptureAtMillis = sequenceStartedAtMillis + initialDelayMs;
             int completed = 0;
             for (int index = 0; index < photoCount; index++) {
                 long scheduledAt = firstCaptureAt + index * intervalMs;
+                long scheduledAtMillis = firstCaptureAtMillis + index * intervalMs;
                 if (!waitUntilOrCanceled(scheduledAt)) {
                     break;
                 }
@@ -335,10 +404,53 @@ public final class MainActivity extends Activity {
                 });
 
                 CaptureFlowResult result;
+                long captureStartedAtMillis = System.currentTimeMillis();
                 try {
                     result = performCaptureAndImport(device, destination);
                 } catch (CaptureFlowException error) {
-                    runOnUiThread(() -> finishSequenceWithError(captureNumber, error));
+                    long failedAtMillis = System.currentTimeMillis();
+                    String manifestError = null;
+                    try {
+                        manifest.recordFailure(
+                                captureNumber,
+                                scheduledAtMillis,
+                                captureStartedAtMillis,
+                                failedAtMillis,
+                                error.getMessage()
+                        );
+                    } catch (IOException manifestFailure) {
+                        manifestError = manifestFailure.getMessage();
+                    }
+                    String finalManifestError = manifestError;
+                    runOnUiThread(() -> finishSequenceWithError(
+                            captureNumber,
+                            error,
+                            manifest.path(),
+                            finalManifestError
+                    ));
+                    return;
+                }
+
+                long captureCompletedAtMillis = System.currentTimeMillis();
+                try {
+                    manifest.recordSuccess(
+                            captureNumber,
+                            scheduledAtMillis,
+                            captureStartedAtMillis,
+                            captureCompletedAtMillis,
+                            result.capturedObject.handle,
+                            result.capturedObject.storageId,
+                            result.cameraFileName,
+                            result.capturedObject.size,
+                            result.downloadedFile
+                    );
+                } catch (IOException error) {
+                    runOnUiThread(() -> finishSequenceAfterManifestError(
+                            captureNumber,
+                            result,
+                            manifest.path(),
+                            error
+                    ));
                     return;
                 }
 
@@ -351,6 +463,9 @@ public final class MainActivity extends Activity {
                             + photoCount + " • última: " + result.cameraFileName);
                     appendEvent("Sequência " + completedCount + "/" + photoCount
                             + " concluída: " + result.cameraFileName);
+                    sequenceReport = manifestReport(
+                            manifest.path(), "running", completedCount, photoCount, null
+                    );
                     showPreview(result.downloadedFile);
                     refreshProbe();
                 });
@@ -358,6 +473,18 @@ public final class MainActivity extends Activity {
 
             int finalCompleted = completed;
             boolean canceled = sequenceCancelRequested;
+            String finalStatus = canceled ? "canceled" : "completed";
+            try {
+                manifest.finish(finalStatus, finalCompleted);
+            } catch (IOException error) {
+                runOnUiThread(() -> finishSequenceAfterManifestError(
+                        finalCompleted,
+                        null,
+                        manifest.path(),
+                        error
+                ));
+                return;
+            }
             runOnUiThread(() -> {
                 cameraBusy = false;
                 sequenceRunning = false;
@@ -373,6 +500,9 @@ public final class MainActivity extends Activity {
                     appendEvent("Sequência astro concluída: " + finalCompleted + "/"
                             + photoCount + " capturas baixadas");
                 }
+                sequenceReport = manifestReport(
+                        manifest.path(), finalStatus, finalCompleted, photoCount, null
+                );
                 refreshProbe();
             });
         });
@@ -423,7 +553,8 @@ public final class MainActivity extends Activity {
                     capture.report,
                     imported.report,
                     imported.downloadedFile,
-                    imported.cameraFileName
+                    imported.cameraFileName,
+                    capture.capturedObject
             );
         } catch (MtpCameraClient.ProbeException error) {
             throw new CaptureFlowException(
@@ -459,7 +590,12 @@ public final class MainActivity extends Activity {
         }
     }
 
-    private void finishSequenceWithError(int captureNumber, CaptureFlowException error) {
+    private void finishSequenceWithError(
+            int captureNumber,
+            CaptureFlowException error,
+            String manifestPath,
+            String manifestError
+    ) {
         cameraBusy = false;
         sequenceRunning = false;
         sequenceCancelRequested = false;
@@ -468,7 +604,62 @@ public final class MainActivity extends Activity {
         sequenceProgressView.setText("Sequência falhou na foto " + captureNumber + ": "
                 + error.getMessage());
         appendEvent("Sequência falhou na foto " + captureNumber + ": " + error.getMessage());
+        sequenceReport = manifestReport(
+                manifestPath,
+                "failed",
+                captureNumber - 1,
+                -1,
+                manifestError
+        );
         refreshProbe();
+    }
+
+    private void finishSequenceAfterManifestError(
+            int captureNumber,
+            CaptureFlowResult result,
+            String manifestPath,
+            IOException error
+    ) {
+        cameraBusy = false;
+        sequenceRunning = false;
+        sequenceCancelRequested = false;
+        if (result != null) {
+            captureReport = result.captureReport;
+            mtpReport = result.importReport;
+            showPreview(result.downloadedFile);
+        }
+        sequenceProgressView.setText("Manifesto falhou após a foto " + captureNumber + ": "
+                + error.getMessage());
+        appendEvent("Sequência interrompida por falha no manifesto: " + error.getMessage());
+        sequenceReport = manifestReport(
+                manifestPath,
+                "manifest-error",
+                captureNumber,
+                -1,
+                error.getMessage()
+        );
+        refreshProbe();
+    }
+
+    private static String manifestReport(
+            String path,
+            String status,
+            int completed,
+            int planned,
+            String error
+    ) {
+        StringBuilder report = new StringBuilder("MANIFESTO DA SEQUÊNCIA\n");
+        report.append("Status: ").append(status).append('\n');
+        report.append("Concluídas: ").append(completed);
+        if (planned >= 0) {
+            report.append('/').append(planned);
+        }
+        report.append('\n');
+        report.append("Arquivo: ").append(path).append('\n');
+        if (error != null) {
+            report.append("Erro: ").append(error).append('\n');
+        }
+        return report.toString();
     }
 
     private void runMtpProbe(boolean downloadLatest) {
@@ -650,17 +841,20 @@ public final class MainActivity extends Activity {
         final String importReport;
         final File downloadedFile;
         final String cameraFileName;
+        final CanonEosEventParser.CapturedObject capturedObject;
 
         CaptureFlowResult(
                 String captureReport,
                 String importReport,
                 File downloadedFile,
-                String cameraFileName
+                String cameraFileName,
+                CanonEosEventParser.CapturedObject capturedObject
         ) {
             this.captureReport = captureReport;
             this.importReport = importReport;
             this.downloadedFile = downloadedFile;
             this.cameraFileName = cameraFileName;
+            this.capturedObject = capturedObject;
         }
     }
 
