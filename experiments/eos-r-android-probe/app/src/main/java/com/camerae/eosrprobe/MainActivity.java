@@ -87,6 +87,11 @@ public final class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        ((TextView) findViewById(R.id.app_version)).setText(getString(
+                R.string.version_format,
+                BuildConfig.VERSION_NAME,
+                BuildConfig.VERSION_CODE
+        ));
         statusView = findViewById(R.id.status);
         logView = findViewById(R.id.log);
         authorizeButton = findViewById(R.id.authorize);

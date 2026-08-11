@@ -1,6 +1,8 @@
 <resources>
     <string name="app_name">Camerae EOS R Probe</string>
     <string name="title">Canon EOS R USB Probe</string>
+    <string name="version_placeholder">Versão do app</string>
+    <string name="version_format">Versão %1$s (build %2$d)</string>
     <string name="status_waiting">Conecte a Canon EOS R por USB.</string>
     <string name="status_permission_required">%1$s encontrada. Autorize o acesso USB.</string>
     <string name="status_ready">%1$s pronta para diagnóstico.</string>

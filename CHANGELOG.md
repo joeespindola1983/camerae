@@ -37,6 +37,8 @@ test distributions do not require an entry here.
   its exact handle through MTP.
 - Added bounded decoding for Canon `ObjectAddedEx64`, the event variant emitted
   by the EOS R for the newly captured CR3.
+- Added a permanently visible app version and build number to the Android probe
+  screen so hardware-test logs and installed APKs are easy to distinguish.
 
 ## [9.5.0] - 2026-08-04
 
