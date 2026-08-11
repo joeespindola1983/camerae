@@ -17,6 +17,7 @@ final class CanonEosRemoteClient {
     private static final int EOS_REMOTE_RELEASE_OFF = 0x9129;
     private static final long OBJECT_EVENT_TIMEOUT_MS = 15_000;
     private static final long OBJECT_EVENT_POLL_MS = 500;
+    private static final int READINESS_ATTEMPTS = 6;
 
     private CanonEosRemoteClient() {
     }
@@ -36,7 +37,7 @@ final class CanonEosRemoteClient {
         String failureMessage = null;
         Throwable failureCause = null;
         try {
-            transport = new PtpUsbTransport(usbManager, device, report);
+            transport = openReadyTransport(usbManager, device, report);
             transport.openSession(OPEN_SESSION_ID);
             transport.command("EOS_SetRemoteMode", EOS_SET_REMOTE_MODE, 1);
             transport.command("EOS_SetEventMode", EOS_SET_EVENT_MODE, 1);
@@ -104,6 +105,38 @@ final class CanonEosRemoteClient {
             throw new CaptureException(failureMessage, report.toString(), failureCause);
         }
         return new Result(report.toString(), captureCommandCompleted, capturedObject);
+    }
+
+    private static PtpUsbTransport openReadyTransport(
+            UsbManager usbManager,
+            UsbDevice device,
+            StringBuilder report
+    ) throws PtpUsbTransport.TransportException {
+        PtpUsbTransport.TransportException lastError = null;
+        for (int attempt = 1; attempt <= READINESS_ATTEMPTS; attempt++) {
+            PtpUsbTransport candidate = null;
+            try {
+                candidate = new PtpUsbTransport(usbManager, device, report);
+                candidate.probeDeviceInfoBeforeSession();
+                report.append("Readiness PTP: tentativa ").append(attempt).append(" aceita\n");
+                return candidate;
+            } catch (PtpUsbTransport.TransportException error) {
+                lastError = error;
+                report.append("Readiness PTP: tentativa ").append(attempt)
+                        .append(" falhou: ").append(error.getMessage()).append('\n');
+                if (candidate != null) {
+                    candidate.close();
+                }
+                if (attempt < READINESS_ATTEMPTS) {
+                    SystemClock.sleep(attempt * 500L);
+                }
+            }
+        }
+        throw new PtpUsbTransport.TransportException(
+                "câmera não ficou pronta após " + READINESS_ATTEMPTS
+                        + " tentativas; último erro: "
+                        + (lastError == null ? "desconhecido" : lastError.getMessage())
+        );
     }
 
     private static CanonEosEventParser.CapturedObject drainEvents(

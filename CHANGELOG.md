@@ -42,6 +42,9 @@ test distributions do not require an entry here.
 - Added the first Android astro-sequence controls for photo count, initial
   delay, start-to-start interval, progress, between-shot cancellation, and
   per-capture download.
+- Added a standard PTP `GetDeviceInfo` readiness handshake with bounded retry,
+  plus a capture allowlist that keeps unvalidated Canon models in import-only
+  mode.
 
 ## [9.5.0] - 2026-08-04
 

@@ -6,6 +6,7 @@
     <string name="status_waiting">Conecte a Canon EOS R por USB.</string>
     <string name="status_permission_required">%1$s encontrada. Autorize o acesso USB.</string>
     <string name="status_ready">%1$s pronta para diagnóstico.</string>
+    <string name="status_import_only">%1$s pronta somente para importação; captura ainda não validada.</string>
     <string name="status_usb_host_missing">Este Android não declara suporte a USB Host/OTG.</string>
     <string name="status_usb_service_missing">O serviço USB do Android não está disponível.</string>
     <string name="status_reading_camera">Operando a câmera via USB/PTP…</string>

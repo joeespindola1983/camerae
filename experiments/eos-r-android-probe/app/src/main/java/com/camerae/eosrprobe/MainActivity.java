@@ -38,6 +38,7 @@ public final class MainActivity extends Activity {
     static final String ACTION_USB_PERMISSION_RESULT =
             "com.camerae.eosrprobe.action.USB_PERMISSION_RESULT";
     private static final int CANON_VENDOR_ID = 0x04A9;
+    private static final int CANON_EOS_R_PRODUCT_ID = 0x32DA;
     private static final long NEW_IMAGE_TIMEOUT_MS = 30_000;
     private static final long PTP_TO_MTP_SETTLE_MS = 1_000;
 
@@ -202,16 +203,19 @@ public final class MainActivity extends Activity {
         } else if (selected == null) {
             statusView.setText(R.string.status_waiting);
         } else if (usbManager.hasPermission(selected)) {
-            statusView.setText(getString(R.string.status_ready, deviceLabel(selected)));
+            statusView.setText(isValidatedCaptureDevice(selected)
+                    ? getString(R.string.status_ready, deviceLabel(selected))
+                    : getString(R.string.status_import_only, deviceLabel(selected)));
         } else {
             statusView.setText(getString(R.string.status_permission_required, deviceLabel(selected)));
         }
         boolean cameraReady = selected != null && usbManager.hasPermission(selected);
+        boolean captureValidated = cameraReady && isValidatedCaptureDevice(selected);
         authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
-        captureButton.setEnabled(cameraReady && !cameraBusy);
+        captureButton.setEnabled(captureValidated && !cameraBusy);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
-        startSequenceButton.setEnabled(cameraReady && !cameraBusy);
+        startSequenceButton.setEnabled(captureValidated && !cameraBusy);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
         sequenceCountInput.setEnabled(!cameraBusy);
         sequenceDelayInput.setEnabled(!cameraBusy);
@@ -228,6 +232,8 @@ public final class MainActivity extends Activity {
         report.append("Android: ").append(Build.VERSION.RELEASE)
                 .append(" (API ").append(Build.VERSION.SDK_INT).append(")\n");
         report.append("USB Host declarado pelo aparelho: ").append(hasUsbHost).append("\n\n");
+        report.append("Captura validada para o dispositivo atual: ")
+                .append(captureValidated).append("\n\n");
         report.append("EVENTOS\n").append(eventLog).append('\n');
         report.append(UsbTopologyFormatter.describe(usbManager));
         report.append('\n').append(captureReport);
@@ -239,6 +245,11 @@ public final class MainActivity extends Activity {
         UsbDevice device = selectCamera();
         if (device == null || !usbManager.hasPermission(device)) {
             appendEvent("Captura não iniciada: câmera ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+        if (!isValidatedCaptureDevice(device)) {
+            appendEvent("Captura bloqueada: modelo Canon ainda não validado");
             refreshProbe();
             return;
         }
@@ -277,6 +288,11 @@ public final class MainActivity extends Activity {
         UsbDevice device = selectCamera();
         if (device == null || !usbManager.hasPermission(device)) {
             appendEvent("Sequência não iniciada: câmera ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+        if (!isValidatedCaptureDevice(device)) {
+            appendEvent("Sequência bloqueada: modelo Canon ainda não validado");
             refreshProbe();
             return;
         }
@@ -621,6 +637,12 @@ public final class MainActivity extends Activity {
     private static String deviceLabel(UsbDevice device) {
         return String.format(Locale.US, "%s [VID=0x%04X PID=0x%04X]",
                 device.getDeviceName(), device.getVendorId(), device.getProductId());
+    }
+
+    private static boolean isValidatedCaptureDevice(UsbDevice device) {
+        return device != null
+                && device.getVendorId() == CANON_VENDOR_ID
+                && device.getProductId() == CANON_EOS_R_PRODUCT_ID;
     }
 
     private static final class CaptureFlowResult {

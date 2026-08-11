@@ -67,6 +67,19 @@ final class PtpUsbTransport implements AutoCloseable {
         nextTransactionId = 1;
     }
 
+    void probeDeviceInfoBeforeSession() throws TransportException {
+        if (sessionOpen) {
+            throw new TransportException("GetDeviceInfo de readiness exige sessão fechada");
+        }
+        byte[] deviceInfo = commandWithData("GetDeviceInfo", 0x1001);
+        nextTransactionId = 0;
+        if (deviceInfo.length < 12) {
+            throw new TransportException("GetDeviceInfo retornou somente "
+                    + deviceInfo.length + " bytes");
+        }
+        append("Readiness PTP confirmada por GetDeviceInfo: %d bytes", deviceInfo.length);
+    }
+
     void command(String name, int operationCode, int... parameters)
             throws TransportException {
         int transactionId = nextTransactionId++;

@@ -23,11 +23,13 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O APK `0.4.1` conseguiu importar automaticamente `5S8A9568.CR3` com os 40.316.045 bytes exatos, mas somente após duas falhas `MTP → PTP` e reconexões físicas.
 - O teste `0.4.2` confirmou transporte estável e revelou que a EOS R emite `0xC1A7 ObjectAddedEx64` cerca de 3,5 s após o disparo, em vez da variante `0xC181` inicialmente implementada.
 - O APK `0.4.4` validou o fluxo definitivo: `ObjectAddedEx64` em 3,021 s, importação MTP em uma tentativa e 40.415.295 bytes exatos de `5S8A9571.CR3`.
-- APK `0.5.0` implementado: primeira interface astro com quantidade, atraso inicial, intervalo entre inícios, progresso, cancelamento entre fotos e download após cada captura.
-- Build debug `0.5.0` verificado com sucesso em 11 de agosto de 2026.
-- A sequência de cinco capturas ainda aguarda validação física; alteração de ISO, shutter e white balance não foi implementada.
+- O primeiro teste do `0.5.0` iniciou 3,9 s após o attach e encontrou o endpoint PTP ainda indisponível antes de `OpenSession`.
+- APK `0.5.1` implementado: usa `GetDeviceInfo` padrão como handshake de readiness com retry limitado e habilita captura somente para o VID:PID validado da EOS R.
+- Build debug `0.5.1` verificado com sucesso em 11 de agosto de 2026.
+- A sequência de cinco capturas ainda aguarda validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
+A política de suporte por modelo está em [COMPATIBILITY.md](COMPATIBILITY.md).
 
 ## Abrir e compilar
 
@@ -55,7 +57,7 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 10. Confirme no log o nome/handle e os bytes de cada etapa; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
 11. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.5.0`, cada foto abre diretamente a sessão PTP Canon, dispara e consulta `EOS_GetEvent` por até 15 segundos até receber `ObjectAddedEx` ou `ObjectAddedEx64`. Depois de fechar PTP, o app abre MTP e busca diretamente esse handle por até 30 segundos. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. O app não altera parâmetros nem o destino de captura.
+No APK `0.5.1`, cada foto primeiro confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. O app não altera parâmetros nem o destino de captura.
 
 ## Preparação do teste físico
 
