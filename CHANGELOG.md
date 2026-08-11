@@ -22,8 +22,8 @@ test distributions do not require an entry here.
 ### Added
 
 - Added an experimental Android EOS R USB probe with physically validated CR3
-  import and a first low-level Canon PTP remote-shutter sequence for hardware
-  validation.
+  import and Canon PTP remote shutter, plus an automatic capture-to-new-handle
+  download flow for hardware validation.
 
 ### Changed
 

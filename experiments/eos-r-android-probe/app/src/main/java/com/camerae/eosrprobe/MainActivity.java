@@ -35,6 +35,7 @@ public final class MainActivity extends Activity {
     static final String ACTION_USB_PERMISSION_RESULT =
             "com.camerae.eosrprobe.action.USB_PERMISSION_RESULT";
     private static final int CANON_VENDOR_ID = 0x04A9;
+    private static final long NEW_IMAGE_TIMEOUT_MS = 30_000;
 
     private final StringBuilder eventLog = new StringBuilder();
     private final ExecutorService cameraExecutor = Executors.newSingleThreadExecutor();
@@ -199,24 +200,61 @@ public final class MainActivity extends Activity {
         }
 
         cameraBusy = true;
-        appendEvent("Iniciando disparo remoto único; use foco manual na lente/câmera");
+        appendEvent("Iniciando captura e importação automática; use foco manual");
         refreshProbe();
+        File destination = downloadDirectory();
         cameraExecutor.execute(() -> {
+            MtpCameraClient.ImageSnapshot baseline;
             try {
-                CanonEosRemoteClient.Result result = CanonEosRemoteClient.capture(usbManager, device);
+                baseline = MtpCameraClient.snapshotImages(usbManager, device);
+            } catch (MtpCameraClient.ProbeException error) {
                 runOnUiThread(() -> {
                     cameraBusy = false;
-                    captureReport = result.report;
-                    appendEvent(result.captureCommandCompleted
-                            ? "Sequência de disparo aceita; aguarde a gravação no cartão"
-                            : "Sequência de disparo terminou sem confirmação");
+                    mtpReport = "BASELINE MTP\nERRO: " + error.getMessage() + "\n";
+                    appendEvent("Captura cancelada: não foi possível ler o baseline MTP");
                     refreshProbe();
                 });
+                return;
+            }
+
+            CanonEosRemoteClient.Result capture;
+            try {
+                capture = CanonEosRemoteClient.capture(usbManager, device);
             } catch (CanonEosRemoteClient.CaptureException error) {
                 runOnUiThread(() -> {
                     cameraBusy = false;
                     captureReport = error.report;
                     appendEvent("Captura remota falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+                return;
+            }
+
+            try {
+                MtpCameraClient.AutoImportResult imported =
+                        MtpCameraClient.waitForNewImageAndDownload(
+                                usbManager,
+                                device,
+                                baseline,
+                                destination,
+                                NEW_IMAGE_TIMEOUT_MS
+                        );
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    captureReport = capture.report;
+                    mtpReport = imported.report;
+                    appendEvent("Captura e download concluídos: " + imported.cameraFileName);
+                    showPreview(imported.downloadedFile);
+                    refreshProbe();
+                });
+            } catch (MtpCameraClient.ProbeException error) {
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    captureReport = capture.report;
+                    mtpReport = "IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\nERRO: "
+                            + error.getMessage() + "\n";
+                    appendEvent("A câmera disparou, mas a importação automática falhou: "
+                            + error.getMessage());
                     refreshProbe();
                 });
             }

@@ -19,9 +19,10 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - Filtro para o vendor ID USB da Canon (`0x04A9`) configurado.
 - Marco M1 validado na EOS R: detecção, permissão e topologia USB.
 - Marco M2 validado na EOS R: sessão MTP/PTP, inventário do cartão e download de um CR3 de 32.312.487 bytes.
-- Marco M3 implementado para teste físico: transporte PTP USB mínimo e disparo remoto único com comandos Canon EOS.
-- Build debug `0.3.0` verificado com sucesso em 11 de agosto de 2026.
-- Captura remota ainda aguarda validação física; alteração de parâmetros não foi implementada.
+- Marco M3 validado para um disparo: a sequência Canon EOS criou `5S8A9566.CR3` e o Android importou os 40.307.117 bytes.
+- APK `0.4.0` implementado: baseline do cartão, disparo, espera por um handle novo e download automático do arquivo exato.
+- Build debug `0.4.0` verificado com sucesso em 11 de agosto de 2026.
+- O fluxo automático e as cinco capturas consecutivas do aceite M3 ainda aguardam validação física; alteração de parâmetros não foi implementada.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
 
@@ -45,13 +46,12 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 4. Toque em `Autorizar USB` caso a permissão ainda não esteja concedida.
 5. Confirme que o estado mostra a câmera pronta para diagnóstico.
 6. Coloque a lente/câmera em foco manual (`MF`).
-7. Toque uma vez em `Disparar teste (MF)` e aguarde a câmera terminar de gravar no cartão.
-8. Confirme visualmente que o contador/atividade da câmera indica uma nova foto.
-9. Toque em `Ler câmera` e confira se um novo arquivo aparece no inventário.
-10. Toque em `Baixar última` e confirme o caminho local registrado no log.
-11. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
+7. Toque uma vez em `Capturar + baixar (MF)` e aguarde o fluxo terminar.
+8. Confirme no log a sequência de disparo, o `Novo handle` e `Bytes gravados`.
+9. `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
+10. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.3.0`, o botão de disparo abre uma sessão PTP própria, ativa os modos remotos Canon e executa meio-pressionamento, pressionamento completo e ambas as liberações. O app não altera o destino de captura: espera que a configuração atual continue salvando no cartão. Depois de fechar essa sessão, `Ler câmera` e `Baixar última` reutilizam a integração MTP já validada.
+No APK `0.4.0`, o botão integrado primeiro registra todos os handles MTP existentes, fecha essa sessão, dispara pela sessão PTP Canon e então consulta o cartão a cada 500 ms por até 30 segundos. Apenas um handle ausente do baseline pode ser importado, com preferência por CR3, e o tamanho final precisa coincidir com o tamanho informado pela câmera. O app não altera o destino de captura: espera que a configuração atual continue salvando no cartão.
 
 ## Preparação do teste físico
 

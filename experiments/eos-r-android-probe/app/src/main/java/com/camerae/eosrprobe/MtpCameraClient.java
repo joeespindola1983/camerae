@@ -8,6 +8,7 @@ import android.mtp.MtpDevice;
 import android.mtp.MtpDeviceInfo;
 import android.mtp.MtpObjectInfo;
 import android.mtp.MtpStorageInfo;
+import android.os.SystemClock;
 
 import java.io.File;
 import java.text.SimpleDateFormat;
@@ -24,6 +25,7 @@ final class MtpCameraClient {
     private static final int MAX_OBJECTS = 10_000;
     private static final int MAX_FOLDERS = 1_000;
     private static final int MAX_REPORTED_FILES = 30;
+    private static final long NEW_IMAGE_POLL_INTERVAL_MS = 500;
 
     private MtpCameraClient() {
     }
@@ -106,6 +108,127 @@ final class MtpCameraClient {
                 connection.close();
             }
         }
+    }
+
+    static ImageSnapshot snapshotImages(
+            UsbManager usbManager,
+            UsbDevice usbDevice
+    ) throws ProbeException {
+        UsbDeviceConnection connection = null;
+        MtpDevice mtpDevice = null;
+        try {
+            connection = usbManager.openDevice(usbDevice);
+            if (connection == null) {
+                throw new ProbeException("UsbManager.openDevice retornou null no baseline");
+            }
+            mtpDevice = new MtpDevice(usbDevice);
+            if (!mtpDevice.open(connection)) {
+                throw new ProbeException("MtpDevice.open falhou no baseline");
+            }
+            List<Candidate> candidates = scanAllImages(mtpDevice);
+            Set<Integer> handles = new HashSet<>();
+            for (Candidate candidate : candidates) {
+                handles.add(candidate.handle);
+            }
+            Candidate latest = candidates.isEmpty() ? null : candidates.get(0);
+            return new ImageSnapshot(
+                    handles,
+                    latest == null ? "<cartão sem imagens>" : latest.name,
+                    latest == null ? 0 : latest.handle
+            );
+        } catch (ProbeException error) {
+            throw error;
+        } catch (RuntimeException error) {
+            throw new ProbeException(error.getClass().getSimpleName() + ": "
+                    + error.getMessage(), error);
+        } finally {
+            if (mtpDevice != null) {
+                mtpDevice.close();
+            }
+            if (connection != null) {
+                connection.close();
+            }
+        }
+    }
+
+    static AutoImportResult waitForNewImageAndDownload(
+            UsbManager usbManager,
+            UsbDevice usbDevice,
+            ImageSnapshot baseline,
+            File downloadDirectory,
+            long timeoutMs
+    ) throws ProbeException {
+        long startedAt = SystemClock.elapsedRealtime();
+        long deadline = startedAt + timeoutMs;
+        int attempts = 0;
+        String lastTransientError = null;
+
+        while (SystemClock.elapsedRealtime() <= deadline) {
+            attempts++;
+            UsbDeviceConnection connection = null;
+            MtpDevice mtpDevice = null;
+            try {
+                connection = usbManager.openDevice(usbDevice);
+                if (connection == null) {
+                    lastTransientError = "UsbManager.openDevice retornou null";
+                } else {
+                    mtpDevice = new MtpDevice(usbDevice);
+                    if (!mtpDevice.open(connection)) {
+                        lastTransientError = "MtpDevice.open falhou enquanto a câmera gravava";
+                    } else {
+                        List<Candidate> candidates = scanAllImages(mtpDevice);
+                        Candidate fresh = firstNewCandidate(candidates, baseline.handles);
+                        if (fresh != null) {
+                            File downloaded = importObject(mtpDevice, fresh, downloadDirectory);
+                            long elapsed = SystemClock.elapsedRealtime() - startedAt;
+                            StringBuilder report = new StringBuilder();
+                            report.append("IMPORTAÇÃO AUTOMÁTICA APÓS CAPTURA\n");
+                            report.append("Baseline: ").append(baseline.handles.size())
+                                    .append(" imagens; última=").append(baseline.latestName)
+                                    .append(" handle=").append(baseline.latestHandle).append('\n');
+                            report.append("Tentativas MTP: ").append(attempts).append('\n');
+                            report.append("Tempo até importação: ").append(elapsed).append(" ms\n");
+                            report.append("Novo handle: ").append(fresh.handle).append('\n');
+                            report.append("Origem: ").append(fresh.name).append('\n');
+                            report.append("Tamanho esperado: ").append(fresh.size).append(" bytes\n");
+                            report.append("Destino: ").append(downloaded.getAbsolutePath()).append('\n');
+                            report.append("Bytes gravados: ").append(downloaded.length()).append('\n');
+                            return new AutoImportResult(report.toString(), downloaded, fresh.name);
+                        }
+                        lastTransientError = "nenhum handle novo visível";
+                    }
+                }
+            } catch (RuntimeException | ProbeException error) {
+                lastTransientError = error.getClass().getSimpleName() + ": " + error.getMessage();
+            } finally {
+                if (mtpDevice != null) {
+                    mtpDevice.close();
+                }
+                if (connection != null) {
+                    connection.close();
+                }
+            }
+
+            long remaining = deadline - SystemClock.elapsedRealtime();
+            if (remaining > 0) {
+                SystemClock.sleep(Math.min(NEW_IMAGE_POLL_INTERVAL_MS, remaining));
+            }
+        }
+        throw new ProbeException("Timeout aguardando nova imagem após " + timeoutMs
+                + " ms; último estado: " + lastTransientError);
+    }
+
+    private static List<Candidate> scanAllImages(MtpDevice mtpDevice) throws ProbeException {
+        int[] storageIds = mtpDevice.getStorageIds();
+        if (storageIds == null) {
+            throw new ProbeException("A câmera não retornou a lista de storages");
+        }
+        List<Candidate> candidates = new ArrayList<>();
+        for (int storageId : storageIds) {
+            candidates.addAll(scanStorage(mtpDevice, storageId).candidates);
+        }
+        candidates.sort(Candidate.NEWEST_FIRST);
+        return candidates;
     }
 
     private static void appendDeviceInfo(StringBuilder report, MtpDeviceInfo info)
@@ -253,6 +376,24 @@ final class MtpCameraClient {
         return candidates.isEmpty() ? null : candidates.get(0);
     }
 
+    private static Candidate firstNewCandidate(
+            List<Candidate> candidates,
+            Set<Integer> baselineHandles
+    ) {
+        for (Candidate candidate : candidates) {
+            if (!baselineHandles.contains(candidate.handle)
+                    && candidate.name.toUpperCase(Locale.US).endsWith(".CR3")) {
+                return candidate;
+            }
+        }
+        for (Candidate candidate : candidates) {
+            if (!baselineHandles.contains(candidate.handle)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
     private static File importObject(
             MtpDevice device,
             Candidate candidate,
@@ -268,6 +409,10 @@ final class MtpCameraClient {
         }
         if (!destination.isFile() || destination.length() == 0) {
             throw new ProbeException("O download terminou sem gerar um arquivo válido");
+        }
+        if (candidate.size > 0 && destination.length() != candidate.size) {
+            throw new ProbeException("Arquivo importado incompleto: " + destination.length()
+                    + "/" + candidate.size + " bytes em " + destination.getAbsolutePath());
         }
         return destination;
     }
@@ -379,6 +524,30 @@ final class MtpCameraClient {
             this.downloadedFile = downloadedFile;
             this.objectCount = objectCount;
             this.imageCount = imageCount;
+        }
+    }
+
+    static final class ImageSnapshot {
+        final Set<Integer> handles;
+        final String latestName;
+        final int latestHandle;
+
+        ImageSnapshot(Set<Integer> handles, String latestName, int latestHandle) {
+            this.handles = handles;
+            this.latestName = latestName;
+            this.latestHandle = latestHandle;
+        }
+    }
+
+    static final class AutoImportResult {
+        final String report;
+        final File downloadedFile;
+        final String cameraFileName;
+
+        AutoImportResult(String report, File downloadedFile, String cameraFileName) {
+            this.report = report;
+            this.downloadedFile = downloadedFile;
+            this.cameraFileName = cameraFileName;
         }
     }
 

@@ -10,7 +10,7 @@
     <string name="refresh">Varrer</string>
     <string name="authorize_usb">Autorizar USB</string>
     <string name="inspect_mtp">Ler câmera</string>
-    <string name="capture_test">Disparar teste (MF)</string>
+    <string name="capture_test">Capturar + baixar (MF)</string>
     <string name="download_latest">Baixar última</string>
     <string name="copy_log">Copiar log</string>
     <string name="share_log">Compartilhar log</string>
