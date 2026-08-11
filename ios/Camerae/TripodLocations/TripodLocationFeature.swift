@@ -10,14 +10,15 @@ enum CameraeHomeDestination: Hashable { case calendar, positions }
 
 enum TripodPositionsCapability: Hashable, Sendable {
     case returnHome, create, switchMapList, selectMapLocation, showLinkedProjects, filterProjects, openProjectSummary
-    case filterVisibleLocations, showSelectionState, openCluster, expandOverlappingCluster
+    case filterVisibleLocations, showSelectionState, openCluster, expandOverlappingCluster, synchronizeMapList
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [
         .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
         .filterProjects, .openProjectSummary, .filterVisibleLocations,
-        .showSelectionState, .openCluster, .expandOverlappingCluster, .returnHome
+        .showSelectionState, .openCluster, .expandOverlappingCluster,
+        .synchronizeMapList, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -175,6 +176,16 @@ enum TripodMapClustering {
             )
         }
         .sorted { $0.id < $1.id }
+    }
+}
+
+enum TripodMapPresentation {
+    static func locations(
+        representedBy clusters: [TripodMapCluster],
+        orderedFrom locations: [TripodLocation]
+    ) -> [TripodLocation] {
+        let representedIDs = Set(clusters.flatMap(\.locations).map(\.id))
+        return locations.filter { representedIDs.contains($0.id) }
     }
 }
 
@@ -383,8 +394,9 @@ struct TripodPositionsView: View {
     @State private var isCreating = false
     @State private var mapPosition = MapCameraPosition.automatic
     @State private var visibleMapRegion: TripodMapCameraRegion?
-    @State private var hasUserAdjustedMap = false
     @State private var expandedClusterLocationIDs: Set<UUID> = []
+    @State private var cameraUpdateRevision = UUID()
+    @State private var protectedExpansionCameraTarget: TripodMapCameraRegion?
     @State private var filter = CalendarProjectFilter.all
 
     var body: some View {
@@ -402,11 +414,11 @@ struct TripodPositionsView: View {
                         HStack {
                             CameraeNextSectionLabel(title: "Posições visíveis", theme: theme)
                             Spacer()
-                            Text("\(visibleLocations.count)")
+                            Text("\(displayedMapLocations.count)")
                                 .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
                                 .foregroundStyle(theme.muted)
                         }
-                        ForEach(visibleLocations) { location in
+                        ForEach(displayedMapLocations) { location in
                             Button { toggleSelection(location.id) } label: {
                                 TripodLocationCatalogRow(
                                     location: location,
@@ -522,15 +534,8 @@ struct TripodPositionsView: View {
                 MapScaleView()
             }
             .onMapCameraChange(frequency: .onEnd) { context in
-                guard hasUserAdjustedMap else { return }
-                updateVisibleRegion(context.region)
+                scheduleVisibleRegionUpdate(context.region)
             }
-            .simultaneousGesture(
-                DragGesture(minimumDistance: 1).onChanged { _ in hasUserAdjustedMap = true }
-            )
-            .simultaneousGesture(
-                MagnifyGesture().onChanged { _ in hasUserAdjustedMap = true }
-            )
 
             if locationsWithGPS.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -616,6 +621,13 @@ struct TripodPositionsView: View {
             locations: visibleLocations,
             region: region,
             viewport: .init(width: 353, height: 270)
+        )
+    }
+
+    private var displayedMapLocations: [TripodLocation] {
+        TripodMapPresentation.locations(
+            representedBy: mapClusters,
+            orderedFrom: store.snapshot.locations
         )
     }
 
@@ -728,8 +740,9 @@ struct TripodPositionsView: View {
     }
 
     private func fitMapToLocations() {
-        hasUserAdjustedMap = false
+        cameraUpdateRevision = UUID()
         expandedClusterLocationIDs = []
+        protectedExpansionCameraTarget = nil
         guard let fitted = TripodMapCameraFit.region(for: store.snapshot.locations) else {
             mapPosition = .automatic
             visibleMapRegion = nil
@@ -763,7 +776,8 @@ struct TripodPositionsView: View {
         selectedLocationID = TripodLocationSelection.afterOpeningCluster
         expandedClusterLocationIDs = TripodClusterExpansion.members(afterOpening: cluster.locations)
         guard let fitted = TripodMapClusterZoom.region(for: cluster.locations) else { return }
-        hasUserAdjustedMap = false
+        cameraUpdateRevision = UUID()
+        protectedExpansionCameraTarget = fitted
         visibleMapRegion = fitted
         mapPosition = .region(MKCoordinateRegion(
             center: CLLocationCoordinate2D(
@@ -789,20 +803,43 @@ struct TripodPositionsView: View {
             && memberIDs.isSubset(of: expandedClusterLocationIDs)
     }
 
+    private func scheduleVisibleRegionUpdate(_ region: MKCoordinateRegion) {
+        let revision = UUID()
+        cameraUpdateRevision = revision
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(160))
+            guard cameraUpdateRevision == revision else { return }
+            updateVisibleRegion(region)
+        }
+    }
+
     private func updateVisibleRegion(_ region: MKCoordinateRegion) {
-        expandedClusterLocationIDs = []
         let visible = TripodMapCameraRegion(
             centerLatitude: region.center.latitude,
             centerLongitude: region.center.longitude,
             latitudeDelta: region.span.latitudeDelta,
             longitudeDelta: region.span.longitudeDelta
         )
+        if protectedExpansionCameraTarget.map({ !cameraRegion($0, matches: visible) }) ?? true {
+            expandedClusterLocationIDs = []
+        }
+        protectedExpansionCameraTarget = nil
         visibleMapRegion = visible
         if let selectedLocationID,
            !TripodMapViewport.locations(in: visible, from: store.snapshot.locations)
             .contains(where: { $0.id == selectedLocationID }) {
             self.selectedLocationID = nil
         }
+    }
+
+
+    private func cameraRegion(_ target: TripodMapCameraRegion, matches actual: TripodMapCameraRegion) -> Bool {
+        let latitudeTolerance = max(target.latitudeDelta, actual.latitudeDelta) * 0.25
+        let longitudeTolerance = max(target.longitudeDelta, actual.longitudeDelta) * 0.25
+        return abs(target.centerLatitude - actual.centerLatitude) <= latitudeTolerance
+            && abs(target.centerLongitude - actual.centerLongitude) <= longitudeTolerance
+            && actual.latitudeDelta <= target.latitudeDelta * 2
+            && actual.longitudeDelta <= target.longitudeDelta * 2
     }
 
     private func selectedLocationBadge(_ location: TripodLocation) -> some View {

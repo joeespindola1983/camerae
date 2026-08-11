@@ -55,6 +55,9 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Tripod list now mirrors every location represented by the rendered map,
+  including cluster members and spiderfy markers, after stabilized zoom-in,
+  zoom-out, drag, and programmatic cluster camera updates.
 - Tripod Positions now opens with no implicit selection, allows a second tap
   to deselect a marker or row, and ignores transient MapKit camera updates
   during the initial fit so every fitted position remains available in List.

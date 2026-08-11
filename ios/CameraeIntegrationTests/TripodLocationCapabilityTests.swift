@@ -9,7 +9,8 @@ struct TripodLocationCapabilityTests {
         #expect(TripodPositionsCapabilityPolicy.catalog == [
             .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
             .filterProjects, .openProjectSummary, .filterVisibleLocations,
-            .showSelectionState, .openCluster, .expandOverlappingCluster, .returnHome
+            .showSelectionState, .openCluster, .expandOverlappingCluster,
+            .synchronizeMapList, .returnHome
         ])
     }
 
@@ -165,6 +166,25 @@ struct TripodLocationCapabilityTests {
         #expect(offsets.count == 12)
         #expect(Set(offsets).count == 12)
         #expect((offsets.map(\.radius).max() ?? 0) > (offsets.map(\.radius).min() ?? 0))
+    }
+
+    @Test("list contains every tripod represented by markers, clusters, and spiderfy")
+    func mapListSynchronization() {
+        let first = TripodLocation.fixture(id: UUID(), latitude: -23.5500, longitude: -46.6300)
+        let second = TripodLocation.fixture(id: UUID(), latitude: -23.5500, longitude: -46.6300)
+        let third = TripodLocation.fixture(id: UUID(), latitude: -23.5600, longitude: -46.6400)
+        let clusters = [
+            TripodMapCluster(locations: [first, second], latitude: -23.5500, longitude: -46.6300),
+            TripodMapCluster(locations: [third], latitude: -23.5600, longitude: -46.6400)
+        ]
+
+        let listed = TripodMapPresentation.locations(
+            representedBy: clusters,
+            orderedFrom: [third, first, second]
+        )
+
+        #expect(listed == [third, first, second])
+        #expect(Set(listed.map(\.id)) == Set(clusters.flatMap(\.locations).map(\.id)))
     }
 
     @Test("legacy positions recover GPS from the newest captured session")
