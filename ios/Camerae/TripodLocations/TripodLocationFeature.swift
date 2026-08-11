@@ -11,6 +11,7 @@ enum CameraeHomeDestination: Hashable { case calendar, positions }
 enum TripodPositionsCapability: Hashable, Sendable {
     case returnHome, create, switchMapList, selectMapLocation, showLinkedProjects, filterProjects, openProjectSummary
     case filterVisibleLocations, showSelectionState, openCluster, expandOverlappingCluster, synchronizeMapList
+    case clearSelectionFromMapBackground, clearProjectOnZoomOut
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
@@ -18,7 +19,8 @@ enum TripodPositionsCapabilityPolicy {
         .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
         .filterProjects, .openProjectSummary, .filterVisibleLocations,
         .showSelectionState, .openCluster, .expandOverlappingCluster,
-        .synchronizeMapList, .returnHome
+        .synchronizeMapList, .clearSelectionFromMapBackground,
+        .clearProjectOnZoomOut, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -399,6 +401,7 @@ struct TripodPositionsView: View {
     @State private var protectedExpansionCameraTarget: TripodMapCameraRegion?
     @State private var filter = CalendarProjectFilter.all
     @State private var selectedProjectContextID: UUID?
+    @State private var projectDestination: CalendarProjectAgendaItem?
 
     var body: some View {
         ScrollView {
@@ -439,6 +442,7 @@ struct TripodPositionsView: View {
                     items: visibleProjectItems,
                     filter: $filter,
                     selectedProjectID: $selectedProjectContextID,
+                    destination: $projectDestination,
                     theme: theme
                 )
             }
@@ -452,7 +456,7 @@ struct TripodPositionsView: View {
         .tint(theme.accent)
         .preferredColorScheme(.light)
         .navigationDestination(for: TripodLocation.self) { TripodLocationDetailView(locationID: $0.id) }
-        .navigationDestination(for: CalendarProjectAgendaItem.self) { item in
+        .navigationDestination(item: $projectDestination) { item in
             CalendarProjectSummaryView(
                 item: item,
                 history: agendaItems.filter { $0.projectID == item.projectID }.sorted { $0.date > $1.date }
@@ -513,28 +517,33 @@ struct TripodPositionsView: View {
 
     private var mapCard: some View {
         ZStack(alignment: .bottomLeading) {
-            Map(position: $mapPosition) {
-                ForEach(mapClusters) { cluster in
-                    Annotation(
-                        cluster.count == 1 ? cluster.locations[0].name : "\(cluster.count) posições",
-                        coordinate: CLLocationCoordinate2D(
-                            latitude: cluster.latitude,
-                            longitude: cluster.longitude
-                        ),
-                        anchor: .center
-                    ) {
-                        clusterContent(cluster)
+            MapReader { proxy in
+                Map(position: $mapPosition) {
+                    ForEach(mapClusters) { cluster in
+                        Annotation(
+                            cluster.count == 1 ? cluster.locations[0].name : "\(cluster.count) posições",
+                            coordinate: CLLocationCoordinate2D(
+                                latitude: cluster.latitude,
+                                longitude: cluster.longitude
+                            ),
+                            anchor: .center
+                        ) {
+                            clusterContent(cluster)
+                        }
+                        .annotationTitles(.hidden)
                     }
-                    .annotationTitles(.hidden)
                 }
-            }
-            .mapStyle(.standard(elevation: .flat))
-            .mapControls {
-                MapCompass()
-                MapScaleView()
-            }
-            .onMapCameraChange(frequency: .onEnd) { context in
-                scheduleVisibleRegionUpdate(context.region)
+                .mapStyle(.standard(elevation: .flat))
+                .mapControls {
+                    MapCompass()
+                    MapScaleView()
+                }
+                .onTapGesture { point in
+                    handleMapTap(at: point, proxy: proxy)
+                }
+                .onMapCameraChange(frequency: .onEnd) { context in
+                    scheduleVisibleRegionUpdate(context.region)
+                }
             }
 
             if locationsWithGPS.isEmpty {
@@ -822,6 +831,11 @@ struct TripodPositionsView: View {
             latitudeDelta: region.span.latitudeDelta,
             longitudeDelta: region.span.longitudeDelta
         )
+        selectedProjectContextID = TripodProjectSelectionPolicy.afterCameraChange(
+            selectedProjectContextID,
+            from: visibleMapRegion,
+            to: visible
+        )
         if protectedExpansionCameraTarget.map({ !cameraRegion($0, matches: visible) }) ?? true {
             expandedClusterLocationIDs = []
         }
@@ -834,6 +848,28 @@ struct TripodPositionsView: View {
         }
     }
 
+    private func handleMapTap(at point: CGPoint, proxy: MapProxy) {
+        let hitMarker = mapClusters.contains { cluster in
+            let coordinate = CLLocationCoordinate2D(
+                latitude: cluster.latitude,
+                longitude: cluster.longitude
+            )
+            guard let markerPoint = proxy.convert(coordinate, to: .local) else { return false }
+            let radius: CGFloat
+            if isExpanded(cluster) {
+                radius = CGFloat(
+                    (TripodClusterExpansion.offsets(count: cluster.count).map(\.radius).max() ?? 0)
+                        + TripodClusterExpansion.markerDiameter / 2
+                )
+            } else {
+                radius = cluster.count > 1 ? 24 : 30
+            }
+            return hypot(point.x - markerPoint.x, point.y - markerPoint.y) <= radius
+        }
+        guard !hitMarker else { return }
+        selectedLocationID = nil
+        selectedProjectContextID = TripodProjectSelectionPolicy.afterMapBackgroundTap
+    }
 
     private func cameraRegion(_ target: TripodMapCameraRegion, matches actual: TripodMapCameraRegion) -> Bool {
         let latitudeTolerance = max(target.latitudeDelta, actual.latitudeDelta) * 0.25
@@ -1202,6 +1238,7 @@ struct CaptureCalendarView: View {
     @State private var visibleMonth = Date()
     @State private var filter = CalendarProjectFilter.all
     @State private var selectedProjectContextID: UUID?
+    @State private var projectDestination: CalendarProjectAgendaItem?
 
     var body: some View {
         ScrollView {
@@ -1227,6 +1264,7 @@ struct CaptureCalendarView: View {
                     items: selectedItems,
                     filter: $filter,
                     selectedProjectID: $selectedProjectContextID,
+                    destination: $projectDestination,
                     theme: theme
                 )
             }
@@ -1239,7 +1277,7 @@ struct CaptureCalendarView: View {
         .foregroundStyle(theme.text)
         .tint(theme.accent)
         .preferredColorScheme(.light)
-        .navigationDestination(for: CalendarProjectAgendaItem.self) { item in
+        .navigationDestination(item: $projectDestination) { item in
             CalendarProjectSummaryView(
                 item: item,
                 history: agendaItems.filter { $0.projectID == item.projectID }.sorted { $0.date > $1.date }
@@ -1260,11 +1298,14 @@ struct CaptureCalendarView: View {
 }
 
 enum ProjectContextCapability: Hashable, Sendable {
+    case clearProjectOnMapBackground, clearProjectOnZoomOut
     case filterProjects, highlightProject, preserveVisibleProjects, openProjectSummary, openProject, scheduleRecapture
 }
 
 enum ProjectContextCapabilityPolicy {
     static let list: Set<ProjectContextCapability> = [
+        .clearProjectOnMapBackground,
+        .clearProjectOnZoomOut,
         .filterProjects,
         .highlightProject,
         .preserveVisibleProjects,
@@ -1358,6 +1399,23 @@ enum ProjectContextSelection {
 
     static func isSelected(_ item: CalendarProjectAgendaItem, selectedID: UUID?) -> Bool {
         id(for: item) == selectedID
+    }
+}
+
+enum TripodProjectSelectionPolicy {
+    private static let zoomOutTolerance = 1.03
+
+    static var afterMapBackgroundTap: UUID? { nil }
+
+    static func afterCameraChange(
+        _ selectedProjectID: UUID?,
+        from previous: TripodMapCameraRegion?,
+        to current: TripodMapCameraRegion
+    ) -> UUID? {
+        guard let previous else { return selectedProjectID }
+        let zoomedOut = current.latitudeDelta > previous.latitudeDelta * zoomOutTolerance
+            && current.longitudeDelta > previous.longitudeDelta * zoomOutTolerance
+        return zoomedOut ? nil : selectedProjectID
     }
 }
 
@@ -1461,6 +1519,7 @@ private struct ProjectContextListSection: View {
     let items: [CalendarProjectAgendaItem]
     @Binding var filter: CalendarProjectFilter
     @Binding var selectedProjectID: UUID?
+    @Binding var destination: CalendarProjectAgendaItem?
     let theme: CameraeNextTheme
 
     private var filteredItems: [CalendarProjectAgendaItem] { filter.apply(to: items) }
@@ -1493,16 +1552,16 @@ private struct ProjectContextListSection: View {
                     .foregroundStyle(theme.text)
             } else {
                 ForEach(filteredItems) { item in
-                    NavigationLink(value: item) {
+                    Button {
+                        selectedProjectID = ProjectContextSelection.id(for: item)
+                        destination = item
+                    } label: {
                         CalendarProjectAgendaRow(
                             item: item,
                             isSelected: ProjectContextSelection.isSelected(item, selectedID: selectedProjectID),
                             theme: theme
                         )
                     }
-                    .simultaneousGesture(TapGesture().onEnded {
-                        selectedProjectID = ProjectContextSelection.id(for: item)
-                    })
                     .buttonStyle(.plain)
                 }
             }

@@ -59,6 +59,9 @@ test distributions do not require an entry here.
   represented in the current map viewport during initial fit, drag, zoom,
   cluster expansion, and spiderfy; selecting a project only highlights its row
   and no longer collapses the visible-project set.
+- Tripod Positions now clears the highlighted project after zooming out or
+  tapping the map background, while marker taps remain selectable; selected
+  project rows use the Repeatable accent token for their tint and outline.
 - Tripod list now mirrors every location represented by the rendered map,
   including cluster members and spiderfy markers, after stabilized zoom-in,
   zoom-out, drag, and programmatic cluster camera updates.

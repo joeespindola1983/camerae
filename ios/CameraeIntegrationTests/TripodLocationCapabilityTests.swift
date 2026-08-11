@@ -10,7 +10,8 @@ struct TripodLocationCapabilityTests {
             .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
             .filterProjects, .openProjectSummary, .filterVisibleLocations,
             .showSelectionState, .openCluster, .expandOverlappingCluster,
-            .synchronizeMapList, .returnHome
+            .synchronizeMapList, .clearSelectionFromMapBackground,
+            .clearProjectOnZoomOut, .returnHome
         ])
     }
 
@@ -241,6 +242,8 @@ struct TripodLocationCapabilityTests {
     @Test("calendar and tripod positions share the project-list use case")
     func sharedProjectContextCapabilities() {
         #expect(ProjectContextCapabilityPolicy.list == [
+            .clearProjectOnMapBackground,
+            .clearProjectOnZoomOut,
             .filterProjects,
             .highlightProject,
             .preserveVisibleProjects,
@@ -332,6 +335,56 @@ struct TripodLocationCapabilityTests {
         #expect(ProjectContextSelection.isSelected(selected, selectedID: selectedProjectID))
         #expect(ProjectContextSelection.isSelected(another, selectedID: selectedProjectID) == false)
         #expect(visibleProjects.count == 2)
+    }
+
+    @Test("zooming out clears the selected project while pan and zoom in preserve it")
+    func projectSelectionFollowsMapZoomDirection() {
+        let selectedProjectID = UUID()
+        let current = TripodMapCameraRegion(
+            centerLatitude: -23.55,
+            centerLongitude: -46.63,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02
+        )
+        let zoomedOut = TripodMapCameraRegion(
+            centerLatitude: -23.55,
+            centerLongitude: -46.63,
+            latitudeDelta: 0.04,
+            longitudeDelta: 0.04
+        )
+        let zoomedIn = TripodMapCameraRegion(
+            centerLatitude: -23.55,
+            centerLongitude: -46.63,
+            latitudeDelta: 0.01,
+            longitudeDelta: 0.01
+        )
+        let panned = TripodMapCameraRegion(
+            centerLatitude: -23.56,
+            centerLongitude: -46.64,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02
+        )
+
+        #expect(TripodProjectSelectionPolicy.afterCameraChange(
+            selectedProjectID,
+            from: current,
+            to: zoomedOut
+        ) == nil)
+        #expect(TripodProjectSelectionPolicy.afterCameraChange(
+            selectedProjectID,
+            from: current,
+            to: zoomedIn
+        ) == selectedProjectID)
+        #expect(TripodProjectSelectionPolicy.afterCameraChange(
+            selectedProjectID,
+            from: current,
+            to: panned
+        ) == selectedProjectID)
+    }
+
+    @Test("tapping the map background clears the selected project")
+    func mapBackgroundClearsProjectSelection() {
+        #expect(TripodProjectSelectionPolicy.afterMapBackgroundTap == nil)
     }
 
     @Test("calendar project filters never invent or edit agenda items")
