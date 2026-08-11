@@ -24,8 +24,8 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O teste `0.4.2` confirmou transporte estável e revelou que a EOS R emite `0xC1A7 ObjectAddedEx64` cerca de 3,5 s após o disparo, em vez da variante `0xC181` inicialmente implementada.
 - O APK `0.4.4` validou o fluxo definitivo: `ObjectAddedEx64` em 3,021 s, importação MTP em uma tentativa e 40.415.295 bytes exatos de `5S8A9571.CR3`.
 - O primeiro teste do `0.5.0` iniciou 3,9 s após o attach e encontrou o endpoint PTP ainda indisponível antes de `OpenSession`.
-- APK `0.5.1` implementado: usa `GetDeviceInfo` padrão como handshake de readiness com retry limitado e habilita captura somente para o VID:PID validado da EOS R.
-- Build debug `0.5.1` verificado com sucesso em 11 de agosto de 2026.
+- APK `0.5.2` implementado: usa `GetDeviceInfo` padrão como handshake de readiness com retry limitado, remove respostas PTP antigas antes do handshake e ignora de forma limitada containers de transações anteriores.
+- Build debug `0.5.2` verificado com sucesso em 11 de agosto de 2026.
 - A sequência de cinco capturas ainda aguarda validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
@@ -57,7 +57,7 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 10. Confirme no log o nome/handle e os bytes de cada etapa; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
 11. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.5.1`, cada foto primeiro confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. O app não altera parâmetros nem o destino de captura.
+No APK `0.5.2`, cada foto primeiro remove respostas antigas da fila bulk IN e confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Durante a sessão, containers atrasados de outras transações são registrados e ignorados com um limite de segurança. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. O app não altera parâmetros nem o destino de captura.
 
 ## Preparação do teste físico
 

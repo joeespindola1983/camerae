@@ -45,6 +45,9 @@ test distributions do not require an entry here.
 - Added a standard PTP `GetDeviceInfo` readiness handshake with bounded retry,
   plus a capture allowlist that keeps unvalidated Canon models in import-only
   mode.
+- Resynchronized the Android PTP bulk input before readiness checks and across
+  commands so delayed responses from a failed capture cannot shift subsequent
+  transaction IDs.
 
 ## [9.5.0] - 2026-08-04
 

@@ -20,6 +20,8 @@ final class PtpUsbTransport implements AutoCloseable {
     private static final int HEADER_LENGTH = 12;
     private static final int MAX_CONTAINER_LENGTH = 2 * 1024 * 1024;
     private static final int USB_TIMEOUT_MS = 15_000;
+    private static final int STALE_INPUT_TIMEOUT_MS = 100;
+    private static final int MAX_STALE_CONTAINERS = 8;
 
     private final UsbDeviceConnection connection;
     private final UsbInterface ptpInterface;
@@ -71,6 +73,7 @@ final class PtpUsbTransport implements AutoCloseable {
         if (sessionOpen) {
             throw new TransportException("GetDeviceInfo de readiness exige sessão fechada");
         }
+        discardStaleInput("antes de GetDeviceInfo");
         byte[] deviceInfo = commandWithData("GetDeviceInfo", 0x1001);
         nextTransactionId = 0;
         if (deviceInfo.length < 12) {
@@ -91,11 +94,7 @@ final class PtpUsbTransport implements AutoCloseable {
             throws TransportException {
         int transactionId = nextTransactionId++;
         writeCommand(operationCode, transactionId, parameters);
-        Container first = readContainer();
-        if (first.transactionId != transactionId) {
-            throw new TransportException(name + ": transactionId inesperado "
-                    + first.transactionId + ", esperado " + transactionId);
-        }
+        Container first = readContainerForTransaction(name, transactionId);
 
         byte[] data = new byte[0];
         Container responseContainer = first;
@@ -106,7 +105,7 @@ final class PtpUsbTransport implements AutoCloseable {
             data = first.payload;
             append("<- DATA %s tx=%d bytes=%d prefix=%s",
                     hex4(operationCode), transactionId, data.length, hexPrefix(data));
-            responseContainer = readContainer();
+            responseContainer = readContainerForTransaction(name, transactionId);
         }
         Response response = parseResponse(name, responseContainer, transactionId);
         requireOk(name, response);
@@ -141,7 +140,7 @@ final class PtpUsbTransport implements AutoCloseable {
         writeCommand(operationCode, transactionId, parameters);
         return parseResponse(
                 hex4(operationCode),
-                readContainer(),
+                readContainerForTransaction(hex4(operationCode), transactionId),
                 transactionId
         );
     }
@@ -175,14 +174,55 @@ final class PtpUsbTransport implements AutoCloseable {
                 hex4(operationCode), transactionId, formatParameters(parameters));
     }
 
-    private Container readContainer() throws TransportException {
+    private void discardStaleInput(String phase) throws TransportException {
+        int discarded = 0;
+        while (discarded < MAX_STALE_CONTAINERS) {
+            Container stale = readContainer(STALE_INPUT_TIMEOUT_MS, true);
+            if (stale == null) {
+                break;
+            }
+            discarded++;
+            append("<- DESCARTADO %s code=%s tx=%d bytes=%d (%s)",
+                    containerTypeName(stale.type), hex4(stale.code), stale.transactionId,
+                    stale.payload.length, phase);
+        }
+        if (discarded > 0) {
+            append("Ressincronização PTP: %d container(s) antigo(s) removido(s)", discarded);
+        }
+        if (discarded == MAX_STALE_CONTAINERS) {
+            throw new TransportException("fila PTP continuou ocupada após descartar "
+                    + MAX_STALE_CONTAINERS + " containers antigos");
+        }
+    }
+
+    private Container readContainerForTransaction(String name, int expectedTransactionId)
+            throws TransportException {
+        for (int skipped = 0; skipped <= MAX_STALE_CONTAINERS; skipped++) {
+            Container container = readContainer(USB_TIMEOUT_MS, false);
+            if (container.transactionId == expectedTransactionId) {
+                return container;
+            }
+            append("<- IGNORADO %s code=%s tx=%d bytes=%d; %s espera tx=%d",
+                    containerTypeName(container.type), hex4(container.code),
+                    container.transactionId, container.payload.length,
+                    name, expectedTransactionId);
+        }
+        throw new TransportException(name + ": mais de " + MAX_STALE_CONTAINERS
+                + " containers de outras transações na fila");
+    }
+
+    private Container readContainer(int timeoutMs, boolean allowTimeout)
+            throws TransportException {
         byte[] bytes = new byte[MAX_CONTAINER_LENGTH];
         int received = connection.bulkTransfer(
                 bulkIn,
                 bytes,
                 bytes.length,
-                USB_TIMEOUT_MS
+                timeoutMs
         );
+        if (received < 0 && allowTimeout) {
+            return null;
+        }
         if (received < HEADER_LENGTH) {
             throw new TransportException("Bulk IN inválido: " + received + " bytes");
         }
@@ -199,7 +239,7 @@ final class PtpUsbTransport implements AutoCloseable {
                     bytes,
                     received,
                     declared - received,
-                    USB_TIMEOUT_MS
+                    timeoutMs
             );
             if (chunk <= 0) {
                 throw new TransportException("Container PTP truncado: "
@@ -214,6 +254,19 @@ final class PtpUsbTransport implements AutoCloseable {
         byte[] payload = new byte[declared - HEADER_LENGTH];
         System.arraycopy(bytes, HEADER_LENGTH, payload, 0, payload.length);
         return new Container(type, code, transactionId, payload);
+    }
+
+    private static String containerTypeName(int type) {
+        switch (type) {
+            case CONTAINER_COMMAND:
+                return "CMD";
+            case CONTAINER_DATA:
+                return "DATA";
+            case CONTAINER_RESPONSE:
+                return "RESP";
+            default:
+                return "TYPE=" + type;
+        }
     }
 
     private Response parseResponse(String name, Container container, int expectedTransactionId)

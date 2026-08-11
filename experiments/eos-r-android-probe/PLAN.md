@@ -157,7 +157,7 @@ Aceite: executar uma sequência de 20 capturas com cadência definida, baixar to
 
 O APK `0.5.0` entrega o primeiro subconjunto funcional: quantidade, atraso inicial, intervalo entre inícios, progresso, cancelamento seguro entre operações e download de cada captura. A sequência é estritamente serial; ISO, white balance, shutter configurável e manifesto persistente continuam pendentes.
 
-O primeiro teste começou 3,9 s após o attach e falhou antes de `OpenSession`, enquanto o teste único anterior começou após 10,3 s e funcionou. O APK `0.5.1` substitui a suposição temporal por um handshake PTP padrão `GetDeviceInfo` com até seis tentativas e backoff. Captura fica em allowlist para `04A9:32DA`; outras Canon podem usar importação MTP, mas não recebem comandos proprietários sem perfil validado.
+O primeiro teste começou 3,9 s após o attach e falhou antes de `OpenSession`, enquanto o teste único anterior começou após 10,3 s e funcionou. Outro log mostrou que a resposta atrasada dessa falha permaneceu na fila bulk IN e deslocou as transações da tentativa seguinte (`0` quando se esperava `1`, depois `1` quando se esperava `2`). O APK `0.5.2` combina o handshake PTP padrão `GetDeviceInfo` com retry limitado, drenagem prévia da fila e descarte limitado de containers pertencentes a transações antigas. Captura fica em allowlist para `04A9:32DA`; outras Canon podem usar importação MTP, mas não recebem comandos proprietários sem perfil validado.
 
 ### M5 — Fluxo demonstrável
 
@@ -237,4 +237,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md`, `PLAN.md` e `COMPATIBILITY.md`. M1, M2 e o fluxo M3 completo foram validados fisicamente. O primeiro teste de sequência encontrou a câmera ainda indisponível 3,9 s após attach; o APK `0.5.1` acrescenta readiness por `GetDeviceInfo` com retry limitado e restringe captura ao perfil EOS R `04A9:32DA`. Aguarde o teste de cinco fotos antes de implementar parâmetros ou manifesto. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md`, `PLAN.md` e `COMPATIBILITY.md`. M1, M2 e o fluxo M3 completo foram validados fisicamente. Os primeiros testes de sequência revelaram indisponibilidade logo após attach e respostas PTP atrasadas contaminando a tentativa seguinte; o APK `0.5.2` acrescenta readiness por `GetDeviceInfo`, drenagem/ressincronização limitada da fila bulk IN e restringe captura ao perfil EOS R `04A9:32DA`. Aguarde o teste de cinco fotos antes de implementar parâmetros ou manifesto. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
