@@ -32,6 +32,8 @@ test distributions do not require an entry here.
 - Unified Calendar and Tripod Positions around the same contextual project
   list: selecting a date or saved tripod point now exposes the same filters,
   project rows, read-only summary, project navigation, and recapture planning.
+- Tripod list mode now follows the map's visible region and keeps the selected
+  position synchronized with a shared accent treatment on marker and row.
 - Redesigned Calendar and Tripod Positions from the approved Camerae Figma
   flows, using the Repeatable visual theme, marked project dates, agenda
   filters, read-only project summaries, a selectable map/list catalog, saved

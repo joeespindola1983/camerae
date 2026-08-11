@@ -10,12 +10,14 @@ enum CameraeHomeDestination: Hashable { case calendar, positions }
 
 enum TripodPositionsCapability: Hashable, Sendable {
     case returnHome, create, switchMapList, selectMapLocation, showLinkedProjects, filterProjects, openProjectSummary
+    case filterVisibleLocations, showSelectionState
     case addReference, openProject, openMap, scheduleRecapture, showMetrics
 }
 enum TripodPositionsCapabilityPolicy {
     static let catalog: Set<TripodPositionsCapability> = [
         .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
-        .filterProjects, .openProjectSummary, .returnHome
+        .filterProjects, .openProjectSummary, .filterVisibleLocations,
+        .showSelectionState, .returnHome
     ]
     static let detail: Set<TripodPositionsCapability> = [.addReference, .openProject, .openMap, .scheduleRecapture, .showMetrics]
 }
@@ -62,6 +64,35 @@ enum TripodMapCameraFit {
             latitudeDelta: max((maximumLatitude - minimumLatitude) * padding, minimumSpan),
             longitudeDelta: max((maximumLongitude - minimumLongitude) * padding, minimumSpan)
         )
+    }
+}
+
+enum TripodMapViewport {
+    static func locations(
+        in region: TripodMapCameraRegion,
+        from locations: [TripodLocation]
+    ) -> [TripodLocation] {
+        locations.filter { location in
+            guard let coordinate = location.coordinate,
+                  coordinate.latitude >= region.minimumLatitude,
+                  coordinate.latitude <= region.maximumLatitude else { return false }
+            return containsLongitude(coordinate.longitude, in: region)
+        }
+    }
+
+    private static func containsLongitude(_ longitude: Double, in region: TripodMapCameraRegion) -> Bool {
+        guard region.longitudeDelta < 360 else { return true }
+        let minimum = normalizedLongitude(region.minimumLongitude)
+        let maximum = normalizedLongitude(region.maximumLongitude)
+        let value = normalizedLongitude(longitude)
+        return minimum <= maximum ? (minimum...maximum).contains(value) : value >= minimum || value <= maximum
+    }
+
+    private static func normalizedLongitude(_ longitude: Double) -> Double {
+        var result = longitude.truncatingRemainder(dividingBy: 360)
+        if result > 180 { result -= 360 }
+        if result < -180 { result += 360 }
+        return result
     }
 }
 
@@ -218,6 +249,7 @@ struct TripodPositionsView: View {
     @State private var selectedLocationID: UUID?
     @State private var isCreating = false
     @State private var mapPosition = MapCameraPosition.automatic
+    @State private var visibleMapRegion: TripodMapCameraRegion?
     @State private var filter = CalendarProjectFilter.all
 
     var body: some View {
@@ -232,12 +264,20 @@ struct TripodPositionsView: View {
                     mapCard
                 } else {
                     LazyVStack(spacing: 12) {
-                        ForEach(store.snapshot.locations) { location in
+                        HStack {
+                            CameraeNextSectionLabel(title: "Posições visíveis", theme: theme)
+                            Spacer()
+                            Text("\(visibleLocations.count)")
+                                .font(.custom("DMMono-Regular", size: 9, relativeTo: .caption2))
+                                .foregroundStyle(theme.muted)
+                        }
+                        ForEach(visibleLocations) { location in
                             Button { selectedLocationID = location.id } label: {
                                 TripodLocationCatalogRow(
                                     location: location,
                                     subtitle: listSubtitle(for: location),
                                     referenceImage: referenceImage(for: location),
+                                    isSelected: selectedLocationID == location.id,
                                     theme: theme
                                 )
                             }
@@ -355,6 +395,9 @@ struct TripodPositionsView: View {
                 MapCompass()
                 MapScaleView()
             }
+            .onMapCameraChange(frequency: .onEnd) { context in
+                updateVisibleRegion(context.region)
+            }
 
             if locationsWithGPS.isEmpty {
                 VStack(alignment: .leading, spacing: 4) {
@@ -428,6 +471,11 @@ struct TripodPositionsView: View {
         store.snapshot.locations.filter { $0.coordinate != nil }
     }
 
+    private var visibleLocations: [TripodLocation] {
+        guard let visibleMapRegion else { return locationsWithGPS }
+        return TripodMapViewport.locations(in: visibleMapRegion, from: store.snapshot.locations)
+    }
+
     private var agendaItems: [CalendarProjectAgendaItem] {
         ProjectContextCatalog.agenda(snapshot: store.snapshot, projects: projects.projects)
     }
@@ -439,6 +487,7 @@ struct TripodPositionsView: View {
 
     @ViewBuilder
     private func mapThumbnail(for location: TripodLocation) -> some View {
+        let selected = selectedLocationID == location.id
         Group {
             if let image = referenceImage(for: location) {
                 Image(uiImage: image)
@@ -446,7 +495,7 @@ struct TripodPositionsView: View {
                     .scaledToFill()
             } else {
                 Circle()
-                    .fill(theme.accent)
+                    .fill(selected ? theme.accent : theme.muted)
                     .overlay {
                         Image(systemName: "camera.fill")
                             .font(.system(size: 16, weight: .semibold))
@@ -455,11 +504,11 @@ struct TripodPositionsView: View {
             }
         }
         .frame(
-            width: selectedLocationID == location.id ? 52 : 44,
-            height: selectedLocationID == location.id ? 52 : 44
+            width: selected ? 52 : 44,
+            height: selected ? 52 : 44
         )
         .clipShape(Circle())
-        .overlay { Circle().stroke(Color.white, lineWidth: 3) }
+        .overlay { Circle().stroke(selected ? theme.accent : Color.white, lineWidth: selected ? 4 : 3) }
         .shadow(color: .black.opacity(0.24), radius: 4, y: 2)
         .animation(.easeOut(duration: 0.16), value: selectedLocationID)
     }
@@ -479,6 +528,22 @@ struct TripodPositionsView: View {
                 longitudeDelta: fitted.longitudeDelta
             )
         ))
+        visibleMapRegion = fitted
+    }
+
+    private func updateVisibleRegion(_ region: MKCoordinateRegion) {
+        let visible = TripodMapCameraRegion(
+            centerLatitude: region.center.latitude,
+            centerLongitude: region.center.longitude,
+            latitudeDelta: region.span.latitudeDelta,
+            longitudeDelta: region.span.longitudeDelta
+        )
+        visibleMapRegion = visible
+        if let selectedLocationID,
+           !TripodMapViewport.locations(in: visible, from: store.snapshot.locations)
+            .contains(where: { $0.id == selectedLocationID }) {
+            self.selectedLocationID = nil
+        }
     }
 
     private func selectedLocationBadge(_ location: TripodLocation) -> some View {
@@ -546,6 +611,7 @@ private struct TripodLocationCatalogRow: View {
     let location: TripodLocation
     let subtitle: String
     let referenceImage: UIImage?
+    let isSelected: Bool
     let theme: CameraeNextTheme
 
     var body: some View {
@@ -567,6 +633,10 @@ private struct TripodLocationCatalogRow: View {
             }
             .frame(width: 98, height: 98)
             .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(isSelected ? theme.accent : Color.clear, lineWidth: 3)
+            }
 
             VStack(alignment: .leading, spacing: 7) {
                 Text(location.name)
@@ -577,7 +647,7 @@ private struct TripodLocationCatalogRow: View {
                     .font(.custom("DMMono-Medium", size: 11, relativeTo: .caption))
                     .foregroundStyle(theme.muted)
                     .lineLimit(1)
-                Text("VER DETALHES")
+                Text(isSelected ? "SELECIONADO" : "SELECIONAR")
                     .font(.custom("DMMono-Medium", size: 10, relativeTo: .caption2))
                     .foregroundStyle(theme.accent)
             }
@@ -585,7 +655,11 @@ private struct TripodLocationCatalogRow: View {
         }
         .padding(12)
         .frame(maxWidth: .infinity, minHeight: 122, alignment: .leading)
-        .background(theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(isSelected ? theme.surface : theme.card, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(isSelected ? theme.accent : Color.clear, lineWidth: 2)
+        }
     }
 }
 

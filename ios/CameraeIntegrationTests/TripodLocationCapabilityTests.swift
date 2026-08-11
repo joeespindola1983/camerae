@@ -8,7 +8,8 @@ struct TripodLocationCapabilityTests {
     func catalogCapabilities() {
         #expect(TripodPositionsCapabilityPolicy.catalog == [
             .create, .switchMapList, .selectMapLocation, .showLinkedProjects,
-            .filterProjects, .openProjectSummary, .returnHome
+            .filterProjects, .openProjectSummary, .filterVisibleLocations,
+            .showSelectionState, .returnHome
         ])
     }
 
@@ -52,6 +53,36 @@ struct TripodLocationCapabilityTests {
         #expect(region.latitudeDelta >= TripodMapCameraFit.minimumSpan)
         #expect(region.longitudeDelta >= TripodMapCameraFit.minimumSpan)
         #expect(TripodMapCameraFit.region(for: [.fixture(id: UUID())]) == nil)
+    }
+
+    @Test("tripod list follows the visible map region")
+    func visibleMapLocations() {
+        let visible = TripodLocation.fixture(id: UUID(), latitude: -23.550, longitude: -46.630)
+        let outside = TripodLocation.fixture(id: UUID(), latitude: -23.600, longitude: -46.700)
+        let withoutGPS = TripodLocation.fixture(id: UUID())
+        let region = TripodMapCameraRegion(
+            centerLatitude: -23.550,
+            centerLongitude: -46.630,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02
+        )
+
+        #expect(TripodMapViewport.locations(in: region, from: [visible, outside, withoutGPS]) == [visible])
+    }
+
+    @Test("visible map region supports the antimeridian")
+    func visibleMapLocationsAcrossAntimeridian() {
+        let east = TripodLocation.fixture(id: UUID(), latitude: 0, longitude: 179.5)
+        let west = TripodLocation.fixture(id: UUID(), latitude: 0, longitude: -179.5)
+        let outside = TripodLocation.fixture(id: UUID(), latitude: 0, longitude: -170)
+        let region = TripodMapCameraRegion(
+            centerLatitude: 0,
+            centerLongitude: 180,
+            latitudeDelta: 10,
+            longitudeDelta: 4
+        )
+
+        #expect(TripodMapViewport.locations(in: region, from: [east, west, outside]) == [east, west])
     }
 
     @Test("legacy positions recover GPS from the newest captured session")
