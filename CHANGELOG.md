@@ -21,9 +21,102 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added an Android foreground connected-device session mode with a CPU-only
+  wake lock and persistent pause, resume and finalize notification controls,
+  allowing EOS R Astro capture to continue while the phone screen is off.
+- Added a Figma-aligned Astro session catalog to the Android USB app with
+  session creation, opening, safe local deletion, resumable paused sessions,
+  explicit finalization, per-session directories and persisted camera-card
+  file references for targeted availability checks after reconnection.
+- Added an explicit low-transfer Android Astro preview mode: remote Live View
+  opens only for a single requested framing frame, the first JPG supplies the
+  session thumbnail, and later JPGs download only on request or after pausing.
+
+- Added a read-only libgphoto2 2.5.34 Android path for the EOS R probe, using
+  the Android-authorized USB file descriptor with libusb and the focused
+  `ptp2`/`usb1` module set before enabling capture or configuration writes.
+- Added an EOS R astro capture MVP on top of libgphoto2 with ISO, white balance,
+  JPG/CR3/JPG+CR3 selection, timed Bulb release, camera-card download, JPG
+  thumbnails, and export of the selected JPG to the Android Gallery.
+- Added continuous libgphoto2 Astro sessions with start, safe pause and resume,
+  start-to-start interval control, per-capture download validation and session
+  thumbnails, without requiring a fixed photo count.
+- Added an experimental Android EOS R USB probe with physically validated CR3
+  import and Canon PTP remote shutter, plus an automatic capture-to-new-handle
+  download flow for hardware validation.
+- Added EOS R ISO and white-balance selectors restricted to camera-advertised
+  values, Canon PTP data-out writes with event readback, configurable Bulb hold
+  duration, and per-shot exposure timing in the Android sequence manifest.
+
 ### Changed
 
+- Limited Android Astro capture formats to JPG and JPG+CR3 so every session can
+  generate a lightweight preview and thumbnail; legacy CR3-only sessions resume
+  as JPG+CR3 to preserve RAW capture.
+- Made the Android Astro capture-settings card visibly read-only whenever the
+  camera is missing, unauthorized, unsupported, busy, or the session is final,
+  with an inline explanation that clears automatically when controls are ready.
+- Replaced the Android Astro exposure text field with a one-second slider from
+  1–45 seconds, using five-second reference marks from 0 through 45.
+- Replaced the Android EOS R probe/debug screen with a focused Astro capture
+  interface based on the canonical Figma capture screen and tokens, retaining
+  only post-capture log sharing from the diagnostic workflow.
+- Kept overnight Astro captures on the camera card instead of transferring
+  every file immediately, reducing continuous USB traffic and leaving CR3
+  originals on the camera for later workflows.
+- Changed the live Astro session panel to show a real seconds-until-next-shot
+  countdown and expose finalization only after capture has paused.
+
 ### Fixed
+
+- Restored the Android app version/build badge to the initial Astro session
+  catalog so installed test builds can be identified before opening a session.
+- Replaced raw Android USB paths and VID/PID values in the Astro UI with the
+  friendly camera model, synchronized the live exposure metric with its input,
+  and kept the active exposure countdown visible while a safe pause is pending.
+
+- Switched EOS R timed Bulb capture from the unavailable generic `bulb` action
+  to libgphoto2's camera-advertised `eosremoterelease` press/release action,
+  and stopped reporting a capture as successful when no file was downloaded.
+- Persisted the Android EOS R PTP command trace across process restarts so a
+  camera lockup can be diagnosed even after cable recovery, and added bounded
+  Canon remote/event-mode cleanup before every session closes.
+- Prevented a delayed pre-session `GetDeviceInfo` response from being mistaken
+  for a retried transaction and contaminating `OpenSession` by draining late
+  containers and requiring a quiet bulk-IN window before session setup.
+- Reused successful EOS R readiness for subsequent actions on the same USB
+  attach, accepted a drained delayed `GetDeviceInfo` pair as valid readiness,
+  and stopped after two attempts or immediately on device disappearance to
+  avoid triggering the camera USB reboot observed during a third retry.
+- Corrected the Android probe notice that still described ISO/WB controls as
+  read-only after property writes were introduced.
+- Corrected Android `MtpDevice` connection ownership and added bounded MTP/PTP
+  transition delays after a physical test exposed an immediate bulk-IN
+  failure during automatic capture.
+- Removed the unstable pre-capture MTP baseline and now resolve the newly
+  captured file from the bounded Canon `ObjectAddedEx` event before importing
+  its exact handle through MTP.
+- Added bounded decoding for Canon `ObjectAddedEx64`, the event variant emitted
+  by the EOS R for the newly captured CR3.
+- Added a permanently visible app version and build number to the Android probe
+  screen so hardware-test logs and installed APKs are easy to distinguish.
+- Added the first Android astro-sequence controls for photo count, initial
+  delay, start-to-start interval, progress, between-shot cancellation, and
+  per-capture download.
+- Added a standard PTP `GetDeviceInfo` readiness handshake with bounded retry,
+  plus a capture allowlist that keeps unvalidated Canon models in import-only
+  mode.
+- Resynchronized the Android PTP bulk input before readiness checks and across
+  commands so delayed responses from a failed capture cannot shift subsequent
+  transaction IDs.
+- Added atomic JSON manifests for Android astro sequences and read-only Canon
+  EOS capability discovery for current and available ISO, white-balance, and
+  shutter values.
+- Recognized the Canon EOS exposure mode during capability discovery so a
+  missing shutter enumeration in Bulb mode is reported as duration-controlled
+  remote release instead of a USB or capability failure.
+- Physically validated a 3/3 EOS R sequence and its atomic manifest, including
+  exact handle, schedule, file path, and downloaded byte-count associations.
 
 ## [9.5.0] - 2026-08-04
 
