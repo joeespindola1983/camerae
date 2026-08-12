@@ -14,8 +14,8 @@ android {
         applicationId = "com.camerae.eosrprobe"
         minSdk = 26
         targetSdk = 36
-        versionCode = 22
-        versionName = "0.10.0"
+        versionCode = 23
+        versionName = "0.11.0"
 
         ndk {
             abiFilters += listOf("arm64-v8a")

@@ -40,6 +40,9 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O log 22 confirmou que ISO, WB, destino e formato foram escritos com sucesso, mas a EOS R não anuncia a ação genérica `bulb`. O APK `0.9.1` usa a ação anunciada `eosremoterelease` com `Press Full MF` e `Release`, e só reporta sucesso quando baixa a contagem esperada de arquivos.
 - O log 23 validou a primeira captura completa pela lib: Bulb 5 s, JPG de 11.810.335 bytes, download 1/1 e saída limpa. O APK `0.10.0` repete essa unidade usando Fotos, Atraso e Intervalo, valida o download de cada etapa e permite cancelar entre exposições.
 - Build debug `0.10.0` verificado e instalado com sucesso no SM-A065M em 11 de agosto de 2026.
+- O log 24 validou a sequência libgphoto2 completa de 5/5 fotos: Bulb 8 s, JPG, ISO 6400, white balance Cloudy, download de todos os arquivos e `gp_camera_exit` limpo em cada captura.
+- O APK `0.11.0` troca o lote de tamanho fixo por uma sessão contínua: `Iniciar sessão`, `Pausar sessão` e `Retomar sessão`. A pausa é aplicada somente depois que a exposição e o download atuais terminam.
+- A interface `0.11.0` remove os probes, captura-teste e console visíveis, mantém o compartilhamento do log após a primeira captura e adota os tokens e a hierarquia Astro do Figma canônico (`Astro Photo / iPhone Portrait / Capture`, node `570:6`).
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
@@ -71,15 +74,16 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 
 Esse probe não solicita captura e não escreve configurações. A conexão autorizada permanece aberta até o app encerrar ou a câmera ser desconectada, porque o backend Android do libgphoto2 mantém o dispositivo externo durante o processo.
 
-### Captura teste libgphoto2 (`0.9.1`)
+### Sessão Astro contínua (`0.11.0`)
 
-1. Confirme `Versão 0.9.1 (build 21)`, câmera em modo Bulb e lente em foco manual.
-2. Para o primeiro teste, mantenha ISO 6400, WB `Color Temperature`, formato `JPG` e Bulb 5 s.
-3. Toque uma única vez em `Captura teste libgphoto2` e aguarde o app liberar o obturador, receber `FILE_ADDED`, baixar a imagem e mostrar a thumbnail.
-4. Toque na thumbnail para selecioná-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
-5. Compartilhe o log antes de testar `CR3` e depois `JPG+CR3`. No modo combinado, o resultado esperado é `Arquivos baixados: 2/2`.
+1. Confirme `Versão 0.11.0 (build 23)`, câmera em modo Bulb e lente em foco manual.
+2. Escolha ISO, white balance, JPG/CR3/JPG+CR3, exposição Bulb e o intervalo mínimo entre os inícios das fotos.
+3. Toque em `Iniciar sessão`. O app captura e baixa fotos sem um limite predefinido.
+4. Toque em `Pausar sessão` quando quiser encerrar o lote. Se uma foto estiver em andamento, o app termina a exposição, baixa seus arquivos e só então pausa.
+5. Toque em uma thumbnail JPG para visualizá-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
+6. Depois da primeira captura, use `Compartilhar log da captura`. Em `JPG+CR3`, cada foto só é aceita com `Arquivos baixados: 2/2`.
 
-A captura configura o destino como cartão de memória, aplica somente escolhas anunciadas pela câmera e sempre tenta encerrar Bulb antes de fechar a sessão. Em `0.10.0`, `Iniciar sequência` repete a mesma captura validada; o intervalo é medido entre os inícios planejados e, se uma captura/download ultrapassar o intervalo, a próxima começa assim que a anterior terminar. O cancelamento acontece entre capturas e nunca interrompe uma liberação Bulb em andamento.
+A captura configura o destino como cartão de memória, aplica somente escolhas anunciadas pela câmera e sempre tenta encerrar Bulb antes de fechar a sessão. O intervalo é medido entre os inícios planejados e, se uma captura/download ultrapassar esse intervalo, a próxima começa assim que a anterior terminar. Pausar nunca interrompe uma liberação Bulb em andamento.
 
 ### Fluxo legado (congelado em `0.8.0`)
 
@@ -109,4 +113,4 @@ No APK `0.7.3`, o primeiro comando do attach removia respostas antigas da fila b
 
 ## Regra do protótipo
 
-Este experimento foi autorizado sem Figma e sem TDD. A validação será manual, orientada por logs e executada no aparelho e câmera reais. Se a viabilidade for comprovada e o código migrar para o Camerae, as regras normais de arquitetura, testes e contrato de capacidades voltam a valer.
+Este experimento foi autorizado sem TDD. A validação continua manual, orientada por logs e executada no aparelho e câmera reais. Desde `0.11.0`, a interface reutiliza a direção visual Astro do Figma canônico; se o código migrar para o Camerae, as regras normais de arquitetura, testes e contrato de capacidades voltam a valer integralmente.

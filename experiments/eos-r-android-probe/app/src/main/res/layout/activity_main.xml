@@ -1,395 +1,455 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:padding="16dp">
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/title"
-        android:textAppearance="?android:attr/textAppearanceLarge" />
-
-    <TextView
-        android:id="@+id/app_version"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="2dp"
-        android:text="@string/version_placeholder"
-        android:textAppearance="?android:attr/textAppearanceSmall" />
-
-    <TextView
-        android:id="@+id/status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/status_waiting"
-        android:textAppearance="?android:attr/textAppearanceMedium" />
-
-    <Button
-        android:id="@+id/gphoto_probe"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="10dp"
-        android:enabled="false"
-        android:text="@string/gphoto_probe" />
-
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="@string/gphoto_probe_notice"
-        android:textAppearance="?android:attr/textAppearanceSmall" />
-
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="12dp"
-        android:background="#EEF3F8"
-        android:orientation="vertical"
-        android:padding="12dp">
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/astro_sequence_title"
-            android:textAppearance="?android:attr/textAppearanceMedium"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="@string/camera_settings_notice"
-            android:textAppearance="?android:attr/textAppearanceSmall" />
-
-        <Button
-            android:id="@+id/inspect_controls"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:text="@string/inspect_controls"
-            android:visibility="gone" />
-
-        <TextView
-            android:id="@+id/exposure_capabilities"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="@string/exposure_capabilities_idle"
-            android:textAppearance="?android:attr/textAppearanceSmall" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:baselineAligned="false"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="4dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:labelFor="@id/iso_spinner"
-                    android:text="@string/iso" />
-
-                <Spinner
-                    android:id="@+id/iso_spinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:enabled="false" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="4dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:labelFor="@id/white_balance_spinner"
-                    android:text="@string/white_balance" />
-
-                <Spinner
-                    android:id="@+id/white_balance_spinner"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:enabled="false" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="4dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:labelFor="@id/bulb_duration"
-                    android:text="@string/bulb_duration_seconds" />
-
-                <EditText
-                    android:id="@+id/bulb_duration"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:enabled="false"
-                    android:importantForAutofill="no"
-                    android:inputType="number"
-                    android:maxLines="1"
-                    android:text="@string/default_bulb_duration" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:labelFor="@id/capture_format_spinner"
-            android:text="@string/capture_format" />
-
-        <Spinner
-            android:id="@+id/capture_format_spinner"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false" />
-
-        <Button
-            android:id="@+id/capture_test"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="6dp"
-            android:enabled="false"
-            android:text="@string/capture_test" />
-
-        <Button
-            android:id="@+id/apply_controls"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:enabled="false"
-            android:text="@string/apply_controls"
-            android:visibility="gone" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:baselineAligned="false"
-            android:orientation="horizontal">
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginEnd="6dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:labelFor="@id/sequence_count"
-                    android:text="@string/photo_count" />
-
-                <EditText
-                    android:id="@+id/sequence_count"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:importantForAutofill="no"
-                    android:inputType="number"
-                    android:maxLines="1"
-                    android:text="@string/default_photo_count" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginHorizontal="6dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:labelFor="@id/sequence_delay"
-                    android:text="@string/initial_delay_seconds" />
-
-                <EditText
-                    android:id="@+id/sequence_delay"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:importantForAutofill="no"
-                    android:inputType="number"
-                    android:maxLines="1"
-                    android:text="@string/default_initial_delay" />
-            </LinearLayout>
-
-            <LinearLayout
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1"
-                android:orientation="vertical">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:labelFor="@id/sequence_interval"
-                    android:text="@string/start_interval_seconds" />
-
-                <EditText
-                    android:id="@+id/sequence_interval"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:importantForAutofill="no"
-                    android:inputType="number"
-                    android:maxLines="1"
-                    android:text="@string/default_start_interval" />
-            </LinearLayout>
-        </LinearLayout>
-
-        <LinearLayout
-            style="?android:attr/buttonBarStyle"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/start_sequence"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="@string/start_sequence" />
-
-            <Button
-                android:id="@+id/cancel_sequence"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="8dp"
-                android:layout_weight="1"
-                android:enabled="false"
-                android:text="@string/cancel_sequence" />
-        </LinearLayout>
-
-        <TextView
-            android:id="@+id/sequence_progress"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="@string/sequence_idle"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:scrollbars="none">
-
-        <LinearLayout
-            style="?android:attr/buttonBarStyle"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal">
-
-            <Button
-                android:id="@+id/refresh"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/refresh" />
-
-            <Button
-                android:id="@+id/authorize"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/authorize_usb" />
-
-            <Button
-                android:id="@+id/inspect_mtp"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/inspect_mtp" />
-
-            <Button
-                android:id="@+id/download_latest"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/download_latest" />
-
-            <Button
-                android:id="@+id/copy_log"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/copy_log" />
-
-            <Button
-                android:id="@+id/share_log"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/share_log" />
-        </LinearLayout>
-    </HorizontalScrollView>
-
-    <ImageView
-        android:id="@+id/preview"
-        android:layout_width="match_parent"
-        android:layout_height="180dp"
-        android:layout_marginTop="8dp"
-        android:contentDescription="@string/latest_image_preview"
-        android:scaleType="centerInside"
-        android:visibility="gone" />
-
-    <HorizontalScrollView
-        android:layout_width="match_parent"
-        android:layout_height="96dp"
-        android:layout_marginTop="6dp"
-        android:scrollbars="none">
-
-        <LinearLayout
-            android:id="@+id/capture_thumbnails"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:orientation="horizontal" />
-    </HorizontalScrollView>
-
-    <Button
-        android:id="@+id/export_jpeg"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:enabled="false"
-        android:text="@string/export_jpeg" />
+    android:background="@drawable/bg_astro_screen">
 
     <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:background="#F0F0F0"
-        android:fillViewport="true">
+        android:layout_height="match_parent"
+        android:clipToPadding="false"
+        android:fillViewport="true"
+        android:overScrollMode="never">
 
-        <TextView
-            android:id="@+id/log"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:padding="12dp"
-            android:textIsSelectable="true"
-            android:textSize="12sp" />
+            android:orientation="vertical"
+            android:paddingStart="16dp"
+            android:paddingTop="24dp"
+            android:paddingEnd="16dp"
+            android:paddingBottom="32dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:gravity="center_vertical"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif"
+                        android:letterSpacing="0.18"
+                        android:text="@string/astro_usb_label"
+                        android:textColor="#4D6FFF"
+                        android:textSize="9sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:fontFamily="sans-serif-medium"
+                        android:text="@string/astro_capture_title"
+                        android:textColor="#E8EEFF"
+                        android:textSize="23sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/app_version"
+                    android:layout_width="wrap_content"
+                    android:layout_height="36dp"
+                    android:background="@drawable/bg_astro_pill"
+                    android:gravity="center"
+                    android:minWidth="112dp"
+                    android:paddingHorizontal="14dp"
+                    android:text="@string/version_placeholder"
+                    android:textColor="#8090C0"
+                    android:textSize="10sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="@string/status_waiting"
+                android:textColor="#B8C3E5"
+                android:textSize="14sp" />
+
+            <Button
+                android:id="@+id/authorize"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="10dp"
+                android:backgroundTint="#4D6FFF"
+                android:text="@string/authorize_usb"
+                android:textAllCaps="false"
+                android:textColor="#050200"
+                android:textStyle="bold" />
+
+            <FrameLayout
+                android:layout_width="match_parent"
+                android:layout_height="244dp"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/bg_astro_preview">
+
+                <ImageView
+                    android:id="@+id/preview"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="@string/latest_image_preview"
+                    android:scaleType="centerCrop"
+                    android:visibility="gone" />
+
+                <LinearLayout
+                    android:id="@+id/preview_placeholder"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center"
+                    android:gravity="center"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="✦"
+                        android:textColor="#4D6FFF"
+                        android:textSize="28sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:letterSpacing="0.16"
+                        android:text="@string/eos_r_external_camera"
+                        android:textColor="#8090C0"
+                        android:textSize="9sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="32dp"
+                    android:layout_gravity="bottom|center_horizontal"
+                    android:layout_marginBottom="14dp"
+                    android:background="@drawable/bg_astro_pill"
+                    android:gravity="center"
+                    android:paddingHorizontal="18dp"
+                    android:text="@string/manual_focus_hint"
+                    android:textColor="#4D6FFF"
+                    android:textSize="9sp" />
+            </FrameLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_astro_card"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.18"
+                    android:text="@string/capture_settings_label"
+                    android:textColor="#4D6FFF"
+                    android:textSize="9sp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="5dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/iso"
+                            android:textColor="#8090C0"
+                            android:textSize="9sp" />
+
+                        <Spinner
+                            android:id="@+id/iso_spinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:enabled="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="5dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/white_balance_short"
+                            android:textColor="#8090C0"
+                            android:textSize="9sp" />
+
+                        <Spinner
+                            android:id="@+id/white_balance_spinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:enabled="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="5dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/exposure_short"
+                            android:textColor="#8090C0"
+                            android:textSize="9sp" />
+
+                        <EditText
+                            android:id="@+id/bulb_duration"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:background="@android:color/transparent"
+                            android:enabled="false"
+                            android:gravity="center_vertical"
+                            android:importantForAutofill="no"
+                            android:inputType="number"
+                            android:maxLines="1"
+                            android:padding="0dp"
+                            android:text="@string/default_bulb_duration"
+                            android:textColor="#E8EEFF"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginEnd="5dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/capture_format"
+                            android:textColor="#8090C0"
+                            android:textSize="9sp" />
+
+                        <Spinner
+                            android:id="@+id/capture_format_spinner"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:enabled="false" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="5dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:orientation="vertical"
+                        android:padding="10dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/interval_between_starts"
+                            android:textColor="#8090C0"
+                            android:textSize="9sp" />
+
+                        <EditText
+                            android:id="@+id/sequence_interval"
+                            android:layout_width="match_parent"
+                            android:layout_height="40dp"
+                            android:background="@android:color/transparent"
+                            android:gravity="center_vertical"
+                            android:importantForAutofill="no"
+                            android:inputType="number"
+                            android:maxLines="1"
+                            android:padding="0dp"
+                            android:text="@string/default_start_interval"
+                            android:textColor="#E8EEFF"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="14dp"
+                android:background="@drawable/bg_astro_card"
+                android:orientation="vertical"
+                android:padding="14dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.18"
+                    android:text="@string/session_label"
+                    android:textColor="#4D6FFF"
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:id="@+id/sequence_progress"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/sequence_idle"
+                    android:textColor="#E8EEFF"
+                    android:textSize="16sp"
+                    android:textStyle="bold" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="12dp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginEnd="4dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/exposure_metric_label" android:textColor="#8090C0" android:textSize="8sp" />
+                        <TextView android:id="@+id/exposure_metric" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="5 s" android:textColor="#E8EEFF" android:textSize="14sp" android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginHorizontal="4dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/accepted_metric_label" android:textColor="#8090C0" android:textSize="8sp" />
+                        <TextView android:id="@+id/accepted_count" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="0" android:textColor="#E8EEFF" android:textSize="14sp" android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="4dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/bg_astro_surface"
+                        android:gravity="center"
+                        android:orientation="vertical">
+
+                        <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/next_metric_label" android:textColor="#8090C0" android:textSize="8sp" />
+                        <TextView android:id="@+id/next_capture" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="2dp" android:text="—" android:textColor="#E8EEFF" android:textSize="14sp" android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+
+                <Button
+                    android:id="@+id/start_sequence"
+                    android:layout_width="match_parent"
+                    android:layout_height="54dp"
+                    android:layout_marginTop="12dp"
+                    android:background="@drawable/bg_astro_accent"
+                    android:text="@string/start_sequence"
+                    android:textAllCaps="false"
+                    android:textColor="#050200"
+                    android:textSize="15sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="18dp"
+                android:letterSpacing="0.16"
+                android:text="@string/recent_captures"
+                android:textColor="#8090C0"
+                android:textSize="9sp" />
+
+            <HorizontalScrollView
+                android:layout_width="match_parent"
+                android:layout_height="96dp"
+                android:layout_marginTop="8dp"
+                android:scrollbars="none">
+
+                <LinearLayout
+                    android:id="@+id/capture_thumbnails"
+                    android:layout_width="wrap_content"
+                    android:layout_height="match_parent"
+                    android:orientation="horizontal" />
+            </HorizontalScrollView>
+
+            <Button
+                android:id="@+id/export_jpeg"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:enabled="false"
+                android:backgroundTint="#101833"
+                android:text="@string/export_jpeg"
+                android:textAllCaps="false"
+                android:textColor="#E8EEFF" />
+
+            <Button
+                android:id="@+id/share_log"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:enabled="false"
+                android:backgroundTint="#080D24"
+                android:text="@string/share_capture_log"
+                android:textAllCaps="false"
+                android:textColor="#8090C0" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <Button android:id="@+id/gphoto_probe" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/capture_test" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/inspect_mtp" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/inspect_controls" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/apply_controls" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/download_latest" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/cancel_sequence" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/copy_log" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <Button android:id="@+id/refresh" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <EditText android:id="@+id/sequence_count" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/default_photo_count" />
+                <EditText android:id="@+id/sequence_delay" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="@string/default_initial_delay" />
+                <TextView android:id="@+id/exposure_capabilities" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+                <TextView android:id="@+id/log" android:layout_width="wrap_content" android:layout_height="wrap_content" />
+            </LinearLayout>
+        </LinearLayout>
     </ScrollView>
-</LinearLayout>
+</FrameLayout>
