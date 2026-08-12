@@ -21,6 +21,9 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added an Android foreground connected-device session mode with a CPU-only
+  wake lock and persistent pause, resume and finalize notification controls,
+  allowing EOS R Astro capture to continue while the phone screen is off.
 - Added a Figma-aligned Astro session catalog to the Android USB app with
   session creation, opening, safe local deletion, resumable paused sessions,
   explicit finalization, per-session directories and persisted camera-card

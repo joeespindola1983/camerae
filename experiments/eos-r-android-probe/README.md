@@ -47,6 +47,7 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O APK `0.13.0` adiciona o catálogo simples de sessões do Figma, sem grupos: criar, abrir e excluir localmente. Cada sessão usa seu próprio diretório e `session.json`, persiste configurações e caminhos no cartão, pode ser retomada enquanto pausada e só se torna imutável após `Finalizar sessão`.
 - Ao abrir uma sessão com a EOS R conectada, o app consulta diretamente os caminhos persistidos e informa quantos arquivos ainda existem no cartão. Essa verificação dirigida evita inventariar o SD inteiro a cada conexão.
 - O APK `0.13.1` mostra `Canon EOS R` no lugar do caminho `/dev/bus/usb` na interface, sincroniza a métrica de exposição durante a edição e mantém em `PRÓXIMA` a contagem regressiva da exposição mesmo quando uma pausa segura já foi solicitada.
+- O APK `0.14.0` move a sessão contínua para um serviço Android de dispositivo conectado. A captura segue com a tela bloqueada e apagada, usa um wake lock somente para a CPU durante a operação e oferece pausar, retomar e finalizar pela notificação persistente.
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
@@ -78,17 +79,18 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 
 Esse probe não solicita captura e não escreve configurações. A conexão autorizada permanece aberta até o app encerrar ou a câmera ser desconectada, porque o backend Android do libgphoto2 mantém o dispositivo externo durante o processo.
 
-### Sessões Astro econômicas (`0.13.0`)
+### Sessões Astro econômicas (`0.14.0`)
 
-1. Confirme `Versão 0.13.0 (build 25)` e crie ou abra uma sessão no catálogo.
+1. Confirme `Versão 0.14.0 (build 27)` e crie ou abra uma sessão no catálogo.
 2. Com a câmera conectada, uma sessão existente verifica os arquivos conhecidos no cartão e continua permitindo importação. Sessões finalizadas podem ser abertas e importadas, mas não retomadas.
 3. Escolha ISO, white balance, JPG/CR3/JPG+CR3, exposição Bulb e o intervalo mínimo entre os inícios das fotos.
 4. Toque em `Iniciar sessão`. O app captura sem um limite predefinido e `PRÓXIMA` mostra a contagem regressiva real.
-5. Toque em `Pausar sessão` quando quiser interromper. Depois da pausa, escolha entre retomar ou `Finalizar sessão`.
-6. A primeira foto baixa um JPG para a prévia. Para atualizar sem transferir todas as fotos, toque em `Atualizar prévia na próxima foto`; a próxima captura concluída substituirá a prévia.
-7. Após pausar, toque em `Baixar JPGs da sessão` para fazer uma única importação em lote. Os CR3 permanecem no cartão nesta etapa econômica.
-8. Toque em uma thumbnail JPG para visualizá-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
-9. Depois da primeira captura, use `Compartilhar log da captura`. Em `JPG+CR3`, cada foto só é aceita quando os dois arquivos são registrados no cartão.
+5. Após a notificação `Sessão Astro em andamento` aparecer, bloqueie o celular. A tela pode permanecer apagada; a sessão e o USB continuam ativos.
+6. Pause, retome ou finalize pela própria notificação, ou volte ao app e use os controles da sessão. A pausa espera a captura atual terminar com segurança.
+7. A primeira foto baixa um JPG para a prévia. Para atualizar sem transferir todas as fotos, toque em `Atualizar prévia na próxima foto`; a próxima captura concluída substituirá a prévia.
+8. Após pausar, toque em `Baixar JPGs da sessão` para fazer uma única importação em lote. Os CR3 permanecem no cartão nesta etapa econômica.
+9. Toque em uma thumbnail JPG para visualizá-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
+10. Depois da primeira captura, use `Compartilhar log da captura`. Em `JPG+CR3`, cada foto só é aceita quando os dois arquivos são registrados no cartão.
 
 A captura configura o destino como cartão de memória, aplica somente escolhas anunciadas pela câmera e sempre tenta encerrar Bulb antes de fechar a sessão. O intervalo é medido entre os inícios planejados e, se uma captura/download ultrapassar esse intervalo, a próxima começa assim que a anterior terminar. Pausar nunca interrompe uma liberação Bulb em andamento.
 

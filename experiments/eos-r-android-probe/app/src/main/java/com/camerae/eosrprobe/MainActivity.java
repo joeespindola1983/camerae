@@ -1,5 +1,6 @@
 package com.camerae.eosrprobe;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.PendingIntent;
@@ -128,7 +129,16 @@ public final class MainActivity extends Activity {
     private AstroUsbSessionStore.Session activeSession;
     private boolean sessionCameraVerified;
     private boolean receiverRegistered;
+    private boolean serviceReceiverRegistered;
+    private String lastServicePreviewPath;
     private CanonEosExposureCapabilities.Snapshot exposureSnapshot;
+
+    private final BroadcastReceiver astroServiceReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            applyAstroServiceSnapshot(AstroCaptureService.currentSnapshot());
+        }
+    };
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         @Override
@@ -275,6 +285,10 @@ public final class MainActivity extends Activity {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         registerReceiver(usbReceiver, filter, Context.RECEIVER_EXPORTED);
         receiverRegistered = true;
+        IntentFilter serviceFilter = new IntentFilter(AstroCaptureService.ACTION_STATE_CHANGED);
+        registerReceiver(astroServiceReceiver, serviceFilter, Context.RECEIVER_NOT_EXPORTED);
+        serviceReceiverRegistered = true;
+        applyAstroServiceSnapshot(AstroCaptureService.currentSnapshot());
         refreshProbe();
     }
 
@@ -283,6 +297,10 @@ public final class MainActivity extends Activity {
         if (receiverRegistered) {
             unregisterReceiver(usbReceiver);
             receiverRegistered = false;
+        }
+        if (serviceReceiverRegistered) {
+            unregisterReceiver(astroServiceReceiver);
+            serviceReceiverRegistered = false;
         }
         super.onStop();
     }
@@ -459,7 +477,12 @@ public final class MainActivity extends Activity {
         sessionCatalogScreen.setVisibility(View.GONE);
         captureScreen.setVisibility(View.VISIBLE);
         appendEvent("Sessão aberta: " + session.id + " com " + session.captureCount + " capturas");
-        refreshProbe();
+        AstroCaptureService.Snapshot snapshot = AstroCaptureService.currentSnapshot();
+        if (snapshot.belongsTo(session.directory)) {
+            applyAstroServiceSnapshot(snapshot);
+        } else {
+            refreshProbe();
+        }
     }
 
     private void returnToSessionCatalog() {
@@ -475,6 +498,13 @@ public final class MainActivity extends Activity {
 
     private void finalizeActiveSession() {
         if (activeSession == null || sequenceRunning) return;
+        AstroCaptureService.Snapshot snapshot = AstroCaptureService.currentSnapshot();
+        if (snapshot.belongsTo(activeSession.directory)
+                && AstroCapturePolicy.shouldRemainForeground(snapshot.state)) {
+            startService(AstroCaptureService.finalizeIntent(this));
+            sequenceProgressView.setText("Finalizando sessão…");
+            return;
+        }
         persistActiveSession("finalized");
         appendEvent("Sessão finalizada: " + activeSession.id);
         activeSession = null;
@@ -515,6 +545,68 @@ public final class MainActivity extends Activity {
         } catch (IOException error) {
             appendEvent("Falha salvando sessão: " + error.getMessage());
         }
+    }
+
+    private void applyAstroServiceSnapshot(AstroCaptureService.Snapshot snapshot) {
+        if (activeSession == null || !snapshot.belongsTo(activeSession.directory)) return;
+
+        try {
+            activeSession = AstroUsbSessionStore.load(activeSession.directory);
+            activeSequenceDirectory = activeSession.directory;
+            pendingJpegCameraFiles.clear();
+            pendingJpegCameraFiles.addAll(activeSession.pendingJpegs);
+            allCameraFiles.clear();
+            allCameraFiles.addAll(activeSession.cameraFiles);
+        } catch (IOException error) {
+            appendEvent("Falha atualizando sessão em segundo plano: " + error.getMessage());
+        }
+
+        activeSequenceCompletedCount = snapshot.completedCount;
+        sequenceRunning = snapshot.isRunning();
+        sequenceCancelRequested = snapshot.state == AstroCapturePolicy.State.PAUSING;
+        cameraBusy = snapshot.isOperatingCamera();
+        previewRefreshRequested = snapshot.previewRequested;
+        acceptedCountView.setText(String.valueOf(snapshot.completedCount));
+        exposureMetricView.setText(snapshot.bulbSeconds + " s");
+        sequenceProgressView.setText(snapshot.phase);
+        nextCaptureView.setText(snapshot.remainingSeconds > 0
+                ? snapshot.remainingSeconds + " s"
+                : snapshot.state == AstroCapturePolicy.State.PAUSED ? "pausada"
+                : snapshot.state == AstroCapturePolicy.State.FAILED ? "falhou"
+                : snapshot.state == AstroCapturePolicy.State.FINALIZED ? "finalizada"
+                : "processando");
+        if (!snapshot.captureReport.isEmpty()) {
+            captureReport = snapshot.captureReport;
+            hasCaptureLog = true;
+        }
+        if (snapshot.previewPath != null
+                && !snapshot.previewPath.equals(lastServicePreviewPath)) {
+            lastServicePreviewPath = snapshot.previewPath;
+            addCapturedFilesFromReport("FILE|" + snapshot.previewPath + "|image/jpeg\n");
+        }
+        sequenceReport = "SESSÃO ASTRO EM SEGUNDO PLANO\nEstado: "
+                + snapshot.state.name().toLowerCase(Locale.US)
+                + "\nConcluídas: " + snapshot.completedCount
+                + "\nPasta: " + snapshot.sessionDirectory + "\n";
+
+        if (snapshot.state == AstroCapturePolicy.State.FINALIZED) {
+            appendEvent("Sessão finalizada pelo serviço em segundo plano");
+            activeSession = null;
+            activeSequenceDirectory = null;
+            showSessionCatalog();
+            return;
+        }
+        refreshProbe();
+    }
+
+    private void requestNotificationPermissionIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU
+                || checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                == PackageManager.PERMISSION_GRANTED) {
+            return;
+        }
+        requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS}, 1400);
+        Toast.makeText(this, R.string.notification_permission_notice, Toast.LENGTH_LONG).show();
     }
 
     private static int parseIntOrDefault(EditText input, int fallback) {
@@ -853,8 +945,11 @@ public final class MainActivity extends Activity {
     }
 
     private void requestNextPreview() {
-        if (!sequenceRunning || previewRefreshRequested) return;
+        AstroCaptureService.Snapshot snapshot = AstroCaptureService.currentSnapshot();
+        if (!sequenceRunning || previewRefreshRequested || activeSession == null
+                || !snapshot.belongsTo(activeSession.directory)) return;
         previewRefreshRequested = true;
+        startService(AstroCaptureService.refreshPreviewIntent(this));
         updatePreviewButton.setText(R.string.preview_waiting);
         Toast.makeText(this, R.string.preview_waiting_notice, Toast.LENGTH_SHORT).show();
         appendEvent("Atualização da prévia solicitada para a próxima captura");
@@ -1267,14 +1362,12 @@ public final class MainActivity extends Activity {
         String iso = String.valueOf(isoSpinner.getSelectedItem());
         String whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
         String format = String.valueOf(formatSpinner.getSelectedItem());
-        int expectedFilesPerPhoto = "JPG+CR3".equals(format) ? 2 : 1;
-        File outputDirectory = activeSequenceDirectory;
 
         cameraBusy = true;
         sequenceRunning = true;
         sequenceCancelRequested = false;
         sequenceReport = "SESSÃO ASTRO LIBGPHOTO2\nEstado: capturando\nConcluídas: "
-                + activeSequenceCompletedCount + "\nPasta: " + outputDirectory + "\n";
+                + activeSequenceCompletedCount + "\nPasta: " + activeSequenceDirectory + "\n";
         sequenceProgressView.setText(activeSequenceCompletedCount == 0
                 ? "Preparando a primeira captura…"
                 : "Retomando após " + activeSequenceCompletedCount + " capturas…");
@@ -1282,104 +1375,29 @@ public final class MainActivity extends Activity {
         exposureMetricView.setText(bulbSeconds + " s");
         nextCaptureView.setText("agora");
         appendEvent("Sessão astro iniciada/retomada: intervalo " + intervalSeconds
-                + " s, Bulb " + bulbSeconds + " s, " + format);
+                + " s, Bulb " + bulbSeconds + " s, " + format
+                + "; modo tela apagada ativo");
         persistActiveSession("capturing");
+        closeGPhotoConnection();
+        requestNotificationPermissionIfNeeded();
+        Intent service = AstroCaptureService.startIntent(
+                this,
+                activeSequenceDirectory,
+                device.getDeviceName(),
+                iso,
+                whiteBalance,
+                format,
+                bulbSeconds,
+                intervalSeconds
+        );
+        startForegroundService(service);
         refreshProbe();
-
-        long intervalMs = intervalSeconds * 1000L;
-        cameraExecutor.execute(() -> {
-            int completed = activeSequenceCompletedCount;
-            String failure = null;
-            long scheduledAt = SystemClock.elapsedRealtime();
-            try {
-                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
-                if (gphotoConnection == null) throw new IOException("UsbManager.openDevice retornou null");
-                while (!sequenceCancelRequested) {
-                    if (!waitUntilOrCanceledWithCountdown(scheduledAt)) break;
-                    int captureNumber = completed + 1;
-                    boolean downloadPreview = completed == 0 || previewRefreshRequested;
-                    previewRefreshRequested = false;
-                    runOnUiThread(() -> {
-                        sequenceProgressView.setText("Expondo a foto " + captureNumber + "…");
-                        startExposureCountdown(bulbSeconds);
-                        updatePreviewButton.setText(downloadPreview
-                                ? R.string.preview_downloading
-                                : R.string.update_preview);
-                    });
-                    String result = NativeGPhotoClient.capture(
-                            getApplicationContext(),
-                            gphotoConnection.getFileDescriptor(),
-                            outputDirectory,
-                            iso,
-                            whiteBalance,
-                            format,
-                            bulbSeconds,
-                            downloadPreview
-                    );
-                    PersistentProbeLog.append(
-                            "GPHOTO2-SEQUENCE-" + captureNumber,
-                            result
-                    );
-                    String successMarker = "Arquivos registrados no cartão: " + expectedFilesPerPhoto
-                            + "/" + expectedFilesPerPhoto;
-                    runOnUiThread(() -> stopActiveCountdown("processando"));
-                    if (!result.contains(successMarker)) {
-                        failure = "captura " + captureNumber + " não completou " + successMarker;
-                        captureReport = result.endsWith("\n") ? result : result + "\n";
-                        break;
-                    }
-                    completed++;
-                    int completedNow = completed;
-                    runOnUiThread(() -> {
-                        captureReport = result.endsWith("\n") ? result : result + "\n";
-                        collectSessionCameraFiles(result);
-                        collectPendingJpegsFromReport(result);
-                        addCapturedFilesFromReport(result);
-                        hasCaptureLog = true;
-                        activeSequenceCompletedCount = completedNow;
-                        acceptedCountView.setText(String.valueOf(completedNow));
-                        nextCaptureView.setText(intervalSeconds + " s");
-                        sequenceProgressView.setText(completedNow + " capturas no cartão");
-                        updatePreviewButton.setText(R.string.update_preview);
-                        shareLogButton.setEnabled(false);
-                        persistActiveSession("capturing");
-                        refreshProbe();
-                    });
-                    scheduledAt = Math.max(scheduledAt + intervalMs, SystemClock.elapsedRealtime());
-                }
-            } catch (Throwable error) {
-                failure = error.getClass().getSimpleName() + ": " + error.getMessage();
-                PersistentProbeLog.append("GPHOTO2-SEQUENCE", "Falha: " + error);
-            }
-
-            int finalCompleted = completed;
-            String finalFailure = failure;
-            boolean canceled = sequenceCancelRequested;
-            runOnUiThread(() -> {
-                cameraBusy = false;
-                sequenceRunning = false;
-                sequenceCancelRequested = false;
-                activeSequenceCompletedCount = finalCompleted;
-                acceptedCountView.setText(String.valueOf(finalCompleted));
-                stopActiveCountdown("pausada");
-                String state = finalFailure != null ? "falhou" : canceled ? "pausada" : "encerrada";
-                sequenceProgressView.setText(finalFailure != null
-                        ? "Sessão falhou após " + finalCompleted + " capturas"
-                        : "Sessão pausada após " + finalCompleted + " capturas");
-                sequenceReport = "SESSÃO ASTRO LIBGPHOTO2\nEstado: " + state
-                        + "\nConcluídas: " + finalCompleted
-                        + "\nPasta: " + outputDirectory
-                        + (finalFailure == null ? "\n" : "\nErro: " + finalFailure + "\n");
-                appendEvent("Sessão astro " + state + ": " + finalCompleted + " capturas");
-                persistActiveSession(finalFailure == null ? "paused" : "failed");
-                refreshProbe();
-            });
-        });
     }
 
     private void pauseAstroSequence() {
         if (!sequenceRunning || sequenceCancelRequested) return;
         sequenceCancelRequested = true;
+        startService(AstroCaptureService.pauseIntent(this));
         sequenceProgressView.setText("Pausa solicitada · concluindo a captura atual…");
         if (!captureCountdownActive) nextCaptureView.setText("pausando");
         appendEvent("Pausa da sessão solicitada");

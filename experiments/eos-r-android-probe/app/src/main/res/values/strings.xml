@@ -3,6 +3,10 @@
     <string name="title">Camerae Astro USB</string>
     <string name="astro_usb_label">CAMERAE · ASTRO USB</string>
     <string name="astro_capture_title">Captura externa</string>
+    <string name="astro_notification_title">Sessão Astro em andamento</string>
+    <string name="astro_notification_channel">Captura Astro</string>
+    <string name="astro_notification_channel_description">Mantém a câmera USB e as capturas ativas com a tela apagada.</string>
+    <string name="notification_permission_notice">Permita notificações para acompanhar e controlar a sessão com a tela bloqueada.</string>
     <string name="sessions_title">Sessões Astro</string>
     <string name="sessions_label">SESSÕES</string>
     <string name="no_sessions_count">0 SESSÕES</string>
