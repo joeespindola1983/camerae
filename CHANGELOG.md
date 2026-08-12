@@ -50,6 +50,9 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Limited Android Astro capture formats to JPG and JPG+CR3 so every session can
+  generate a lightweight preview and thumbnail; legacy CR3-only sessions resume
+  as JPG+CR3 to preserve RAW capture.
 - Made the Android Astro capture-settings card visibly read-only whenever the
   camera is missing, unauthorized, unsupported, busy, or the session is final,
   with an inline explanation that clears automatically when controls are ready.

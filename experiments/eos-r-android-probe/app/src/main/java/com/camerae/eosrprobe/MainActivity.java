@@ -477,7 +477,7 @@ public final class MainActivity extends Activity {
         }
         selectSpinnerValue(isoSpinner, session.iso);
         selectSpinnerValue(whiteBalanceSpinner, session.whiteBalance);
-        selectSpinnerValue(formatSpinner, session.format);
+        selectSpinnerValue(formatSpinner, AstroCaptureFormatPolicy.normalize(session.format));
         setBulbDurationSeconds(session.bulbSeconds);
         sequenceIntervalInput.setText(String.valueOf(session.intervalSeconds));
         acceptedCountView.setText(String.valueOf(session.captureCount));
@@ -884,7 +884,7 @@ public final class MainActivity extends Activity {
                 "Auto", "AWB White", "Daylight", "Shadow", "Cloudy", "Tungsten",
                 "Fluorescent", "Flash", "Manual", "Color Temperature"
         };
-        String[] formatValues = {"JPG", "CR3", "JPG+CR3"};
+        String[] formatValues = AstroCaptureFormatPolicy.selectableFormats();
         isoSpinner.setAdapter(new ArrayAdapter<>(
                 this, R.layout.spinner_item_astro, isoValues));
         whiteBalanceSpinner.setAdapter(new ArrayAdapter<>(

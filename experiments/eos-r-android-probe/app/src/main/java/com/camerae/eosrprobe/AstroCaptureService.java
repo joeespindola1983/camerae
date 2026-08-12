@@ -209,7 +209,7 @@ public final class AstroCaptureService extends Service {
         deviceName = intent.getStringExtra(EXTRA_DEVICE_NAME);
         iso = intent.getStringExtra(EXTRA_ISO);
         whiteBalance = intent.getStringExtra(EXTRA_WHITE_BALANCE);
-        format = intent.getStringExtra(EXTRA_FORMAT);
+        format = AstroCaptureFormatPolicy.normalize(intent.getStringExtra(EXTRA_FORMAT));
         bulbSeconds = intent.getIntExtra(EXTRA_BULB_SECONDS, session.bulbSeconds);
         intervalSeconds = intent.getIntExtra(EXTRA_INTERVAL_SECONDS, session.intervalSeconds);
         session.iso = iso;
