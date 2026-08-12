@@ -23,6 +23,26 @@ struct CameraeNextSessionCatalogTests {
         )
     }
 
+    @Test func astroProjectUsesTheSamePersistentCaptureWorkspaceWithoutTripod() {
+        let presentation = CameraeNextProjectWorkspacePresentation(
+            projectTitle: "Via Láctea",
+            spatialGuidanceAvailability: .moduleUnavailable,
+            hasSpatialReference: false,
+            captureCount: 2,
+            module: .astrophotography
+        )
+
+        #expect(presentation.tabs.map(\.section) == [.configuration, .captures])
+        #expect(presentation.tabs.map(\.title) == ["Configurar", "Capturas (2)"])
+        #expect(
+            CameraeNextProjectWorkspaceCapabilityPolicy.actions(
+                spatialGuidanceAvailability: .moduleUnavailable,
+                hasSpatialReference: false,
+                module: .astrophotography
+            ) == [.configure, .openCaptures]
+        )
+    }
+
     @Test func savedSpatialGuideRemainsDiscoverableOnAnIncompatibleDevice() {
         #expect(
             CameraeNextProjectSection.visibleSections(
@@ -131,8 +151,8 @@ struct CameraeNextSessionCatalogTests {
         #expect(state.section == .configuration)
     }
 
-    @Test func astroStillUsesItsDedicatedCompletionFlow() {
-        #expect(CameraeNextCaptureCompletionRoute(module: .astrophotography) == .completionScreen)
+    @Test func completedAstroCaptureReturnsToThePersistentCaptureCatalog() {
+        #expect(CameraeNextCaptureCompletionRoute(module: .astrophotography) == .projectCaptures)
     }
 
     @Test func openingReadyRepeatableCaptureRoutesToFullScreenVideo() {
@@ -442,12 +462,44 @@ struct CameraeNextSessionCatalogTests {
     }
 
     @Test func astroCardKeepsProcessingLanguageInsteadOfMP4Prompt() {
-        let presentation = CameraeNextSessionCardPresentation(
-            summary: fixture(frameCount: 8, module: .astrophotography)
-        )
+        let summary = fixture(frameCount: 8, module: .astrophotography)
+        let presentation = CameraeNextSessionCardPresentation(summary: summary)
 
         #expect(presentation.statusText == "ABRIR PROCESSAMENTO")
         #expect(presentation.trailingAction == .menu)
+        #expect(
+            CameraeNextSessionCapabilityPolicy.actions(for: summary) ==
+                [.processAstro, .delete]
+        )
+    }
+
+    @Test func astroPhotoCaptureExposesProcessShareAndDeleteIndependentOfLayout() {
+        let photoURL = URL(fileURLWithPath: "/tmp/astro.dng")
+        let summary = fixture(
+            frameCount: 5,
+            module: .astrophotography,
+            captureKind: .photo,
+            referenceFrameURL: photoURL
+        )
+
+        #expect(
+            CameraeNextSessionCapabilityPolicy.actions(for: summary) ==
+                [.processAstro, .share(photoURL), .delete]
+        )
+    }
+
+    @Test func processedAstroCaptureSharesItsNewestRenderedVideoFromTheCatalog() {
+        let renderedVideoURL = URL(fileURLWithPath: "/tmp/Astro Renders/latest/astro.mp4")
+        let summary = fixture(
+            frameCount: 120,
+            module: .astrophotography,
+            renderedAstroVideoURL: renderedVideoURL
+        )
+
+        #expect(
+            CameraeNextSessionCapabilityPolicy.actions(for: summary) ==
+                [.processAstro, .share(renderedVideoURL), .delete]
+        )
     }
 
     @Test func catalogHidesEmptyCaptureShells() {
@@ -518,6 +570,7 @@ struct CameraeNextSessionCatalogTests {
         videoURL: URL? = nil,
         videoClipURL: URL? = nil,
         alignedVideoURL: URL? = nil,
+        renderedAstroVideoURL: URL? = nil,
         captureKind: RepeatableCaptureKind = .timelapse,
         purpose: TimelapseSession.Purpose? = nil,
         referenceFrameURL: URL? = nil,
@@ -546,6 +599,7 @@ struct CameraeNextSessionCatalogTests {
             videoURL: videoURL,
             videoClipURL: videoClipURL,
             alignedVideoURL: alignedVideoURL,
+            renderedAstroVideoURL: renderedAstroVideoURL,
             isAstroProcessed: false,
             hasRenderedOutput: false
         )

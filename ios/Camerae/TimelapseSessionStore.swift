@@ -64,6 +64,7 @@ struct TimelapseSessionSummary: Identifiable, Equatable, Hashable {
     let videoURL: URL?
     let videoClipURL: URL?
     let alignedVideoURL: URL?
+    let renderedAstroVideoURL: URL?
     let isAstroProcessed: Bool
     let hasRenderedOutput: Bool
 
@@ -393,6 +394,7 @@ final class TimelapseSessionStore {
                 videoURL: videoURL,
                 videoClipURL: clipURL,
                 alignedVideoURL: alignedURL,
+                renderedAstroVideoURL: latestAstroRenderedVideoURL(for: session),
                 isAstroProcessed: (summary.astroSummary?.frameCount ?? 0) > 0 ||
                     (summary.astroSummary?.hasRenderedClip ?? false),
                 hasRenderedOutput: (summary.astroSummary?.hasRenderedClip ?? false) ||
@@ -488,6 +490,7 @@ final class TimelapseSessionStore {
             videoURL: existingVideoURL(for: session),
             videoClipURL: existingVideoClipURL(for: session),
             alignedVideoURL: existingAlignedVideoURL(for: session),
+            renderedAstroVideoURL: latestAstroRenderedVideoURL(for: session),
             isAstroProcessed: isAstroProcessed(session),
             hasRenderedOutput: hasAstroRenderedClip(in: session) ||
                 existingVideoURL(for: session) != nil || existingVideoClipURL(for: session) != nil
@@ -639,19 +642,29 @@ final class TimelapseSessionStore {
     }
 
     private func hasAstroRenderedClip(in session: TimelapseSession) -> Bool {
+        latestAstroRenderedVideoURL(for: session) != nil
+    }
+
+    private func latestAstroRenderedVideoURL(for session: TimelapseSession) -> URL? {
         let rendersURL = session.directoryURL.appendingPathComponent("Astro Renders", isDirectory: true)
         guard let renderDirectories = try? fileManager.contentsOfDirectory(
             at: rendersURL,
-            includingPropertiesForKeys: [.isDirectoryKey]
+            includingPropertiesForKeys: [.isDirectoryKey, .contentModificationDateKey]
         ) else {
-            return false
+            return nil
         }
 
-        return renderDirectories.contains { renderURL in
-            let isDirectory = (try? renderURL.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true
-            guard isDirectory else { return false }
-            return fileManager.fileExists(atPath: renderURL.appendingPathComponent("astro.mp4").path)
+        return renderDirectories.compactMap { renderURL -> (URL, Date)? in
+            let values = try? renderURL.resourceValues(
+                forKeys: [.isDirectoryKey, .contentModificationDateKey]
+            )
+            guard values?.isDirectory == true else { return nil }
+            let videoURL = renderURL.appendingPathComponent("astro.mp4")
+            guard fileManager.fileExists(atPath: videoURL.path) else { return nil }
+            return (videoURL, values?.contentModificationDate ?? .distantPast)
         }
+        .sorted { $0.1 > $1.1 }
+        .first?.0
     }
 
     func exportZip(for session: TimelapseSession) throws -> URL {

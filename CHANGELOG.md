@@ -23,6 +23,10 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Astro projects now use the same persistent Configure/Captures workspace as
+  Repeatable projects, with processing, sharing, and deletion actions available
+  from the capture catalog instead of a session modal.
+
 ### Fixed
 
 - Prevented Astro DNG capture from crashing by leaving processed-photo quality

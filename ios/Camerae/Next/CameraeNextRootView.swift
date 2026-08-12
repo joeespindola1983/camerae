@@ -235,7 +235,6 @@ struct CameraeNextProjectRuntimeView: View {
 
     @State private var captureConfiguration: CameraeNextCaptureConfiguration?
     @State private var isPresentingCapture = false
-    @State private var isPresentingSessions = false
     @State private var videoSettings = WorkflowVideoSettings.repeatableDefault
     @State private var completedCapture: CameraeNextCompletedCapture?
     @State private var repeatableWorkspace = CameraeNextRepeatableProjectWorkspaceState()
@@ -249,12 +248,13 @@ struct CameraeNextProjectRuntimeView: View {
         return SpatialGuidanceSystemCapabilityProvider.availability(for: project.module)
     }
 
-    private var repeatableWorkspacePresentation: CameraeNextProjectWorkspacePresentation {
+    private var captureWorkspacePresentation: CameraeNextProjectWorkspacePresentation {
         CameraeNextProjectWorkspacePresentation(
             projectTitle: project.name,
             spatialGuidanceAvailability: spatialGuidanceAvailability,
             hasSpatialReference: hasSpatialReference,
-            captureCount: projectCaptureCount
+            captureCount: projectCaptureCount,
+            module: project.module
         )
     }
 
@@ -262,12 +262,12 @@ struct CameraeNextProjectRuntimeView: View {
         Group {
             if project.module == .edit {
                 CameraeNextEditProjectView(project: project)
-            } else if project.module == .repeatable {
+            } else {
                 VStack(spacing: 0) {
                     CameraeNextProjectTabs(
                         selection: $repeatableWorkspace.section,
-                        theme: .init(workflow: .repeatable),
-                        presentations: repeatableWorkspacePresentation.tabs
+                        theme: .init(workflow: project.module.designTheme),
+                        presentations: captureWorkspacePresentation.tabs
                     )
 
                     switch repeatableWorkspace.section {
@@ -303,12 +303,10 @@ struct CameraeNextProjectRuntimeView: View {
                         )
                     }
                 }
-                .background(CameraeNextTheme(workflow: .repeatable).background.ignoresSafeArea())
-            } else {
-                workflowConfiguration(isEmbeddedInProjectWorkspace: false)
+                .background(CameraeNextTheme(workflow: project.module.designTheme).background.ignoresSafeArea())
             }
         }
-        .navigationTitle(repeatableWorkspacePresentation.projectTitle)
+        .navigationTitle(captureWorkspacePresentation.projectTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear(perform: refreshProjectTabIndicators)
         .onReceive(
@@ -385,16 +383,9 @@ struct CameraeNextProjectRuntimeView: View {
                 onDone: { completedCapture = nil },
                 onOpenSessions: {
                     completedCapture = nil
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                        isPresentingSessions = true
-                    }
+                    repeatableWorkspace.showCaptures()
                 }
             )
-        }
-        .sheet(isPresented: $isPresentingSessions) {
-            CameraeNextSessionCatalogView(project: project) {
-                isPresentingSessions = false
-            }
         }
     }
 
@@ -417,11 +408,7 @@ struct CameraeNextProjectRuntimeView: View {
                 CameraeCaptureDiagnostics.event("R01.3 capturePresentation.requested")
             },
             onShowSessions: {
-                if project.module == .repeatable {
-                    repeatableWorkspace.showCaptures()
-                } else {
-                    isPresentingSessions = true
-                }
+                repeatableWorkspace.showCaptures()
             },
             isEmbeddedInProjectWorkspace: isEmbeddedInProjectWorkspace,
             referenceRefreshID: referenceRefreshID

@@ -187,6 +187,7 @@ private struct Fixture {
             videoURL: nil,
             videoClipURL: videoURL,
             alignedVideoURL: nil,
+            renderedAstroVideoURL: nil,
             isAstroProcessed: false,
             hasRenderedOutput: true
         )

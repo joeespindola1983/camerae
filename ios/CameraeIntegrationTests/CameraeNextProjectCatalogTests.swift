@@ -500,6 +500,7 @@ struct CameraeNextProjectCatalogTests {
             videoURL: kind == .video ? URL(fileURLWithPath: "/tmp/video.mov") : nil,
             videoClipURL: nil,
             alignedVideoURL: nil,
+            renderedAstroVideoURL: nil,
             isAstroProcessed: false,
             hasRenderedOutput: kind == .video
         )

@@ -258,6 +258,36 @@ struct AppCompositionTests {
         #expect(try store.capturePlan(in: session) == plan)
     }
 
+    @Test("Astro catalog exposes the newest rendered video for sharing")
+    func astroCatalogExposesNewestRenderedVideo() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("CameraeAstroCatalogTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let projectStore = ProjectStore(rootDirectory: root)
+        let project = try await projectStore.createProject(module: .astrophotography, name: "Astro")
+        let store = TimelapseSessionStore(project: project)
+        let session = try store.createSession(captureKind: .timelapse)
+        _ = try store.saveFrame(Data([1]), in: session, index: 1, format: .jpeg)
+        let oldRender = session.directoryURL.appendingPathComponent("Astro Renders/old", isDirectory: true)
+        let latestRender = session.directoryURL.appendingPathComponent("Astro Renders/latest", isDirectory: true)
+        try FileManager.default.createDirectory(at: oldRender, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: latestRender, withIntermediateDirectories: true)
+        try Data([1]).write(to: oldRender.appendingPathComponent("astro.mp4"))
+        try Data([2]).write(to: latestRender.appendingPathComponent("astro.mp4"))
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 100)],
+            ofItemAtPath: oldRender.path
+        )
+        try FileManager.default.setAttributes(
+            [.modificationDate: Date(timeIntervalSince1970: 200)],
+            ofItemAtPath: latestRender.path
+        )
+
+        let summary = try #require(try await store.sessionSummariesFromCatalog().first)
+
+        #expect(summary.renderedAstroVideoURL == latestRender.appendingPathComponent("astro.mp4"))
+    }
+
     @Test("empty capture attempts are discarded without touching sessions that contain media")
     func emptyCaptureAttemptsAreDiscarded() async throws {
         let root = FileManager.default.temporaryDirectory
@@ -683,6 +713,7 @@ struct AppCompositionTests {
             videoURL: kind == .timelapse && hasVideo ? directory.appendingPathComponent("timelapse.mp4") : nil,
             videoClipURL: kind == .video && hasVideo ? directory.appendingPathComponent("video.mov") : nil,
             alignedVideoURL: nil,
+            renderedAstroVideoURL: nil,
             isAstroProcessed: false,
             hasRenderedOutput: hasVideo
         )

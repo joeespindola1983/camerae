@@ -273,6 +273,7 @@ struct CameraeNextWorkflowConfigurationTests {
             videoURL: hasVideo ? sessionDirectory.appendingPathComponent("capture.mp4") : nil,
             videoClipURL: nil,
             alignedVideoURL: nil,
+            renderedAstroVideoURL: nil,
             isAstroProcessed: false,
             hasRenderedOutput: hasVideo
         )
@@ -829,6 +830,7 @@ struct CameraeNextWorkflowConfigurationTests {
             videoURL: nil,
             videoClipURL: videoClipURL,
             alignedVideoURL: nil,
+            renderedAstroVideoURL: nil,
             isAstroProcessed: isAstroProcessed,
             hasRenderedOutput: videoClipURL != nil
         )

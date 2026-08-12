@@ -16,9 +16,13 @@ enum CameraeNextProjectSection: String, CaseIterable, Equatable, Sendable {
 
     static func visibleSections(
         spatialGuidanceAvailability: SpatialGuidanceAvailability,
-        hasSpatialReference: Bool
+        hasSpatialReference: Bool,
+        module: CameraModule = .repeatable
     ) -> [Self] {
-        spatialGuidanceAvailability == .available
+        guard module == .repeatable else {
+            return [.configuration, .captures]
+        }
+        return spatialGuidanceAvailability == .available
             || spatialGuidanceAvailability == .temporarilyUnavailable
             || hasSpatialReference
             ? [.configuration, .tripod, .captures]
@@ -43,11 +47,13 @@ enum CameraeNextProjectWorkspaceAction: Equatable, Sendable {
 enum CameraeNextProjectWorkspaceCapabilityPolicy {
     static func actions(
         spatialGuidanceAvailability: SpatialGuidanceAvailability,
-        hasSpatialReference: Bool
+        hasSpatialReference: Bool,
+        module: CameraModule = .repeatable
     ) -> [CameraeNextProjectWorkspaceAction] {
         CameraeNextProjectSection.visibleSections(
             spatialGuidanceAvailability: spatialGuidanceAvailability,
-            hasSpatialReference: hasSpatialReference
+            hasSpatialReference: hasSpatialReference,
+            module: module
         ).map {
             switch $0 {
             case .configuration: .configure
@@ -66,12 +72,14 @@ struct CameraeNextProjectWorkspacePresentation: Equatable, Sendable {
         projectTitle: String,
         spatialGuidanceAvailability: SpatialGuidanceAvailability,
         hasSpatialReference: Bool,
-        captureCount: Int
+        captureCount: Int,
+        module: CameraModule = .repeatable
     ) {
         self.projectTitle = projectTitle
         tabs = CameraeNextProjectWorkspaceCapabilityPolicy.actions(
             spatialGuidanceAvailability: spatialGuidanceAvailability,
-            hasSpatialReference: hasSpatialReference
+            hasSpatialReference: hasSpatialReference,
+            module: module
         ).map {
             CameraeNextProjectTabPresentation(
                 section: $0.section,
@@ -109,7 +117,7 @@ enum CameraeNextCaptureCompletionRoute: Equatable, Sendable {
     case completionScreen
 
     init(module: CameraModule) {
-        self = module == .repeatable ? .projectCaptures : .completionScreen
+        self = module == .edit ? .completionScreen : .projectCaptures
     }
 }
 
@@ -136,6 +144,37 @@ enum CameraeNextSessionTrailingAction: Equatable, Sendable {
     case share(URL)
     case videoMenu(URL)
     case menu
+}
+
+enum CameraeNextSessionCapability: Equatable, Sendable {
+    case processAstro
+    case share(URL)
+    case delete
+}
+
+enum CameraeNextSessionCapabilityPolicy {
+    static func actions(for summary: TimelapseSessionSummary) -> [CameraeNextSessionCapability] {
+        guard summary.session.module == .astrophotography else { return [.delete] }
+
+        var actions: [CameraeNextSessionCapability] = [.processAstro]
+        if let shareURL = shareURL(for: summary) {
+            actions.append(.share(shareURL))
+        }
+        actions.append(.delete)
+        return actions
+    }
+
+    private static func shareURL(for summary: TimelapseSessionSummary) -> URL? {
+        switch summary.captureKind {
+        case .photo:
+            summary.referenceFrameURL
+        case .video, .timelapse:
+            summary.renderedAstroVideoURL
+                ?? summary.alignedVideoURL
+                ?? summary.videoClipURL
+                ?? summary.videoURL
+        }
+    }
 }
 
 struct CameraeNextCaptureTypePresentation: Equatable, Sendable {
@@ -798,13 +837,33 @@ struct CameraeNextSessionCatalogView: View {
             .accessibilityLabel("Ações do vídeo")
         case .menu:
             Menu {
-                if project.module == .repeatable, summary.captureKind == .timelapse {
+                if project.module == .astrophotography {
+                    ForEach(
+                        Array(CameraeNextSessionCapabilityPolicy.actions(for: summary).enumerated()),
+                        id: \.offset
+                    ) { _, capability in
+                        switch capability {
+                        case .processAstro:
+                            Button("Processar", systemImage: "wand.and.stars") {
+                                selectedAstroSession = summary
+                            }
+                        case let .share(url):
+                            Button("Compartilhar", systemImage: "square.and.arrow.up") {
+                                shareItem = .init(url: url)
+                            }
+                        case .delete:
+                            Button("Excluir", systemImage: "trash", role: .destructive) {
+                                pendingDeletion = summary.session
+                            }
+                        }
+                    }
+                } else if summary.captureKind == .timelapse {
                     Button("Gerar MP4", systemImage: "film") {
                         pendingVideoGeneration = summary
                     }
-                }
-                Button("Excluir", systemImage: "trash", role: .destructive) {
-                    pendingDeletion = summary.session
+                    Button("Excluir", systemImage: "trash", role: .destructive) {
+                        pendingDeletion = summary.session
+                    }
                 }
             } label: {
                 Image(systemName: "ellipsis")
@@ -812,7 +871,11 @@ struct CameraeNextSessionCatalogView: View {
                     .frame(width: 44, height: 44)
                     .background(theme.surface, in: Circle())
             }
-            .accessibilityLabel("Ações da captura")
+            .accessibilityLabel(
+                project.module == .astrophotography
+                    ? "Ações da captura Astro"
+                    : "Ações da captura"
+            )
         }
     }
 
