@@ -31,7 +31,9 @@ final class AstroSequenceManifest {
             UsbDevice device,
             int photoCount,
             int initialDelaySeconds,
-            int intervalSeconds
+            int intervalSeconds,
+            long requestedBulbHoldMillis,
+            CanonEosExposureCapabilities.Snapshot exposureSnapshot
     ) throws IOException {
         String sequenceId = "sequence_" + new SimpleDateFormat(
                 "yyyyMMdd_HHmmss_SSS",
@@ -63,8 +65,17 @@ final class AstroSequenceManifest {
             plan.put("photoCount", photoCount);
             plan.put("initialDelaySeconds", initialDelaySeconds);
             plan.put("startIntervalSeconds", intervalSeconds);
+            plan.put("requestedBulbHoldMillis", requestedBulbHoldMillis);
             plan.put("scheduleSemantics", "start-to-start; serial; never overlaps");
             root.put("plan", plan);
+            if (exposureSnapshot != null) {
+                JSONObject settings = new JSONObject();
+                settings.put("exposureMode", exposureSnapshot.exposureMode);
+                settings.put("shutterValue", exposureSnapshot.shutterValue);
+                settings.put("isoValue", exposureSnapshot.isoValue);
+                settings.put("whiteBalanceValue", exposureSnapshot.whiteBalanceValue);
+                root.put("settingsAtStart", settings);
+            }
             root.put("shots", shots);
         } catch (JSONException error) {
             throw new IOException("Não foi possível iniciar o manifesto JSON", error);
@@ -96,7 +107,8 @@ final class AstroSequenceManifest {
             int storageId,
             String cameraFileName,
             long cameraSize,
-            File downloadedFile
+            File downloadedFile,
+            long actualBulbHoldMillis
     ) throws IOException {
         try {
             JSONObject shot = baseShot(
@@ -113,6 +125,7 @@ final class AstroSequenceManifest {
             shot.put("localPath", downloadedFile.getAbsolutePath());
             shot.put("localBytes", downloadedFile.length());
             shot.put("byteCountVerified", cameraSize <= 0 || cameraSize == downloadedFile.length());
+            shot.put("actualBulbHoldMillis", actualBulbHoldMillis);
             shots.put(shot);
             document.put("completedCount", shots.length());
             document.put("updatedAt", isoTimestamp(completedAtMillis));

@@ -140,7 +140,7 @@ Aceite físico: cinco capturas consecutivas, iniciadas pelo app, resultam em cin
 
 Antes da captura sequencial, registrar descritores e valores atuais de ISO, white balance, abertura, velocidade e modo de exposição. Só habilitar escrita para propriedades que a EOS R confirmar como configuráveis na sessão remota.
 
-### M4 — Sequência astro mínima — interface inicial implementada; aceite pendente
+### M4 — Sequência astro mínima — fluxo básico validado; controles em validação
 
 Depois do aceite do M3, implementar:
 
@@ -155,7 +155,7 @@ Depois do aceite do M3, implementar:
 
 Aceite: executar uma sequência de 20 capturas com cadência definida, baixar todos os arquivos e produzir um manifesto local que associe ordem, horário, parâmetros, handle PTP e arquivo importado.
 
-O APK `0.5.0` entregou o primeiro subconjunto funcional: quantidade, atraso inicial, intervalo entre inícios, progresso, cancelamento seguro entre operações e download de cada captura. A sequência é estritamente serial. O APK `0.5.2` completou fisicamente 5/5 capturas e downloads com cadência de 10 segundos. O APK `0.6.0` acrescentou um manifesto JSON atômico por sequência e confirmou fisicamente os valores/listas de ISO e white balance. A EOS R estava em modo Bulb, no qual não anunciou lista de shutter; o `0.6.1` reconhece esse estado como duração por pressão remota. Escrita de propriedades e duração Bulb configurável continuam pendentes.
+O APK `0.5.0` entregou o primeiro subconjunto funcional: quantidade, atraso inicial, intervalo entre inícios, progresso, cancelamento seguro entre operações e download de cada captura. A sequência é estritamente serial. O APK `0.5.2` completou fisicamente 5/5 capturas e downloads com cadência de 10 segundos. O APK `0.6.0` acrescentou um manifesto JSON atômico por sequência e confirmou fisicamente os valores/listas de ISO e white balance. A EOS R estava em modo Bulb, no qual não anunciou lista de shutter; o `0.6.1` reconheceu esse estado e completou fisicamente 3/3 capturas, downloads e registros consistentes no manifesto. O `0.7.0` acrescenta escrita limitada aos valores anunciados de ISO/WB, readback obrigatório e duração Bulb configurável e cancelável. Esses novos controles aguardam validação física; o aceite final de 20 capturas continua pendente.
 
 O primeiro teste começou 3,9 s após o attach e falhou antes de `OpenSession`, enquanto o teste único anterior começou após 10,3 s e funcionou. Outro log mostrou que a resposta atrasada dessa falha permaneceu na fila bulk IN e deslocou as transações da tentativa seguinte (`0` quando se esperava `1`, depois `1` quando se esperava `2`). O APK `0.5.2` combina o handshake PTP padrão `GetDeviceInfo` com retry limitado, drenagem prévia da fila e descarte limitado de containers pertencentes a transações antigas. Captura fica em allowlist para `04A9:32DA`; outras Canon podem usar importação MTP, mas não recebem comandos proprietários sem perfil validado.
 
@@ -237,4 +237,4 @@ Manter Java no bootstrap evita adicionar dependências. Kotlin pode ser adotado 
 
 ## Prompt de handoff para o próximo modelo
 
-> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md`, `PLAN.md` e `COMPATIBILITY.md`. M1, M2, M3 e uma sequência M4 de cinco fotos foram validados fisicamente. O APK `0.6.1` preserva a ressincronização PTP do `0.5.2`, cria manifesto JSON por sequência e descobre ISO, white balance, shutter e modo de exposição somente por leitura. ISO/WB foram confirmados fisicamente; no modo Bulb, shutter não possui lista e deverá usar duração por pressão remota. Aguarde o teste do manifesto e do diagnóstico Bulb antes de habilitar escrita ou duração configurável. Captura permanece restrita ao perfil EOS R `04A9:32DA`. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.
+> Trabalhe em `/private/tmp/camerae-eos-r-probe/experiments/eos-r-android-probe`, branch `codex/eos-r-android-probe`. Leia `README.md`, `PLAN.md` e `COMPATIBILITY.md`. M1, M2 e M3 foram validados fisicamente; o M4 completou sequências de 5/5 e 3/3, esta última com manifesto validado. O APK `0.7.0` preserva a ressincronização PTP do `0.5.2`, permite ISO/WB somente entre opções anunciadas com readback obrigatório e controla Bulb pelo tempo entre `FullPress` e `FullRelease`. Valide esses novos controles no hardware antes de ampliar o perfil. Captura e escrita permanecem restritas à EOS R `04A9:32DA`. Preserve o escopo descartável, sem Figma e sem TDD, conforme autorizado para este experimento.

@@ -2,7 +2,10 @@ package com.camerae.eosrprobe;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
@@ -94,12 +97,44 @@ final class CanonEosExposureCapabilities {
         appendPropertyReport(report, shutter);
         appendPropertyReport(report, iso);
         appendPropertyReport(report, whiteBalance);
-        report.append("Escrita habilitada: não; esta build valida somente capabilities\n");
+        report.append("Escrita segura: ISO e white balance, limitada aos valores anunciados")
+                .append(" e confirmada por readback\n");
         if (isBulbMode() && shutter.availableValues.isEmpty()) {
             report.append("Diagnóstico shutter: lista indisponível é esperada no modo Bulb; ")
                     .append("a duração deve ser controlada pelo tempo entre FullPress e FullRelease\n");
         }
         return report.toString();
+    }
+
+    Snapshot snapshot() {
+        return new Snapshot(
+                exposureMode.currentValue == null ? -1 : exposureMode.currentValue,
+                shutter.currentValue == null ? -1 : shutter.currentValue,
+                iso.currentValue == null ? -1 : iso.currentValue,
+                whiteBalance.currentValue == null ? -1 : whiteBalance.currentValue,
+                options(iso),
+                options(whiteBalance)
+        );
+    }
+
+    boolean isAvailable(int propertyCode, int value) {
+        PropertyCapability capability = property(propertyCode);
+        return capability != null && capability.availableValues.contains(value);
+    }
+
+    int currentValue(int propertyCode) {
+        PropertyCapability capability = property(propertyCode);
+        return capability == null || capability.currentValue == null
+                ? -1
+                : capability.currentValue;
+    }
+
+    private static List<Option> options(PropertyCapability property) {
+        List<Option> options = new ArrayList<>();
+        for (int value : property.availableValues) {
+            options.add(new Option(value, label(property.code, value)));
+        }
+        return Collections.unmodifiableList(options);
     }
 
     private static void appendPropertyReport(
@@ -330,6 +365,50 @@ final class CanonEosExposureCapabilities {
                 return name + ": " + current + " • controlado pela duração Bulb";
             }
             return name + ": " + current + " • " + availableValues.size() + " opções";
+        }
+    }
+
+    static final class Option {
+        final int value;
+        final String label;
+
+        Option(int value, String label) {
+            this.value = value;
+            this.label = label;
+        }
+
+        @Override
+        public String toString() {
+            return label;
+        }
+    }
+
+    static final class Snapshot {
+        final int exposureMode;
+        final int shutterValue;
+        final int isoValue;
+        final int whiteBalanceValue;
+        final List<Option> isoOptions;
+        final List<Option> whiteBalanceOptions;
+
+        Snapshot(
+                int exposureMode,
+                int shutterValue,
+                int isoValue,
+                int whiteBalanceValue,
+                List<Option> isoOptions,
+                List<Option> whiteBalanceOptions
+        ) {
+            this.exposureMode = exposureMode;
+            this.shutterValue = shutterValue;
+            this.isoValue = isoValue;
+            this.whiteBalanceValue = whiteBalanceValue;
+            this.isoOptions = isoOptions;
+            this.whiteBalanceOptions = whiteBalanceOptions;
+        }
+
+        boolean isBulbMode() {
+            return exposureMode == 0x0004;
         }
     }
 }

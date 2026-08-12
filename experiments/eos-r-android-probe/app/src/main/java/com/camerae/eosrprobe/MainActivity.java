@@ -21,8 +21,10 @@ import android.os.Environment;
 import android.os.SystemClock;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -52,6 +54,7 @@ public final class MainActivity extends Activity {
     private Button captureButton;
     private Button inspectMtpButton;
     private Button inspectControlsButton;
+    private Button applyControlsButton;
     private Button downloadLatestButton;
     private Button startSequenceButton;
     private Button cancelSequenceButton;
@@ -60,6 +63,9 @@ public final class MainActivity extends Activity {
     private EditText sequenceCountInput;
     private EditText sequenceDelayInput;
     private EditText sequenceIntervalInput;
+    private EditText bulbDurationInput;
+    private Spinner isoSpinner;
+    private Spinner whiteBalanceSpinner;
     private TextView sequenceProgressView;
     private TextView exposureCapabilitiesView;
     private ImageView previewView;
@@ -71,6 +77,7 @@ public final class MainActivity extends Activity {
     private volatile boolean sequenceRunning;
     private volatile boolean sequenceCancelRequested;
     private boolean receiverRegistered;
+    private CanonEosExposureCapabilities.Snapshot exposureSnapshot;
 
     private final BroadcastReceiver usbReceiver = new BroadcastReceiver() {
         @Override
@@ -94,6 +101,9 @@ public final class MainActivity extends Activity {
                 sequenceCancelRequested = true;
                 mtpReport = "MTP/PTP desconectado.\n";
                 captureReport = "Captura remota desconectada.\n";
+                exposureReport = "Controles de exposição desconectados.\n";
+                exposureSnapshot = null;
+                clearExposureControls();
                 sequenceProgressView.setText("Sequência interrompida: câmera desconectada");
                 previewView.setVisibility(View.GONE);
                 refreshProbe();
@@ -118,6 +128,7 @@ public final class MainActivity extends Activity {
         captureButton = findViewById(R.id.capture_test);
         inspectMtpButton = findViewById(R.id.inspect_mtp);
         inspectControlsButton = findViewById(R.id.inspect_controls);
+        applyControlsButton = findViewById(R.id.apply_controls);
         downloadLatestButton = findViewById(R.id.download_latest);
         startSequenceButton = findViewById(R.id.start_sequence);
         cancelSequenceButton = findViewById(R.id.cancel_sequence);
@@ -126,6 +137,9 @@ public final class MainActivity extends Activity {
         sequenceCountInput = findViewById(R.id.sequence_count);
         sequenceDelayInput = findViewById(R.id.sequence_delay);
         sequenceIntervalInput = findViewById(R.id.sequence_interval);
+        bulbDurationInput = findViewById(R.id.bulb_duration);
+        isoSpinner = findViewById(R.id.iso_spinner);
+        whiteBalanceSpinner = findViewById(R.id.white_balance_spinner);
         sequenceProgressView = findViewById(R.id.sequence_progress);
         exposureCapabilitiesView = findViewById(R.id.exposure_capabilities);
         previewView = findViewById(R.id.preview);
@@ -140,6 +154,7 @@ public final class MainActivity extends Activity {
         cancelSequenceButton.setOnClickListener(view -> cancelAstroSequence());
         inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
         inspectControlsButton.setOnClickListener(view -> inspectExposureCapabilities());
+        applyControlsButton.setOnClickListener(view -> applyExposureControls());
         downloadLatestButton.setOnClickListener(view -> runMtpProbe(true));
         copyLogButton.setOnClickListener(view -> copyLog());
         shareLogButton.setOnClickListener(view -> shareLog());
@@ -223,6 +238,16 @@ public final class MainActivity extends Activity {
         captureButton.setEnabled(captureValidated && !cameraBusy);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
         inspectControlsButton.setEnabled(captureValidated && !cameraBusy);
+        boolean controlsReady = captureValidated
+                && exposureSnapshot != null
+                && !exposureSnapshot.isoOptions.isEmpty()
+                && !exposureSnapshot.whiteBalanceOptions.isEmpty();
+        applyControlsButton.setEnabled(controlsReady && !cameraBusy);
+        isoSpinner.setEnabled(controlsReady && !cameraBusy);
+        whiteBalanceSpinner.setEnabled(controlsReady && !cameraBusy);
+        bulbDurationInput.setEnabled(controlsReady
+                && exposureSnapshot.isBulbMode()
+                && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
         startSequenceButton.setEnabled(captureValidated && !cameraBusy);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
@@ -272,6 +297,8 @@ public final class MainActivity extends Activity {
                 runOnUiThread(() -> {
                     cameraBusy = false;
                     exposureReport = result.report;
+                    exposureSnapshot = result.snapshot;
+                    populateExposureControls(result.snapshot);
                     exposureCapabilitiesView.setText(result.summary);
                     appendEvent("Capabilities de exposição confirmadas pela EOS R");
                     refreshProbe();
@@ -287,6 +314,100 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void applyExposureControls() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)
+                || !isValidatedCaptureDevice(device)
+                || exposureSnapshot == null) {
+            appendEvent("Aplicação de controles bloqueada: leia as capabilities primeiro");
+            refreshProbe();
+            return;
+        }
+        CanonEosExposureCapabilities.Option iso = selectedOption(isoSpinner);
+        CanonEosExposureCapabilities.Option whiteBalance =
+                selectedOption(whiteBalanceSpinner);
+        if (iso == null || whiteBalance == null) {
+            appendEvent("Aplicação de controles bloqueada: seleção incompleta");
+            refreshProbe();
+            return;
+        }
+
+        cameraBusy = true;
+        appendEvent("Aplicando ISO=" + iso.label + " WB=" + whiteBalance.label);
+        exposureCapabilitiesView.setText("Aplicando e confirmando controles…");
+        refreshProbe();
+        cameraExecutor.execute(() -> {
+            try {
+                CanonEosRemoteClient.CapabilityResult result =
+                        CanonEosRemoteClient.applyExposureSettings(
+                                usbManager,
+                                device,
+                                iso.value,
+                                whiteBalance.value
+                        );
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    exposureReport = result.report;
+                    exposureSnapshot = result.snapshot;
+                    populateExposureControls(result.snapshot);
+                    exposureCapabilitiesView.setText(result.summary);
+                    appendEvent("Controles confirmados: ISO=" + iso.label
+                            + " WB=" + whiteBalance.label);
+                    refreshProbe();
+                });
+            } catch (CanonEosRemoteClient.CapabilityException error) {
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    exposureReport = error.report;
+                    exposureCapabilitiesView.setText("Aplicação falhou: " + error.getMessage());
+                    appendEvent("Aplicação de controles falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
+    }
+
+    private void populateExposureControls(CanonEosExposureCapabilities.Snapshot snapshot) {
+        setSpinnerOptions(isoSpinner, snapshot.isoOptions, snapshot.isoValue);
+        setSpinnerOptions(
+                whiteBalanceSpinner,
+                snapshot.whiteBalanceOptions,
+                snapshot.whiteBalanceValue
+        );
+    }
+
+    private void clearExposureControls() {
+        isoSpinner.setAdapter(null);
+        whiteBalanceSpinner.setAdapter(null);
+    }
+
+    private void setSpinnerOptions(
+            Spinner spinner,
+            java.util.List<CanonEosExposureCapabilities.Option> options,
+            int selectedValue
+    ) {
+        ArrayAdapter<CanonEosExposureCapabilities.Option> adapter = new ArrayAdapter<>(
+                this,
+                android.R.layout.simple_spinner_item,
+                options
+        );
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+        spinner.setAdapter(adapter);
+        for (int index = 0; index < options.size(); index++) {
+            if (options.get(index).value == selectedValue) {
+                spinner.setSelection(index);
+                break;
+            }
+        }
+    }
+
+    private static CanonEosExposureCapabilities.Option selectedOption(Spinner spinner) {
+        Object selected = spinner.getSelectedItem();
+        return selected instanceof CanonEosExposureCapabilities.Option
+                ? (CanonEosExposureCapabilities.Option) selected
+                : null;
     }
 
     private void runRemoteCapture() {
@@ -307,9 +428,20 @@ public final class MainActivity extends Activity {
         sequenceProgressView.setText("Captura única em andamento…");
         refreshProbe();
         File destination = downloadDirectory();
+        long bulbDurationMillis = selectedBulbDurationMillis();
+        if (bulbDurationMillis < 0) {
+            cameraBusy = false;
+            refreshProbe();
+            return;
+        }
         cameraExecutor.execute(() -> {
             try {
-                CaptureFlowResult result = performCaptureAndImport(device, destination);
+                CaptureFlowResult result = performCaptureAndImport(
+                        device,
+                        destination,
+                        bulbDurationMillis,
+                        () -> false
+                );
                 runOnUiThread(() -> {
                     cameraBusy = false;
                     captureReport = result.captureReport;
@@ -355,6 +487,10 @@ public final class MainActivity extends Activity {
         if (photoCount == null || initialDelaySeconds == null || intervalSeconds == null) {
             return;
         }
+        long bulbDurationMillis = selectedBulbDurationMillis();
+        if (bulbDurationMillis < 0) {
+            return;
+        }
 
         AstroSequenceManifest manifest;
         try {
@@ -363,7 +499,9 @@ public final class MainActivity extends Activity {
                     device,
                     photoCount,
                     initialDelaySeconds,
-                    intervalSeconds
+                    intervalSeconds,
+                    bulbDurationMillis,
+                    exposureSnapshot
             );
         } catch (IOException error) {
             sequenceProgressView.setText("Não foi possível criar o manifesto: "
@@ -377,7 +515,10 @@ public final class MainActivity extends Activity {
         sequenceRunning = true;
         sequenceCancelRequested = false;
         appendEvent("Sequência astro iniciada: fotos=" + photoCount
-                + " atraso=" + initialDelaySeconds + "s intervalo=" + intervalSeconds + "s");
+                + " atraso=" + initialDelaySeconds + "s intervalo=" + intervalSeconds + "s"
+                + (bulbDurationMillis > 0
+                ? " bulb=" + bulbDurationMillis / 1000L + "s"
+                : ""));
         sequenceProgressView.setText("Preparando sequência de " + photoCount + " fotos…");
         sequenceReport = manifestReport(manifest.path(), "running", 0, photoCount, null);
         refreshProbe();
@@ -406,7 +547,12 @@ public final class MainActivity extends Activity {
                 CaptureFlowResult result;
                 long captureStartedAtMillis = System.currentTimeMillis();
                 try {
-                    result = performCaptureAndImport(device, destination);
+                    result = performCaptureAndImport(
+                            device,
+                            destination,
+                            bulbDurationMillis,
+                            () -> sequenceCancelRequested
+                    );
                 } catch (CaptureFlowException error) {
                     long failedAtMillis = System.currentTimeMillis();
                     String manifestError = null;
@@ -442,7 +588,8 @@ public final class MainActivity extends Activity {
                             result.capturedObject.storageId,
                             result.cameraFileName,
                             result.capturedObject.size,
-                            result.downloadedFile
+                            result.downloadedFile,
+                            result.actualBulbHoldMillis
                     );
                 } catch (IOException error) {
                     runOnUiThread(() -> finishSequenceAfterManifestError(
@@ -518,11 +665,21 @@ public final class MainActivity extends Activity {
         refreshProbe();
     }
 
-    private CaptureFlowResult performCaptureAndImport(UsbDevice device, File destination)
+    private CaptureFlowResult performCaptureAndImport(
+            UsbDevice device,
+            File destination,
+            long bulbDurationMillis,
+            java.util.function.BooleanSupplier cancelRequested
+    )
             throws CaptureFlowException {
         CanonEosRemoteClient.Result capture;
         try {
-            capture = CanonEosRemoteClient.capture(usbManager, device);
+            capture = CanonEosRemoteClient.capture(
+                    usbManager,
+                    device,
+                    bulbDurationMillis,
+                    cancelRequested
+            );
         } catch (CanonEosRemoteClient.CaptureException error) {
             throw new CaptureFlowException(
                     "captura remota: " + error.getMessage(),
@@ -554,7 +711,8 @@ public final class MainActivity extends Activity {
                     imported.report,
                     imported.downloadedFile,
                     imported.cameraFileName,
-                    capture.capturedObject
+                    capture.capturedObject,
+                    capture.actualBulbHoldMillis
             );
         } catch (MtpCameraClient.ProbeException error) {
             throw new CaptureFlowException(
@@ -588,6 +746,14 @@ public final class MainActivity extends Activity {
                     Toast.LENGTH_LONG).show();
             return null;
         }
+    }
+
+    private long selectedBulbDurationMillis() {
+        if (exposureSnapshot == null || !exposureSnapshot.isBulbMode()) {
+            return 0;
+        }
+        Integer seconds = readSequenceValue(bulbDurationInput, 1, 3600, "Bulb");
+        return seconds == null ? -1 : seconds * 1000L;
     }
 
     private void finishSequenceWithError(
@@ -842,19 +1008,22 @@ public final class MainActivity extends Activity {
         final File downloadedFile;
         final String cameraFileName;
         final CanonEosEventParser.CapturedObject capturedObject;
+        final long actualBulbHoldMillis;
 
         CaptureFlowResult(
                 String captureReport,
                 String importReport,
                 File downloadedFile,
                 String cameraFileName,
-                CanonEosEventParser.CapturedObject capturedObject
+                CanonEosEventParser.CapturedObject capturedObject,
+                long actualBulbHoldMillis
         ) {
             this.captureReport = captureReport;
             this.importReport = importReport;
             this.downloadedFile = downloadedFile;
             this.cameraFileName = cameraFileName;
             this.capturedObject = capturedObject;
+            this.actualBulbHoldMillis = actualBulbHoldMillis;
         }
     }
 

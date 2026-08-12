@@ -112,6 +112,23 @@ final class PtpUsbTransport implements AutoCloseable {
         return data;
     }
 
+    void commandWithDataOut(
+            String name,
+            int operationCode,
+            byte[] payload,
+            int... parameters
+    ) throws TransportException {
+        int transactionId = nextTransactionId++;
+        writeCommand(operationCode, transactionId, parameters);
+        writeData(operationCode, transactionId, payload);
+        Response response = parseResponse(
+                name,
+                readContainerForTransaction(name, transactionId),
+                transactionId
+        );
+        requireOk(name, response);
+    }
+
     void closeSessionQuietly() {
         if (!sessionOpen) {
             return;
@@ -172,6 +189,33 @@ final class PtpUsbTransport implements AutoCloseable {
         }
         append("-> CMD %s tx=%d params=%s",
                 hex4(operationCode), transactionId, formatParameters(parameters));
+    }
+
+    private void writeData(int operationCode, int transactionId, byte[] payload)
+            throws TransportException {
+        if (payload.length > MAX_CONTAINER_LENGTH - HEADER_LENGTH) {
+            throw new TransportException("Payload PTP excede o limite: " + payload.length);
+        }
+        ByteBuffer bytes = ByteBuffer.allocate(HEADER_LENGTH + payload.length)
+                .order(ByteOrder.LITTLE_ENDIAN);
+        bytes.putInt(bytes.capacity());
+        bytes.putShort((short) CONTAINER_DATA);
+        bytes.putShort((short) operationCode);
+        bytes.putInt(transactionId);
+        bytes.put(payload);
+
+        int written = connection.bulkTransfer(
+                bulkOut,
+                bytes.array(),
+                bytes.capacity(),
+                USB_TIMEOUT_MS
+        );
+        if (written != bytes.capacity()) {
+            throw new TransportException("Falha no DATA bulk OUT de " + hex4(operationCode)
+                    + ": " + written + "/" + bytes.capacity() + " bytes");
+        }
+        append("-> DATA %s tx=%d bytes=%d prefix=%s",
+                hex4(operationCode), transactionId, payload.length, hexPrefix(payload));
     }
 
     private void discardStaleInput(String phase) throws TransportException {

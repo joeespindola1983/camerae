@@ -26,9 +26,10 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O primeiro teste do `0.5.0` iniciou 3,9 s após o attach e encontrou o endpoint PTP ainda indisponível antes de `OpenSession`.
 - O APK `0.5.2` validou uma sequência física de cinco capturas e downloads, com cadência de 10 segundos, readiness na primeira tentativa e nenhum desalinhamento PTP.
 - O APK `0.6.0` confirmou fisicamente ISO 6400 com 28 opções e white balance por temperatura de cor com 10 opções. A EOS R estava em modo Bulb e corretamente não anunciou uma lista de velocidades selecionáveis.
-- APK `0.6.1` implementado: reconhece o modo de exposição anunciado pela câmera e trata shutter sem lista, quando em Bulb, como controle de duração por pressão remota em vez de falha de capabilities.
-- Build debug `0.6.1` verificado com sucesso em 11 de agosto de 2026.
-- O manifesto da sequência e o novo diagnóstico de modo Bulb ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
+- O APK `0.6.1` reconheceu fisicamente o modo Bulb e completou 3/3 capturas com cadência de 10 segundos. O manifesto associou cada captura ao handle, arquivo, tamanho e horário corretos, com os três downloads verificados byte a byte.
+- APK `0.7.0` implementado: permite selecionar ISO e white balance somente entre os valores anunciados pela EOS R, exige confirmação por evento após a escrita e controla a duração Bulb pelo tempo entre `FullPress` e `FullRelease`.
+- Build debug `0.7.0` verificado com sucesso em 11 de agosto de 2026.
+- A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
 A política de suporte por modelo está em [COMPATIBILITY.md](COMPATIBILITY.md).
@@ -54,13 +55,13 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 5. Confirme que o estado mostra a câmera pronta para diagnóstico.
 6. Coloque a lente/câmera em foco manual (`MF`).
 7. Para captura única, toque em `Capturar + baixar (MF)` e aguarde o fluxo terminar.
-8. Toque em `Ler ISO, WB e shutter` e confirme que os três controles mostram valor atual e quantidade de opções; esta versão ainda não escreve propriedades.
-9. Para sequência, defina `Fotos`, `Atraso` e `Intervalo` e toque em `Iniciar sequência`.
-10. Aguarde `Sequência concluída`; o cancelamento é aplicado com segurança entre operações de câmera.
+8. Toque em `Ler ISO, WB e shutter`, escolha somente os valores apresentados e toque em `Aplicar ISO + WB`; o app só considera sucesso após a EOS R anunciar os valores de volta.
+9. Se a câmera estiver em Bulb, defina também a duração em segundos. Para sequência, use um intervalo maior que a exposição mais o tempo de transferência — por exemplo, Bulb de 5 s com intervalo de 15 s.
+10. Defina `Fotos`, `Atraso` e `Intervalo`, toque em `Iniciar sequência` e aguarde `Sequência concluída`; cancelar durante uma exposição Bulb libera imediatamente o obturador antes da limpeza.
 11. Confirme no log o nome/handle, os bytes de cada etapa e o caminho do `manifest.json`; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
 12. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.6.1`, cada foto primeiro remove respostas antigas da fila bulk IN e confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Durante a sessão, containers atrasados de outras transações são registrados e ignorados com um limite de segurança. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. Cada sequência recebe uma pasta própria contendo os arquivos baixados e um `manifest.json` atualizado atomicamente após cada foto. A descoberta de controles interpreta `PropValueChanged` e `AvailListChanged`; no modo Bulb, a ausência da lista de shutter é identificada como duração por pressão remota, não como erro. O app ainda não altera parâmetros nem o destino de captura.
+No APK `0.7.0`, cada foto primeiro remove respostas antigas da fila bulk IN e confirma comunicação bidirecional com `GetDeviceInfo`, usando até seis tentativas com backoff antes de abrir a sessão. Durante a sessão, containers atrasados de outras transações são registrados e ignorados com um limite de segurança. Em seguida dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. Cada sequência recebe uma pasta própria contendo os arquivos baixados e um `manifest.json` atualizado atomicamente após cada foto, incluindo configurações confirmadas e duração Bulb real. A descoberta de controles interpreta `PropValueChanged` e `AvailListChanged`; a escrita Canon `SetDevicePropValueEx` fica restrita às opções anunciadas e é verificada por readback. No modo Bulb, a ausência da lista de shutter é identificada como duração por pressão remota, não como erro. O app ainda não altera o destino de captura.
 
 ## Preparação do teste físico
 

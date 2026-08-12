@@ -24,6 +24,9 @@ test distributions do not require an entry here.
 - Added an experimental Android EOS R USB probe with physically validated CR3
   import and Canon PTP remote shutter, plus an automatic capture-to-new-handle
   download flow for hardware validation.
+- Added EOS R ISO and white-balance selectors restricted to camera-advertised
+  values, Canon PTP data-out writes with event readback, configurable Bulb hold
+  duration, and per-shot exposure timing in the Android sequence manifest.
 
 ### Changed
 
@@ -54,6 +57,8 @@ test distributions do not require an entry here.
 - Recognized the Canon EOS exposure mode during capability discovery so a
   missing shutter enumeration in Bulb mode is reported as duration-controlled
   remote release instead of a USB or capability failure.
+- Physically validated a 3/3 EOS R sequence and its atomic manifest, including
+  exact handle, schedule, file path, and downloaded byte-count associations.
 
 ## [9.5.0] - 2026-08-04
 

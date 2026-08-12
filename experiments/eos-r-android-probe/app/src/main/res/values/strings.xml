@@ -14,6 +14,11 @@
     <string name="camera_settings_notice">Primeiro confirme os controles anunciados pela câmera; esta build ainda não altera valores.</string>
     <string name="inspect_controls">Ler ISO, WB e shutter</string>
     <string name="exposure_capabilities_idle">Controles ainda não consultados.</string>
+    <string name="iso">ISO</string>
+    <string name="white_balance">White balance</string>
+    <string name="bulb_duration_seconds">Bulb (s)</string>
+    <string name="default_bulb_duration">5</string>
+    <string name="apply_controls">Aplicar ISO e WB</string>
     <string name="photo_count">Fotos</string>
     <string name="initial_delay_seconds">Atraso (s)</string>
     <string name="start_interval_seconds">Intervalo (s)</string>
