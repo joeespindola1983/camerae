@@ -20,6 +20,7 @@ final class PtpUsbTransport implements AutoCloseable {
     private static final int HEADER_LENGTH = 12;
     private static final int MAX_CONTAINER_LENGTH = 2 * 1024 * 1024;
     private static final int USB_TIMEOUT_MS = 15_000;
+    private static final int CLEANUP_TIMEOUT_MS = 2_000;
     private static final int STALE_INPUT_TIMEOUT_MS = 100;
     private static final int MAX_STALE_CONTAINERS = 8;
 
@@ -90,6 +91,18 @@ final class PtpUsbTransport implements AutoCloseable {
         requireOk(name, response);
     }
 
+    void commandForCleanup(String name, int operationCode, int... parameters)
+            throws TransportException {
+        int transactionId = nextTransactionId++;
+        Response response = transactNoDataWithTimeout(
+                operationCode,
+                transactionId,
+                CLEANUP_TIMEOUT_MS,
+                parameters
+        );
+        requireOk(name, response);
+    }
+
     byte[] commandWithData(String name, int operationCode, int... parameters)
             throws TransportException {
         int transactionId = nextTransactionId++;
@@ -135,13 +148,21 @@ final class PtpUsbTransport implements AutoCloseable {
         }
         try {
             int transactionId = nextTransactionId++;
-            Response response = transactNoData(0x1003, transactionId);
+            Response response = transactNoDataWithTimeout(
+                    0x1003,
+                    transactionId,
+                    CLEANUP_TIMEOUT_MS
+            );
             append("CloseSession: %s", responseName(response.code));
         } catch (TransportException error) {
             append("CloseSession falhou durante limpeza: %s", error.getMessage());
         } finally {
             sessionOpen = false;
         }
+    }
+
+    boolean isSessionOpen() {
+        return sessionOpen;
     }
 
     @Override
@@ -154,10 +175,24 @@ final class PtpUsbTransport implements AutoCloseable {
 
     private Response transactNoData(int operationCode, int transactionId, int... parameters)
             throws TransportException {
+        return transactNoDataWithTimeout(
+                operationCode,
+                transactionId,
+                USB_TIMEOUT_MS,
+                parameters
+        );
+    }
+
+    private Response transactNoDataWithTimeout(
+            int operationCode,
+            int transactionId,
+            int timeoutMs,
+            int... parameters
+    ) throws TransportException {
         writeCommand(operationCode, transactionId, parameters);
         return parseResponse(
                 hex4(operationCode),
-                readContainerForTransaction(hex4(operationCode), transactionId),
+                readContainerForTransaction(hex4(operationCode), transactionId, timeoutMs),
                 transactionId
         );
     }
@@ -241,8 +276,16 @@ final class PtpUsbTransport implements AutoCloseable {
 
     private Container readContainerForTransaction(String name, int expectedTransactionId)
             throws TransportException {
+        return readContainerForTransaction(name, expectedTransactionId, USB_TIMEOUT_MS);
+    }
+
+    private Container readContainerForTransaction(
+            String name,
+            int expectedTransactionId,
+            int timeoutMs
+    ) throws TransportException {
         for (int skipped = 0; skipped <= MAX_STALE_CONTAINERS; skipped++) {
-            Container container = readContainer(USB_TIMEOUT_MS, false);
+            Container container = readContainer(timeoutMs, false);
             if (container.transactionId == expectedTransactionId) {
                 return container;
             }
@@ -268,6 +311,8 @@ final class PtpUsbTransport implements AutoCloseable {
             return null;
         }
         if (received < HEADER_LENGTH) {
+            append("<- ERRO bulk IN: %d bytes (mínimo=%d timeout=%dms)",
+                    received, HEADER_LENGTH, timeoutMs);
             throw new TransportException("Bulk IN inválido: " + received + " bytes");
         }
 
@@ -286,6 +331,7 @@ final class PtpUsbTransport implements AutoCloseable {
                     timeoutMs
             );
             if (chunk <= 0) {
+                append("<- ERRO container truncado: %d/%d bytes", received, declared);
                 throw new TransportException("Container PTP truncado: "
                         + received + "/" + declared + " bytes");
             }
@@ -421,7 +467,9 @@ final class PtpUsbTransport implements AutoCloseable {
     }
 
     private void append(String format, Object... arguments) {
-        report.append(String.format(Locale.US, format, arguments)).append('\n');
+        String line = String.format(Locale.US, format, arguments);
+        report.append(line).append('\n');
+        PersistentProbeLog.append("PTP", line);
     }
 
     private static final class Container {

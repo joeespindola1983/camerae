@@ -129,6 +129,7 @@ final class CanonEosRemoteClient {
                 if (halfPressed) {
                     releaseQuietly(transport, report, "half", 1);
                 }
+                restoreCameraUiQuietly(transport, report);
                 try {
                     transport.close();
                 } catch (RuntimeException error) {
@@ -180,7 +181,8 @@ final class CanonEosRemoteClient {
             report.append("ERRO: ").append(error.getMessage()).append('\n');
         } finally {
             if (transport != null) {
-                transport.close();
+                restoreCameraUiQuietly(transport, report);
+                closeTransportQuietly(transport, report);
             }
             report.append("Fim: ").append(timestamp()).append('\n');
         }
@@ -243,7 +245,8 @@ final class CanonEosRemoteClient {
             report.append("ERRO: ").append(error.getMessage()).append('\n');
         } finally {
             if (transport != null) {
-                transport.close();
+                restoreCameraUiQuietly(transport, report);
+                closeTransportQuietly(transport, report);
             }
             report.append("Fim: ").append(timestamp()).append('\n');
         }
@@ -262,6 +265,65 @@ final class CanonEosRemoteClient {
         transport.openSession(OPEN_SESSION_ID);
         transport.command("EOS_SetRemoteMode", EOS_SET_REMOTE_MODE, 1);
         transport.command("EOS_SetEventMode", EOS_SET_EVENT_MODE, 1);
+    }
+
+    private static void restoreCameraUiQuietly(
+            PtpUsbTransport transport,
+            StringBuilder report
+    ) {
+        if (!transport.isSessionOpen()) {
+            return;
+        }
+        report.append("Limpeza Canon: restaurando display e controles físicos\n");
+        cleanupCommandQuietly(
+                transport,
+                report,
+                "RemoteMode=0",
+                EOS_SET_REMOTE_MODE,
+                0
+        );
+        cleanupCommandQuietly(
+                transport,
+                report,
+                "RemoteMode=1 (reativar display)",
+                EOS_SET_REMOTE_MODE,
+                1
+        );
+        cleanupCommandQuietly(
+                transport,
+                report,
+                "EventMode=0",
+                EOS_SET_EVENT_MODE,
+                0
+        );
+    }
+
+    private static void cleanupCommandQuietly(
+            PtpUsbTransport transport,
+            StringBuilder report,
+            String name,
+            int operationCode,
+            int parameter
+    ) {
+        try {
+            transport.commandForCleanup("EOS_Cleanup " + name, operationCode, parameter);
+            report.append("Limpeza Canon: ").append(name).append(" concluído\n");
+        } catch (PtpUsbTransport.TransportException error) {
+            report.append("Limpeza Canon: ").append(name).append(" falhou: ")
+                    .append(error.getMessage()).append('\n');
+        }
+    }
+
+    private static void closeTransportQuietly(
+            PtpUsbTransport transport,
+            StringBuilder report
+    ) {
+        try {
+            transport.close();
+        } catch (RuntimeException error) {
+            report.append("Limpeza: fechamento USB falhou: ")
+                    .append(error.getMessage()).append('\n');
+        }
     }
 
     private static void readCapabilities(

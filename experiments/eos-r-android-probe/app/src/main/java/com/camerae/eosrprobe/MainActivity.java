@@ -114,6 +114,7 @@ public final class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        PersistentProbeLog.initialize(getApplicationContext());
         setContentView(R.layout.activity_main);
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
@@ -274,6 +275,8 @@ public final class MainActivity extends Activity {
         report.append('\n').append(mtpReport);
         report.append('\n').append(exposureReport);
         report.append('\n').append(sequenceReport);
+        report.append("\nDIAGNÓSTICO PERSISTENTE PTP\n")
+                .append(PersistentProbeLog.snapshot());
         logView.setText(report.toString());
     }
 
@@ -981,6 +984,7 @@ public final class MainActivity extends Activity {
 
     private void appendEvent(String message) {
         eventLog.append('[').append(timestamp()).append("] ").append(message).append('\n');
+        PersistentProbeLog.append("APP", message);
     }
 
     private static String timestamp() {

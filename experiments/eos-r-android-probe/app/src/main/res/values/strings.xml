@@ -11,7 +11,7 @@
     <string name="status_usb_service_missing">O serviço USB do Android não está disponível.</string>
     <string name="status_reading_camera">Operando a câmera via USB/PTP…</string>
     <string name="astro_sequence_title">Sequência astro</string>
-    <string name="camera_settings_notice">Primeiro confirme os controles anunciados pela câmera; esta build ainda não altera valores.</string>
+    <string name="camera_settings_notice">A EOS R bloqueia seus controles físicos enquanto está ligada ao USB. Leia abaixo as opções anunciadas pela câmera antes de aplicar ISO/WB.</string>
     <string name="inspect_controls">Ler ISO, WB e shutter</string>
     <string name="exposure_capabilities_idle">Controles ainda não consultados.</string>
     <string name="iso">ISO</string>

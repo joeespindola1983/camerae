@@ -32,6 +32,11 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Persisted the Android EOS R PTP command trace across process restarts so a
+  camera lockup can be diagnosed even after cable recovery, and added bounded
+  Canon remote/event-mode cleanup before every session closes.
+- Corrected the Android probe notice that still described ISO/WB controls as
+  read-only after property writes were introduced.
 - Corrected Android `MtpDevice` connection ownership and added bounded MTP/PTP
   transition delays after a physical test exposed an immediate bulk-IN
   failure during automatic capture.
