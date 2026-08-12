@@ -23,6 +23,15 @@ test distributions do not require an entry here.
 
 ### Changed
 
+### Fixed
+
+## [9.5.1] - 2026-08-12
+
+**Status:** QA candidate (build 37)
+**Areas:** Astro capture, RAW stability, capture navigation, deferred processing
+
+### Changed
+
 - Astro projects now use the same persistent Configure/Captures workspace as
   Repeatable projects, with processing, sharing, and deletion actions available
   from the capture catalog instead of a session modal.
