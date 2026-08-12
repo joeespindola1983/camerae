@@ -38,6 +38,10 @@ test distributions do not require an entry here.
 - Prevented a delayed pre-session `GetDeviceInfo` response from being mistaken
   for a retried transaction and contaminating `OpenSession` by draining late
   containers and requiring a quiet bulk-IN window before session setup.
+- Reused successful EOS R readiness for subsequent actions on the same USB
+  attach, accepted a drained delayed `GetDeviceInfo` pair as valid readiness,
+  and stopped after two attempts or immediately on device disappearance to
+  avoid triggering the camera USB reboot observed during a third retry.
 - Corrected the Android probe notice that still described ISO/WB controls as
   read-only after property writes were introduced.
 - Corrected Android `MtpDevice` connection ownership and added bounded MTP/PTP

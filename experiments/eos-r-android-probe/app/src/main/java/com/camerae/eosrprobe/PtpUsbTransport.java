@@ -74,7 +74,16 @@ final class PtpUsbTransport implements AutoCloseable {
         if (sessionOpen) {
             throw new TransportException("GetDeviceInfo de readiness exige sessão fechada");
         }
-        discardStaleInput("antes de GetDeviceInfo", STALE_INPUT_TIMEOUT_MS);
+        boolean recoveredDelayedReadiness = discardStaleInput(
+                "antes de GetDeviceInfo",
+                STALE_INPUT_TIMEOUT_MS
+        );
+        if (recoveredDelayedReadiness) {
+            nextTransactionId = 0;
+            append("Readiness PTP recuperada da resposta GetDeviceInfo atrasada");
+            discardStaleInput("após readiness recuperada", postReadinessQuietMs);
+            return;
+        }
         byte[] deviceInfo = commandWithData("GetDeviceInfo", 0x1001);
         nextTransactionId = 0;
         if (deviceInfo.length < 12) {
@@ -254,14 +263,27 @@ final class PtpUsbTransport implements AutoCloseable {
                 hex4(operationCode), transactionId, payload.length, hexPrefix(payload));
     }
 
-    private void discardStaleInput(String phase, int quietWindowMs) throws TransportException {
+    private boolean discardStaleInput(String phase, int quietWindowMs)
+            throws TransportException {
         int discarded = 0;
+        boolean getDeviceInfoData = false;
+        boolean getDeviceInfoResponse = false;
         while (discarded < MAX_STALE_CONTAINERS) {
             Container stale = readContainer(quietWindowMs, true);
             if (stale == null) {
                 break;
             }
             discarded++;
+            if (stale.transactionId == 0
+                    && stale.type == CONTAINER_DATA
+                    && stale.code == 0x1001
+                    && stale.payload.length >= 12) {
+                getDeviceInfoData = true;
+            } else if (stale.transactionId == 0
+                    && stale.type == CONTAINER_RESPONSE
+                    && stale.code == RESPONSE_OK) {
+                getDeviceInfoResponse = true;
+            }
             append("<- DESCARTADO %s code=%s tx=%d bytes=%d (%s)",
                     containerTypeName(stale.type), hex4(stale.code), stale.transactionId,
                     stale.payload.length, phase);
@@ -273,6 +295,7 @@ final class PtpUsbTransport implements AutoCloseable {
             throw new TransportException("fila PTP continuou ocupada após descartar "
                     + MAX_STALE_CONTAINERS + " containers antigos");
         }
+        return getDeviceInfoData && getDeviceInfoResponse;
     }
 
     private Container readContainerForTransaction(String name, int expectedTransactionId)

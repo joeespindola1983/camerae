@@ -21,7 +21,7 @@ final class CanonEosRemoteClient {
     private static final int EOS_REMOTE_RELEASE_OFF = 0x9129;
     private static final long OBJECT_EVENT_TIMEOUT_MS = 15_000;
     private static final long OBJECT_EVENT_POLL_MS = 500;
-    private static final int READINESS_ATTEMPTS = 6;
+    private static final int READINESS_ATTEMPTS = 2;
     private static final int FIRST_READINESS_QUIET_MS = 200;
     private static final int RECOVERED_READINESS_QUIET_MS = 750;
     private static final long FIRST_READINESS_RETRY_DELAY_MS = 1_500;
@@ -29,6 +29,7 @@ final class CanonEosRemoteClient {
     private static final int SETTING_READBACK_POLLS = 6;
     private static final int PROP_ISO_SPEED = 0xD103;
     private static final int PROP_WHITE_BALANCE = 0xD109;
+    private static int readyDeviceId = -1;
 
     private CanonEosRemoteClient() {
     }
@@ -117,10 +118,12 @@ final class CanonEosRemoteClient {
                         .append(" size=").append(capturedObject.size).append(" bytes\n");
             }
         } catch (PtpUsbTransport.TransportException error) {
+            invalidateReadiness(device);
             failureMessage = error.getMessage();
             failureCause = error;
             report.append("ERRO: ").append(failureMessage).append('\n');
         } catch (RuntimeException error) {
+            invalidateReadiness(device);
             failureMessage = error.getClass().getSimpleName() + ": " + error.getMessage();
             failureCause = error;
             report.append("ERRO: ").append(failureMessage).append('\n');
@@ -179,6 +182,7 @@ final class CanonEosRemoteClient {
                 );
             }
         } catch (PtpUsbTransport.TransportException | RuntimeException error) {
+            invalidateReadiness(device);
             failureMessage = error.getMessage();
             failureCause = error;
             report.append("ERRO: ").append(error.getMessage()).append('\n');
@@ -243,6 +247,7 @@ final class CanonEosRemoteClient {
             );
             report.append('\n').append(capabilities.report());
         } catch (PtpUsbTransport.TransportException | RuntimeException error) {
+            invalidateReadiness(device);
             failureMessage = error.getMessage();
             failureCause = error;
             report.append("ERRO: ").append(error.getMessage()).append('\n');
@@ -413,8 +418,25 @@ final class CanonEosRemoteClient {
             UsbDevice device,
             StringBuilder report
     ) throws PtpUsbTransport.TransportException {
+        if (!isDeviceStillConnected(usbManager, device)) {
+            throw new PtpUsbTransport.TransportException(
+                    "dispositivo USB foi desconectado antes da operação"
+            );
+        }
+        if (readyDeviceId == device.getDeviceId()) {
+            PtpUsbTransport cached = new PtpUsbTransport(usbManager, device, report);
+            report.append("Readiness PTP reutilizada para o mesmo deviceId=")
+                    .append(device.getDeviceId()).append('\n');
+            return cached;
+        }
+
         PtpUsbTransport.TransportException lastError = null;
         for (int attempt = 1; attempt <= READINESS_ATTEMPTS; attempt++) {
+            if (!isDeviceStillConnected(usbManager, device)) {
+                throw new PtpUsbTransport.TransportException(
+                        "dispositivo USB desconectado durante readiness"
+                );
+            }
             PtpUsbTransport candidate = null;
             try {
                 candidate = new PtpUsbTransport(usbManager, device, report);
@@ -424,6 +446,7 @@ final class CanonEosRemoteClient {
                                 : RECOVERED_READINESS_QUIET_MS
                 );
                 report.append("Readiness PTP: tentativa ").append(attempt).append(" aceita\n");
+                readyDeviceId = device.getDeviceId();
                 return candidate;
             } catch (PtpUsbTransport.TransportException error) {
                 lastError = error;
@@ -443,6 +466,17 @@ final class CanonEosRemoteClient {
                         + " tentativas; último erro: "
                         + (lastError == null ? "desconhecido" : lastError.getMessage())
         );
+    }
+
+    private static boolean isDeviceStillConnected(UsbManager usbManager, UsbDevice device) {
+        UsbDevice current = usbManager.getDeviceList().get(device.getDeviceName());
+        return current != null && current.getDeviceId() == device.getDeviceId();
+    }
+
+    private static void invalidateReadiness(UsbDevice device) {
+        if (readyDeviceId == device.getDeviceId()) {
+            readyDeviceId = -1;
+        }
     }
 
     private static CanonEosEventParser.CapturedObject drainEvents(

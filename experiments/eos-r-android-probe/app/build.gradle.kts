@@ -14,8 +14,8 @@ android {
         applicationId = "com.camerae.eosrprobe"
         minSdk = 26
         targetSdk = 36
-        versionCode = 17
-        versionName = "0.7.2"
+        versionCode = 18
+        versionName = "0.7.3"
     }
 
     compileOptions {
