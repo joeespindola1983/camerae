@@ -172,7 +172,7 @@ public final class MainActivity extends Activity {
         authorizeButton.setOnClickListener(view -> requestUsbPermission());
         gphotoProbeButton.setOnClickListener(view -> runGPhotoProbe());
         captureButton.setOnClickListener(view -> runGPhotoCapture());
-        startSequenceButton.setOnClickListener(view -> startAstroSequence());
+        startSequenceButton.setOnClickListener(view -> startGPhotoSequence());
         cancelSequenceButton.setOnClickListener(view -> cancelAstroSequence());
         inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
         inspectControlsButton.setOnClickListener(view -> inspectExposureCapabilities());
@@ -276,7 +276,7 @@ public final class MainActivity extends Activity {
         bulbDurationInput.setEnabled(captureValidated && !cameraBusy);
         exportJpegButton.setEnabled(selectedJpeg != null && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
-        startSequenceButton.setEnabled(false);
+        startSequenceButton.setEnabled(captureValidated && !cameraBusy);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
         sequenceCountInput.setEnabled(!cameraBusy);
         sequenceDelayInput.setEnabled(!cameraBusy);
@@ -729,6 +729,125 @@ public final class MainActivity extends Activity {
                     refreshProbe();
                 });
             }
+        });
+    }
+
+    private void startGPhotoSequence() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)
+                || !isValidatedCaptureDevice(device)) {
+            appendEvent("Sequência libgphoto2 não iniciada: EOS R ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+        Integer photoCount = readSequenceValue(sequenceCountInput, 1, 100, "Fotos");
+        Integer initialDelaySeconds = readSequenceValue(sequenceDelayInput, 0, 3600, "Atraso");
+        Integer intervalSeconds = readSequenceValue(sequenceIntervalInput, 1, 86400, "Intervalo");
+        if (photoCount == null || initialDelaySeconds == null || intervalSeconds == null) return;
+
+        int bulbSeconds;
+        try {
+            bulbSeconds = Integer.parseInt(bulbDurationInput.getText().toString().trim());
+        } catch (NumberFormatException error) {
+            Toast.makeText(this, "Informe uma duração Bulb válida", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (bulbSeconds < 1 || bulbSeconds > 120) {
+            Toast.makeText(this, "Neste MVP, use Bulb entre 1 e 120 segundos", Toast.LENGTH_LONG).show();
+            return;
+        }
+        String iso = String.valueOf(isoSpinner.getSelectedItem());
+        String whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
+        String format = String.valueOf(formatSpinner.getSelectedItem());
+        int expectedFilesPerPhoto = "JPG+CR3".equals(format) ? 2 : 1;
+        File pictures = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        if (pictures == null) pictures = getFilesDir();
+        File outputDirectory = new File(
+                pictures,
+                "CameraeAstro/sequence-"
+                        + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date())
+        );
+
+        cameraBusy = true;
+        sequenceRunning = true;
+        sequenceCancelRequested = false;
+        sequenceReport = "SEQUÊNCIA LIBGPHOTO2\nEstado: executando\nConcluídas: 0/"
+                + photoCount + "\nPasta: " + outputDirectory + "\n";
+        sequenceProgressView.setText("Preparando sequência de " + photoCount + " fotos…");
+        appendEvent("Sequência libgphoto2 iniciada: " + photoCount + " fotos, atraso "
+                + initialDelaySeconds + " s, intervalo " + intervalSeconds + " s, Bulb "
+                + bulbSeconds + " s, " + format);
+        refreshProbe();
+
+        long initialDelayMs = initialDelaySeconds * 1000L;
+        long intervalMs = intervalSeconds * 1000L;
+        cameraExecutor.execute(() -> {
+            int completed = 0;
+            String failure = null;
+            long firstCaptureAt = SystemClock.elapsedRealtime() + initialDelayMs;
+            try {
+                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
+                if (gphotoConnection == null) throw new IOException("UsbManager.openDevice retornou null");
+                for (int index = 0; index < photoCount; index++) {
+                    long scheduledAt = firstCaptureAt + index * intervalMs;
+                    if (!waitUntilOrCanceled(scheduledAt)) break;
+                    int captureNumber = index + 1;
+                    runOnUiThread(() -> sequenceProgressView.setText(
+                            "Expondo " + captureNumber + "/" + photoCount + "…"
+                    ));
+                    String result = NativeGPhotoClient.capture(
+                            getApplicationContext(),
+                            gphotoConnection.getFileDescriptor(),
+                            outputDirectory,
+                            iso,
+                            whiteBalance,
+                            format,
+                            bulbSeconds
+                    );
+                    PersistentProbeLog.append(
+                            "GPHOTO2-SEQUENCE-" + captureNumber,
+                            result
+                    );
+                    String successMarker = "Arquivos baixados: " + expectedFilesPerPhoto
+                            + "/" + expectedFilesPerPhoto;
+                    if (!result.contains(successMarker)) {
+                        failure = "captura " + captureNumber + " não completou " + successMarker;
+                        captureReport = result.endsWith("\n") ? result : result + "\n";
+                        break;
+                    }
+                    completed++;
+                    int completedNow = completed;
+                    runOnUiThread(() -> {
+                        captureReport = result.endsWith("\n") ? result : result + "\n";
+                        addCapturedFilesFromReport(result);
+                        sequenceProgressView.setText(
+                                "Baixadas " + completedNow + "/" + photoCount + " fotos"
+                        );
+                    });
+                }
+            } catch (Throwable error) {
+                failure = error.getClass().getSimpleName() + ": " + error.getMessage();
+                PersistentProbeLog.append("GPHOTO2-SEQUENCE", "Falha: " + error);
+            }
+
+            int finalCompleted = completed;
+            String finalFailure = failure;
+            boolean canceled = sequenceCancelRequested;
+            runOnUiThread(() -> {
+                cameraBusy = false;
+                sequenceRunning = false;
+                sequenceCancelRequested = false;
+                String state = finalFailure != null ? "falhou" : canceled ? "cancelada" : "concluída";
+                sequenceProgressView.setText("Sequência " + state + ": " + finalCompleted
+                        + "/" + photoCount);
+                sequenceReport = "SEQUÊNCIA LIBGPHOTO2\nEstado: " + state
+                        + "\nConcluídas: " + finalCompleted + "/" + photoCount
+                        + "\nPasta: " + outputDirectory
+                        + (finalFailure == null ? "\n" : "\nErro: " + finalFailure + "\n");
+                appendEvent("Sequência libgphoto2 " + state + ": " + finalCompleted
+                        + "/" + photoCount);
+                refreshProbe();
+            });
         });
     }
 

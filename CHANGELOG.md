@@ -27,6 +27,9 @@ test distributions do not require an entry here.
 - Added an EOS R astro capture MVP on top of libgphoto2 with ISO, white balance,
   JPG/CR3/JPG+CR3 selection, timed Bulb release, camera-card download, JPG
   thumbnails, and export of the selected JPG to the Android Gallery.
+- Added repeatable libgphoto2 astro sequences using the existing photo count,
+  initial delay and start-to-start interval controls, with between-shot
+  cancellation, per-capture download validation and session thumbnails.
 - Added an experimental Android EOS R USB probe with physically validated CR3
   import and Canon PTP remote shutter, plus an automatic capture-to-new-handle
   download flow for hardware validation.

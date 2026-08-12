@@ -345,7 +345,9 @@ Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCapture(
         void *event_data = NULL;
         int timeout = downloaded == 0 ? 90000 : 8000;
         result = gp_camera_wait_for_event(camera, timeout, &event_type, &event_data, context);
-        report_append(&report, "Evento pós-captura: result=%d type=%d\n", result, event_type);
+        if (event_type != GP_EVENT_UNKNOWN) {
+            report_append(&report, "Evento pós-captura: result=%d type=%d\n", result, event_type);
+        }
         if (result < GP_OK) break;
         if (event_type == GP_EVENT_FILE_ADDED && event_data) {
             int download_result = download_camera_file(camera, context, &report, event_data, output);
