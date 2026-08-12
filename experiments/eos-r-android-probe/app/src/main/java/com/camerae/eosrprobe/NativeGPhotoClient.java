@@ -1,0 +1,48 @@
+package com.camerae.eosrprobe;
+
+import android.content.Context;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+
+final class NativeGPhotoClient {
+    static {
+        System.loadLibrary("gphoto2_bridge");
+    }
+
+    private NativeGPhotoClient() {}
+
+    static String probe(Context context, int fileDescriptor) throws IOException {
+        File root = new File(context.getFilesDir(), "gphoto2-modules/2.5.34");
+        File camlibs = new File(root, "camlibs");
+        File iolibs = new File(root, "iolibs");
+        copyAsset(context, "gphoto/camlibs/ptp2.so", new File(camlibs, "ptp2.so"));
+        copyAsset(context, "gphoto/iolibs/usb1.so", new File(iolibs, "usb1.so"));
+        return nativeProbe(fileDescriptor, camlibs.getAbsolutePath(), iolibs.getAbsolutePath());
+    }
+
+    private static void copyAsset(Context context, String assetName, File target) throws IOException {
+        File parent = target.getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+            throw new IOException("Não foi possível criar " + parent);
+        }
+        try (InputStream input = context.getAssets().open(assetName);
+             FileOutputStream output = new FileOutputStream(target, false)) {
+            byte[] buffer = new byte[32 * 1024];
+            int count;
+            while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+            output.getFD().sync();
+        }
+        if (!target.setReadable(true, true) || !target.setExecutable(true, true)) {
+            throw new IOException("Não foi possível preparar o módulo " + target.getName());
+        }
+    }
+
+    private static native String nativeProbe(
+            int fileDescriptor,
+            String camlibDirectory,
+            String iolibDirectory
+    );
+}

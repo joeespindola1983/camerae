@@ -51,6 +51,7 @@ public final class MainActivity extends Activity {
     private TextView statusView;
     private TextView logView;
     private Button authorizeButton;
+    private Button gphotoProbeButton;
     private Button captureButton;
     private Button inspectMtpButton;
     private Button inspectControlsButton;
@@ -73,7 +74,10 @@ public final class MainActivity extends Activity {
     private String captureReport = "Captura remota ainda não testada.\n";
     private String exposureReport = "Controles de exposição ainda não consultados.\n";
     private String sequenceReport = "Manifesto de sequência ainda não criado.\n";
+    private String gphotoReport = "libgphoto2 ainda não consultou a câmera.\n";
     private boolean cameraBusy;
+    private boolean gphotoProbeCompleted;
+    private UsbDeviceConnection gphotoConnection;
     private volatile boolean sequenceRunning;
     private volatile boolean sequenceCancelRequested;
     private boolean receiverRegistered;
@@ -102,6 +106,9 @@ public final class MainActivity extends Activity {
                 mtpReport = "MTP/PTP desconectado.\n";
                 captureReport = "Captura remota desconectada.\n";
                 exposureReport = "Controles de exposição desconectados.\n";
+                gphotoReport = "libgphoto2 desconectado; reinicie o app antes de um novo probe.\n";
+                gphotoProbeCompleted = false;
+                closeGPhotoConnection();
                 exposureSnapshot = null;
                 clearExposureControls();
                 sequenceProgressView.setText("Sequência interrompida: câmera desconectada");
@@ -126,6 +133,7 @@ public final class MainActivity extends Activity {
         statusView = findViewById(R.id.status);
         logView = findViewById(R.id.log);
         authorizeButton = findViewById(R.id.authorize);
+        gphotoProbeButton = findViewById(R.id.gphoto_probe);
         captureButton = findViewById(R.id.capture_test);
         inspectMtpButton = findViewById(R.id.inspect_mtp);
         inspectControlsButton = findViewById(R.id.inspect_controls);
@@ -150,6 +158,7 @@ public final class MainActivity extends Activity {
             refreshProbe();
         });
         authorizeButton.setOnClickListener(view -> requestUsbPermission());
+        gphotoProbeButton.setOnClickListener(view -> runGPhotoProbe());
         captureButton.setOnClickListener(view -> runRemoteCapture());
         startSequenceButton.setOnClickListener(view -> startAstroSequence());
         cancelSequenceButton.setOnClickListener(view -> cancelAstroSequence());
@@ -200,6 +209,7 @@ public final class MainActivity extends Activity {
     protected void onDestroy() {
         sequenceCancelRequested = true;
         cameraExecutor.shutdownNow();
+        closeGPhotoConnection();
         super.onDestroy();
     }
 
@@ -236,21 +246,23 @@ public final class MainActivity extends Activity {
         boolean cameraReady = selected != null && usbManager.hasPermission(selected);
         boolean captureValidated = cameraReady && isValidatedCaptureDevice(selected);
         authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
-        captureButton.setEnabled(captureValidated && !cameraBusy);
+        gphotoProbeButton.setEnabled(captureValidated && !cameraBusy && !gphotoProbeCompleted);
+        // O transporte PTP manual fica congelado enquanto validamos o caminho oficial libgphoto2.
+        captureButton.setEnabled(false);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
-        inspectControlsButton.setEnabled(captureValidated && !cameraBusy);
+        inspectControlsButton.setEnabled(false);
         boolean controlsReady = captureValidated
                 && exposureSnapshot != null
                 && !exposureSnapshot.isoOptions.isEmpty()
                 && !exposureSnapshot.whiteBalanceOptions.isEmpty();
-        applyControlsButton.setEnabled(controlsReady && !cameraBusy);
+        applyControlsButton.setEnabled(false);
         isoSpinner.setEnabled(controlsReady && !cameraBusy);
         whiteBalanceSpinner.setEnabled(controlsReady && !cameraBusy);
         bulbDurationInput.setEnabled(controlsReady
                 && exposureSnapshot.isBulbMode()
                 && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
-        startSequenceButton.setEnabled(captureValidated && !cameraBusy);
+        startSequenceButton.setEnabled(false);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
         sequenceCountInput.setEnabled(!cameraBusy);
         sequenceDelayInput.setEnabled(!cameraBusy);
@@ -271,6 +283,7 @@ public final class MainActivity extends Activity {
                 .append(captureValidated).append("\n\n");
         report.append("EVENTOS\n").append(eventLog).append('\n');
         report.append(UsbTopologyFormatter.describe(usbManager));
+        report.append('\n').append(gphotoReport);
         report.append('\n').append(captureReport);
         report.append('\n').append(mtpReport);
         report.append('\n').append(exposureReport);
@@ -278,6 +291,61 @@ public final class MainActivity extends Activity {
         report.append("\nDIAGNÓSTICO PERSISTENTE PTP\n")
                 .append(PersistentProbeLog.snapshot());
         logView.setText(report.toString());
+    }
+
+    private void runGPhotoProbe() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)) {
+            appendEvent("Probe libgphoto2 cancelado: câmera ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+        if (gphotoProbeCompleted) {
+            appendEvent("Probe libgphoto2 já executado neste attach; reconecte a câmera para repetir");
+            refreshProbe();
+            return;
+        }
+
+        cameraBusy = true;
+        appendEvent("Iniciando probe libgphoto2 2.5.34 somente leitura");
+        refreshProbe();
+        cameraExecutor.submit(() -> {
+            try {
+                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
+                if (gphotoConnection == null) {
+                    throw new IOException("UsbManager.openDevice retornou null");
+                }
+                int fileDescriptor = gphotoConnection.getFileDescriptor();
+                PersistentProbeLog.append("GPHOTO2", "Início do probe read-only; fd=" + fileDescriptor);
+                String result = NativeGPhotoClient.probe(getApplicationContext(), fileDescriptor);
+                PersistentProbeLog.append("GPHOTO2", result);
+                runOnUiThread(() -> {
+                    gphotoReport = result.endsWith("\n") ? result : result + "\n";
+                    gphotoProbeCompleted = true;
+                    cameraBusy = false;
+                    appendEvent("Probe libgphoto2 finalizado; nenhuma escrita ou captura foi solicitada");
+                    refreshProbe();
+                });
+            } catch (Throwable error) {
+                PersistentProbeLog.append("GPHOTO2", "Falha: " + error);
+                runOnUiThread(() -> {
+                    gphotoReport = "PROBE LIBGPHOTO2 SOMENTE LEITURA\nERRO: "
+                            + error.getClass().getSimpleName() + ": " + error.getMessage() + "\n";
+                    gphotoProbeCompleted = true;
+                    cameraBusy = false;
+                    appendEvent("Probe libgphoto2 falhou: " + error.getClass().getSimpleName()
+                            + ": " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
+    }
+
+    private void closeGPhotoConnection() {
+        if (gphotoConnection != null) {
+            gphotoConnection.close();
+            gphotoConnection = null;
+        }
     }
 
     private void inspectExposureCapabilities() {

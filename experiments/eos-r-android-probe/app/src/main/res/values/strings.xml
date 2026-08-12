@@ -10,6 +10,8 @@
     <string name="status_usb_host_missing">Este Android não declara suporte a USB Host/OTG.</string>
     <string name="status_usb_service_missing">O serviço USB do Android não está disponível.</string>
     <string name="status_reading_camera">Operando a câmera via USB/PTP…</string>
+    <string name="gphoto_probe">Testar libgphoto2 (somente leitura)</string>
+    <string name="gphoto_probe_notice">Primeiro marco: detectar a EOS R e ler resumo, ISO, WB e shutter sem capturar nem alterar configurações. O transporte PTP experimental anterior está desativado nesta versão.</string>
     <string name="astro_sequence_title">Sequência astro</string>
     <string name="camera_settings_notice">A EOS R bloqueia seus controles físicos enquanto está ligada ao USB. Leia abaixo as opções anunciadas pela câmera antes de aplicar ISO/WB.</string>
     <string name="inspect_controls">Ler ISO, WB e shutter</string>

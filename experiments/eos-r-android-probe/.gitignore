@@ -2,4 +2,6 @@
 .idea/
 local.properties
 **/build/
+.cxx/
+**/.cxx/
 *.iml

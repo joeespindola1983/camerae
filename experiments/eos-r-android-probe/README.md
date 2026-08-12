@@ -32,11 +32,15 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O `0.7.1` também executa a sequência de restauração usada pela referência Canon do libgphoto2 (`RemoteMode 0`, `RemoteMode 1`, `EventMode 0`) antes de fechar a sessão, com timeout curto e sem impedir a liberação da interface USB se a câmera não responder.
 - O log 17 identificou uma resposta `GetDeviceInfo tx=0` atrasada: o retry reutilizou a mesma transação, consumiu a primeira resposta como se fosse sua e deixou o segundo container `DATA` para `OpenSession`. O APK `0.7.2` aguarda mais após uma falha, drena respostas tardias e exige uma janela bulk IN silenciosa depois do readiness antes de abrir a sessão.
 - O log 18 validou a recuperação do `0.7.2`, mas o log 19 mostrou a EOS R reiniciando sua conexão USB durante o terceiro readiness de uma ação posterior; nenhum `SetDevicePropValueEx` chegou a ser enviado. O APK `0.7.3` reutiliza readiness no mesmo `deviceId`, aceita um par `GetDeviceInfo` tardio drenado como válido, interrompe após duas tentativas e para imediatamente se o device original desaparecer.
-- Build debug `0.7.3` verificado com sucesso em 11 de agosto de 2026.
+- O log 20 confirmou que até o primeiro `GetDeviceInfo` continuava retornando bulk IN inválido em conexões físicas limpas. Esse resultado encerrou os ajustes incrementais do transporte PTP manual.
+- O APK `0.8.0` substitui o próximo marco por libgphoto2 2.5.34, libusb 1.0.29 e libltdl 2.5.4 compilados para Android `arm64-v8a`. O file descriptor autorizado pelo Android é entregue ao backend oficial por `gp_port_usb_set_sys_device`.
+- Em `0.8.0`, captura, sequência e escrita pelo transporte manual estão desativadas. O novo botão `Testar libgphoto2 (somente leitura)` limita-se a inicializar a EOS R, obter seu resumo e ler a árvore de configuração procurando ISO, white balance, shutter, Bulb e capture target.
+- Build debug `0.8.0` verificado e instalado com sucesso no SM-A065M em 11 de agosto de 2026.
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
 A política de suporte por modelo está em [COMPATIBILITY.md](COMPATIBILITY.md).
+As versões, hashes e decisões do build nativo estão em [NATIVE_DEPENDENCIES.md](NATIVE_DEPENDENCIES.md).
 
 ## Abrir e compilar
 
@@ -52,6 +56,19 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 
 ## Testar disparo, leitura e download
 
+### Primeiro teste do caminho libgphoto2 (`0.8.0`)
+
+1. Confirme no topo `Versão 0.8.0 (build 19)`.
+2. Conecte a EOS R ligada, com Wi-Fi desligado, e autorize o USB.
+3. Toque uma única vez em `Testar libgphoto2 (somente leitura)`.
+4. Não toque nos controles físicos nem desconecte o cabo enquanto o estado indicar operação USB/PTP.
+5. Ao terminar, toque em `Compartilhar log`. O resultado esperado contém `gp_camera_init`, `gp_camera_get_summary`, `gp_camera_get_config` e `gp_camera_exit`.
+6. Se houver erro ou a câmera reiniciar, não repita no mesmo attach: compartilhe o log e reconecte fisicamente antes de outro teste.
+
+Esse probe não solicita captura e não escreve configurações. A conexão autorizada permanece aberta até o app encerrar ou a câmera ser desconectada, porque o backend Android do libgphoto2 mantém o dispositivo externo durante o processo.
+
+### Fluxo legado (congelado em `0.8.0`)
+
 1. Instale `app/build/outputs/apk/debug/app-debug.apk`.
 2. Abra o app e conecte a EOS R ligada, em modo de fotografia, com Wi-Fi desligado.
 3. Selecione o app quando o Android perguntar como tratar o dispositivo Canon.
@@ -65,7 +82,7 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 11. Confirme no log o nome/handle, os bytes de cada etapa e o caminho do `manifest.json`; `Ler câmera` e `Baixar última` continuam disponíveis para diagnóstico manual.
 12. Toque em `Compartilhar log` e envie o texto completo para a próxima análise.
 
-No APK `0.7.3`, o primeiro comando do attach remove respostas antigas da fila bulk IN e confirma comunicação bidirecional com `GetDeviceInfo`, usando no máximo duas tentativas. Uma resposta completa tardia encontrada durante a drenagem já conta como readiness válido; ações posteriores no mesmo `deviceId` não repetem esse probe. Uma falha recebe tempo para sua resposta chegar, e todo sucesso precisa ser seguido por uma janela silenciosa antes de `OpenSession`. Durante a sessão, containers atrasados de outras transações são registrados e ignorados com um limite de segurança. Cada comando e resposta PTP também é persistido no armazenamento privado enquanto acontece; a seção `DIAGNÓSTICO PERSISTENTE PTP` do log contém a sessão atual e a anterior. Em seguida o app dispara, aguarda `ObjectAddedEx/64` e busca o handle diretamente por MTP. Na sequência, o intervalo é medido entre os inícios planejados; se captura/download demorarem mais, a próxima foto começa assim que a operação anterior termina, nunca em paralelo. Cada sequência recebe uma pasta própria contendo os arquivos baixados e um `manifest.json` atualizado atomicamente após cada foto, incluindo configurações confirmadas e duração Bulb real. A descoberta de controles interpreta `PropValueChanged` e `AvailListChanged`; a escrita Canon `SetDevicePropValueEx` fica restrita às opções anunciadas e é verificada por readback. Antes de fechar toda sessão, o app tenta restaurar o display/controle Canon e sempre libera a interface USB. O app ainda não altera o destino de captura.
+No APK `0.7.3`, o primeiro comando do attach removia respostas antigas da fila bulk IN e confirmava comunicação bidirecional com `GetDeviceInfo`, usando no máximo duas tentativas. Esse caminho permanece no código apenas como referência diagnóstica e seus botões de captura/configuração estão desativados em `0.8.0`.
 
 ## Preparação do teste físico
 
