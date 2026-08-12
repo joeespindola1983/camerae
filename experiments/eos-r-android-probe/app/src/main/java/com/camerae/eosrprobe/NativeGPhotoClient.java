@@ -28,7 +28,8 @@ final class NativeGPhotoClient {
             String iso,
             String whiteBalance,
             String format,
-            int bulbSeconds
+            int bulbSeconds,
+            boolean downloadJpegPreview
     ) throws IOException {
         File root = prepareModules(context);
         File camlibs = new File(root, "camlibs");
@@ -44,7 +45,29 @@ final class NativeGPhotoClient {
                 iso,
                 whiteBalance,
                 format,
-                bulbSeconds
+                bulbSeconds,
+                downloadJpegPreview
+        );
+    }
+
+    static String downloadFiles(
+            Context context,
+            int fileDescriptor,
+            File outputDirectory,
+            String cameraFiles
+    ) throws IOException {
+        File root = prepareModules(context);
+        File camlibs = new File(root, "camlibs");
+        File iolibs = new File(root, "iolibs");
+        if (!outputDirectory.isDirectory() && !outputDirectory.mkdirs()) {
+            throw new IOException("Não foi possível criar " + outputDirectory);
+        }
+        return nativeDownloadFiles(
+                fileDescriptor,
+                camlibs.getAbsolutePath(),
+                iolibs.getAbsolutePath(),
+                outputDirectory.getAbsolutePath(),
+                cameraFiles
         );
     }
 
@@ -88,6 +111,15 @@ final class NativeGPhotoClient {
             String iso,
             String whiteBalance,
             String format,
-            int bulbSeconds
+            int bulbSeconds,
+            boolean downloadJpegPreview
+    );
+
+    private static native String nativeDownloadFiles(
+            int fileDescriptor,
+            String camlibDirectory,
+            String iolibDirectory,
+            String outputDirectory,
+            String cameraFiles
     );
 }

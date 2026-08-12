@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <unistd.h>
 
 #include <gphoto2/gphoto2-camera.h>
@@ -283,11 +284,18 @@ static int download_camera_file(Camera *camera, GPContext *context, ProbeReport 
     return result;
 }
 
+static int is_jpeg_name(const char *name) {
+    if (!name) return 0;
+    const char *extension = strrchr(name, '.');
+    return extension && (!strcasecmp(extension, ".jpg") || !strcasecmp(extension, ".jpeg"));
+}
+
 JNIEXPORT jstring JNICALL
 Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCapture(
         JNIEnv *env, jclass clazz, jint file_descriptor, jstring camlib_directory,
         jstring iolib_directory, jstring output_directory, jstring iso_value,
-        jstring white_balance, jstring requested_format, jint bulb_seconds) {
+        jstring white_balance, jstring requested_format, jint bulb_seconds,
+        jboolean download_jpeg_preview) {
     (void) clazz;
     ProbeReport report = {{0}, 0};
     const char *camlibs = (*env)->GetStringUTFChars(env, camlib_directory, NULL);
@@ -339,21 +347,28 @@ Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCapture(
     }
 
     int expected_files = !strcmp(format, "JPG+CR3") ? 2 : 1;
+    int registered = 0;
     int downloaded = 0;
-    while (result >= GP_OK && downloaded < expected_files) {
+    while (result >= GP_OK && registered < expected_files) {
         CameraEventType event_type = GP_EVENT_TIMEOUT;
         void *event_data = NULL;
-        int timeout = downloaded == 0 ? 90000 : 8000;
+        int timeout = registered == 0 ? 90000 : 8000;
         result = gp_camera_wait_for_event(camera, timeout, &event_type, &event_data, context);
         if (event_type != GP_EVENT_UNKNOWN) {
             report_append(&report, "Evento pós-captura: result=%d type=%d\n", result, event_type);
         }
         if (result < GP_OK) break;
         if (event_type == GP_EVENT_FILE_ADDED && event_data) {
-            int download_result = download_camera_file(camera, context, &report, event_data, output);
+            CameraFilePath *camera_path = event_data;
+            report_append(&report, "CAMERA|%s|%s\n", camera_path->folder, camera_path->name);
+            registered++;
+            int download_result = GP_OK;
+            if (download_jpeg_preview && is_jpeg_name(camera_path->name)) {
+                download_result = download_camera_file(camera, context, &report, camera_path, output);
+                if (download_result >= GP_OK) downloaded++;
+            }
             free(event_data);
             if (download_result < GP_OK) { result = download_result; break; }
-            downloaded++;
         } else if (event_type == GP_EVENT_TIMEOUT) {
             result = GP_ERROR_TIMEOUT;
             break;
@@ -361,7 +376,8 @@ Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCapture(
             free(event_data);
         }
     }
-    report_append(&report, "Arquivos baixados: %d/%d\n", downloaded, expected_files);
+    report_append(&report, "Arquivos registrados no cartão: %d/%d\n", registered, expected_files);
+    report_append(&report, "Prévia JPG baixada: %d\n", downloaded);
 
     if (shutter_pressed && camera) {
         set_text_config(camera, context, &report, "eosremoterelease", "Release");
@@ -380,5 +396,80 @@ Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCapture(
     (*env)->ReleaseStringUTFChars(env, iso_value, iso);
     (*env)->ReleaseStringUTFChars(env, white_balance, wb);
     (*env)->ReleaseStringUTFChars(env, requested_format, format);
+    return (*env)->NewStringUTF(env, report.data);
+}
+
+JNIEXPORT jstring JNICALL
+Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeDownloadFiles(
+        JNIEnv *env, jclass clazz, jint file_descriptor, jstring camlib_directory,
+        jstring iolib_directory, jstring output_directory, jstring camera_files) {
+    (void) clazz;
+    ProbeReport report = {{0}, 0};
+    const char *camlibs = (*env)->GetStringUTFChars(env, camlib_directory, NULL);
+    const char *iolibs = (*env)->GetStringUTFChars(env, iolib_directory, NULL);
+    const char *output = (*env)->GetStringUTFChars(env, output_directory, NULL);
+    const char *encoded_files = (*env)->GetStringUTFChars(env, camera_files, NULL);
+    if (!camlibs || !iolibs || !output || !encoded_files) {
+        return (*env)->NewStringUTF(env, "ERRO: parâmetros JNI inválidos.");
+    }
+    setenv("CAMLIBS", camlibs, 1);
+    setenv("IOLIBS", iolibs, 1);
+    report_append(&report, "IMPORTAÇÃO JPG LIBGPHOTO2\n");
+
+    GPContext *context = gp_context_new();
+    Camera *camera = NULL;
+    int initialized = 0;
+    int result = gp_port_usb_set_sys_device(file_descriptor);
+    if (context) {
+        gp_context_set_error_func(context, context_error, &report);
+        gp_context_set_status_func(context, context_status, &report);
+    }
+    if (result >= GP_OK && context) result = gp_camera_new(&camera);
+    if (result >= GP_OK && camera) {
+        result = gp_camera_init(camera, context);
+        initialized = result >= GP_OK;
+        report_append(&report, "gp_camera_init: %d (%s)\n", result, gp_result_as_string(result));
+    }
+
+    int requested = 0;
+    int downloaded = 0;
+    char *files = strdup(encoded_files);
+    char *save_line = NULL;
+    for (char *line = strtok_r(files, "\n", &save_line);
+         result >= GP_OK && line;
+         line = strtok_r(NULL, "\n", &save_line)) {
+        char *separator = strchr(line, '|');
+        if (!separator) continue;
+        *separator = '\0';
+        CameraFilePath camera_path;
+        snprintf(camera_path.folder, sizeof(camera_path.folder), "%s", line);
+        snprintf(camera_path.name, sizeof(camera_path.name), "%s", separator + 1);
+        if (!is_jpeg_name(camera_path.name)) continue;
+        requested++;
+        int file_result = download_camera_file(
+                camera, context, &report, &camera_path, output
+        );
+        if (file_result < GP_OK) {
+            result = file_result;
+            break;
+        }
+        downloaded++;
+    }
+    free(files);
+    report_append(&report, "JPGs baixados: %d/%d\n", downloaded, requested);
+
+    if (camera) {
+        if (initialized) {
+            int exit_result = gp_camera_exit(camera, context);
+            report_append(&report, "gp_camera_exit: %d (%s)\n",
+                          exit_result, gp_result_as_string(exit_result));
+        }
+        gp_camera_free(camera);
+    }
+    if (context) gp_context_unref(context);
+    (*env)->ReleaseStringUTFChars(env, camlib_directory, camlibs);
+    (*env)->ReleaseStringUTFChars(env, iolib_directory, iolibs);
+    (*env)->ReleaseStringUTFChars(env, output_directory, output);
+    (*env)->ReleaseStringUTFChars(env, camera_files, encoded_files);
     return (*env)->NewStringUTF(env, report.data);
 }

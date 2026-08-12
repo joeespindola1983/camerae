@@ -43,6 +43,7 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O log 24 validou a sequência libgphoto2 completa de 5/5 fotos: Bulb 8 s, JPG, ISO 6400, white balance Cloudy, download de todos os arquivos e `gp_camera_exit` limpo em cada captura.
 - O APK `0.11.0` troca o lote de tamanho fixo por uma sessão contínua: `Iniciar sessão`, `Pausar sessão` e `Retomar sessão`. A pausa é aplicada somente depois que a exposição e o download atuais terminam.
 - A interface `0.11.0` remove os probes, captura-teste e console visíveis, mantém o compartilhamento do log após a primeira captura e adota os tokens e a hierarquia Astro do Figma canônico (`Astro Photo / iPhone Portrait / Capture`, node `570:6`).
+- O log 25 confirmou seis capturas em 72 segundos, mas também mostrou cerca de 12 MB transferidos após cada exposição. O APK `0.12.0` usa o cartão da câmera como armazenamento primário durante a noite: baixa automaticamente apenas o primeiro JPG, permite solicitar uma nova prévia na próxima foto e importa os JPGs restantes em lote depois da pausa.
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
@@ -74,14 +75,16 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 
 Esse probe não solicita captura e não escreve configurações. A conexão autorizada permanece aberta até o app encerrar ou a câmera ser desconectada, porque o backend Android do libgphoto2 mantém o dispositivo externo durante o processo.
 
-### Sessão Astro contínua (`0.11.0`)
+### Sessão Astro econômica (`0.12.0`)
 
-1. Confirme `Versão 0.11.0 (build 23)`, câmera em modo Bulb e lente em foco manual.
+1. Confirme `Versão 0.12.0 (build 24)`, câmera em modo Bulb e lente em foco manual.
 2. Escolha ISO, white balance, JPG/CR3/JPG+CR3, exposição Bulb e o intervalo mínimo entre os inícios das fotos.
 3. Toque em `Iniciar sessão`. O app captura e baixa fotos sem um limite predefinido.
 4. Toque em `Pausar sessão` quando quiser encerrar o lote. Se uma foto estiver em andamento, o app termina a exposição, baixa seus arquivos e só então pausa.
-5. Toque em uma thumbnail JPG para visualizá-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
-6. Depois da primeira captura, use `Compartilhar log da captura`. Em `JPG+CR3`, cada foto só é aceita com `Arquivos baixados: 2/2`.
+5. A primeira foto baixa um JPG para a prévia. Para atualizar sem transferir todas as fotos, toque em `Atualizar prévia na próxima foto`; a próxima captura concluída substituirá a prévia.
+6. Após pausar, toque em `Baixar JPGs da sessão` para fazer uma única importação em lote. Os CR3 permanecem no cartão nesta etapa econômica.
+7. Toque em uma thumbnail JPG para visualizá-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
+8. Depois da primeira captura, use `Compartilhar log da captura`. Em `JPG+CR3`, cada foto só é aceita quando os dois arquivos são registrados no cartão.
 
 A captura configura o destino como cartão de memória, aplica somente escolhas anunciadas pela câmera e sempre tenta encerrar Bulb antes de fechar a sessão. O intervalo é medido entre os inícios planejados e, se uma captura/download ultrapassar esse intervalo, a próxima começa assim que a anterior terminar. Pausar nunca interrompe uma liberação Bulb em andamento.
 

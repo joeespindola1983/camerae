@@ -37,7 +37,11 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -68,6 +72,8 @@ public final class MainActivity extends Activity {
     private Button copyLogButton;
     private Button shareLogButton;
     private Button exportJpegButton;
+    private Button updatePreviewButton;
+    private Button downloadSessionJpegsButton;
     private EditText sequenceCountInput;
     private EditText sequenceDelayInput;
     private EditText sequenceIntervalInput;
@@ -95,8 +101,10 @@ public final class MainActivity extends Activity {
     private volatile boolean sequenceRunning;
     private volatile boolean sequenceCancelRequested;
     private boolean hasCaptureLog;
+    private volatile boolean previewRefreshRequested;
     private File activeSequenceDirectory;
     private int activeSequenceCompletedCount;
+    private final List<String> pendingJpegCameraFiles = new ArrayList<>();
     private boolean receiverRegistered;
     private CanonEosExposureCapabilities.Snapshot exposureSnapshot;
 
@@ -169,6 +177,8 @@ public final class MainActivity extends Activity {
         whiteBalanceSpinner = findViewById(R.id.white_balance_spinner);
         formatSpinner = findViewById(R.id.capture_format_spinner);
         exportJpegButton = findViewById(R.id.export_jpeg);
+        updatePreviewButton = findViewById(R.id.update_preview);
+        downloadSessionJpegsButton = findViewById(R.id.download_session_jpegs);
         thumbnailStrip = findViewById(R.id.capture_thumbnails);
         sequenceProgressView = findViewById(R.id.sequence_progress);
         acceptedCountView = findViewById(R.id.accepted_count);
@@ -200,6 +210,8 @@ public final class MainActivity extends Activity {
         copyLogButton.setOnClickListener(view -> copyLog());
         shareLogButton.setOnClickListener(view -> shareLog());
         exportJpegButton.setOnClickListener(view -> exportSelectedJpeg());
+        updatePreviewButton.setOnClickListener(view -> requestNextPreview());
+        downloadSessionJpegsButton.setOnClickListener(view -> downloadSessionJpegs());
 
         configureAstroControlAdapters();
 
@@ -294,6 +306,17 @@ public final class MainActivity extends Activity {
         formatSpinner.setEnabled(captureValidated && !cameraBusy);
         bulbDurationInput.setEnabled(captureValidated && !cameraBusy);
         exportJpegButton.setEnabled(selectedJpeg != null && !cameraBusy);
+        updatePreviewButton.setEnabled(sequenceRunning && !previewRefreshRequested);
+        updatePreviewButton.setText(previewRefreshRequested
+                ? R.string.preview_waiting
+                : R.string.update_preview);
+        downloadSessionJpegsButton.setEnabled(
+                !cameraBusy && !pendingJpegCameraFiles.isEmpty()
+        );
+        downloadSessionJpegsButton.setText(getString(
+                R.string.download_session_jpegs_count,
+                pendingJpegCameraFiles.size()
+        ));
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
         startSequenceButton.setEnabled(captureValidated && (!cameraBusy || sequenceRunning));
         startSequenceButton.setText(sequenceRunning
@@ -450,7 +473,8 @@ public final class MainActivity extends Activity {
                         iso,
                         whiteBalance,
                         format,
-                        bulbSeconds
+                        bulbSeconds,
+                        true
                 );
                 PersistentProbeLog.append("GPHOTO2-CAPTURE", result);
                 runOnUiThread(() -> {
@@ -460,7 +484,7 @@ public final class MainActivity extends Activity {
                     cameraBusy = false;
                     int expectedFiles = "JPG+CR3".equals(format) ? 2 : 1;
                     boolean completed = result.contains(
-                            "Arquivos baixados: " + expectedFiles + "/" + expectedFiles
+                            "Arquivos registrados no cartão: " + expectedFiles + "/" + expectedFiles
                     );
                     appendEvent(completed
                             ? "Captura libgphoto2 concluída com download " + expectedFiles + "/" + expectedFiles
@@ -508,6 +532,99 @@ public final class MainActivity extends Activity {
             }
             selectJpeg(file);
         }
+    }
+
+    private void collectPendingJpegsFromReport(String report) {
+        Set<String> downloadedNames = downloadedFileNames(report);
+        for (String line : report.split("\\n")) {
+            if (!line.startsWith("CAMERA|")) continue;
+            String[] components = line.split("\\|", 3);
+            if (components.length < 3 || !isJpegName(components[2])) continue;
+            String cameraFile = components[1] + "|" + components[2];
+            if (!downloadedNames.contains(components[2])
+                    && !pendingJpegCameraFiles.contains(cameraFile)) {
+                pendingJpegCameraFiles.add(cameraFile);
+            }
+        }
+    }
+
+    private void requestNextPreview() {
+        if (!sequenceRunning || previewRefreshRequested) return;
+        previewRefreshRequested = true;
+        updatePreviewButton.setText(R.string.preview_waiting);
+        Toast.makeText(this, R.string.preview_waiting_notice, Toast.LENGTH_SHORT).show();
+        appendEvent("Atualização da prévia solicitada para a próxima captura");
+        refreshProbe();
+    }
+
+    private void downloadSessionJpegs() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)
+                || activeSequenceDirectory == null || pendingJpegCameraFiles.isEmpty()) {
+            return;
+        }
+        List<String> requestedFiles = new ArrayList<>(pendingJpegCameraFiles);
+        String encodedFiles = String.join("\n", requestedFiles);
+        int requestedCount = requestedFiles.size();
+        cameraBusy = true;
+        sequenceProgressView.setText("Baixando " + requestedCount + " JPGs do cartão…");
+        appendEvent("Importação pós-sessão iniciada: " + requestedCount + " JPGs");
+        refreshProbe();
+        cameraExecutor.execute(() -> {
+            try {
+                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
+                if (gphotoConnection == null) throw new IOException("UsbManager.openDevice retornou null");
+                String result = NativeGPhotoClient.downloadFiles(
+                        getApplicationContext(),
+                        gphotoConnection.getFileDescriptor(),
+                        activeSequenceDirectory,
+                        encodedFiles
+                );
+                PersistentProbeLog.append("GPHOTO2-IMPORT", result);
+                runOnUiThread(() -> {
+                    captureReport = result.endsWith("\n") ? result : result + "\n";
+                    addCapturedFilesFromReport(result);
+                    removeDownloadedCameraFiles(result);
+                    cameraBusy = false;
+                    int downloadedCount = requestedCount - pendingJpegCameraFiles.size();
+                    sequenceProgressView.setText(downloadedCount + " JPGs baixados para o aparelho");
+                    appendEvent("Importação pós-sessão concluída: " + downloadedCount
+                            + "/" + requestedCount + " JPGs");
+                    refreshProbe();
+                });
+            } catch (Throwable error) {
+                PersistentProbeLog.append("GPHOTO2-IMPORT", "Falha: " + error);
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    sequenceProgressView.setText("Falha ao baixar JPGs: " + error.getMessage());
+                    appendEvent("Importação pós-sessão falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
+    }
+
+    private void removeDownloadedCameraFiles(String report) {
+        Set<String> downloadedNames = downloadedFileNames(report);
+        pendingJpegCameraFiles.removeIf(cameraFile -> {
+            int separator = cameraFile.lastIndexOf('|');
+            return separator >= 0 && downloadedNames.contains(cameraFile.substring(separator + 1));
+        });
+    }
+
+    private static Set<String> downloadedFileNames(String report) {
+        Set<String> names = new HashSet<>();
+        for (String line : report.split("\\n")) {
+            if (!line.startsWith("FILE|")) continue;
+            String[] components = line.split("\\|", 3);
+            if (components.length >= 2) names.add(new File(components[1]).getName());
+        }
+        return names;
+    }
+
+    private static boolean isJpegName(String name) {
+        String lower = name.toLowerCase(Locale.US);
+        return lower.endsWith(".jpg") || lower.endsWith(".jpeg");
     }
 
     private void selectJpeg(File file) {
@@ -829,9 +946,14 @@ public final class MainActivity extends Activity {
                 while (!sequenceCancelRequested) {
                     if (!waitUntilOrCanceled(scheduledAt)) break;
                     int captureNumber = completed + 1;
+                    boolean downloadPreview = completed == 0 || previewRefreshRequested;
+                    previewRefreshRequested = false;
                     runOnUiThread(() -> {
                         sequenceProgressView.setText("Expondo a foto " + captureNumber + "…");
                         nextCaptureView.setText("capturando");
+                        updatePreviewButton.setText(downloadPreview
+                                ? R.string.preview_downloading
+                                : R.string.update_preview);
                     });
                     String result = NativeGPhotoClient.capture(
                             getApplicationContext(),
@@ -840,13 +962,14 @@ public final class MainActivity extends Activity {
                             iso,
                             whiteBalance,
                             format,
-                            bulbSeconds
+                            bulbSeconds,
+                            downloadPreview
                     );
                     PersistentProbeLog.append(
                             "GPHOTO2-SEQUENCE-" + captureNumber,
                             result
                     );
-                    String successMarker = "Arquivos baixados: " + expectedFilesPerPhoto
+                    String successMarker = "Arquivos registrados no cartão: " + expectedFilesPerPhoto
                             + "/" + expectedFilesPerPhoto;
                     if (!result.contains(successMarker)) {
                         failure = "captura " + captureNumber + " não completou " + successMarker;
@@ -857,13 +980,16 @@ public final class MainActivity extends Activity {
                     int completedNow = completed;
                     runOnUiThread(() -> {
                         captureReport = result.endsWith("\n") ? result : result + "\n";
+                        collectPendingJpegsFromReport(result);
                         addCapturedFilesFromReport(result);
                         hasCaptureLog = true;
                         activeSequenceCompletedCount = completedNow;
                         acceptedCountView.setText(String.valueOf(completedNow));
                         nextCaptureView.setText(intervalSeconds + " s");
-                        sequenceProgressView.setText(completedNow + " capturas baixadas");
+                        sequenceProgressView.setText(completedNow + " capturas no cartão");
+                        updatePreviewButton.setText(R.string.update_preview);
                         shareLogButton.setEnabled(false);
+                        refreshProbe();
                     });
                     scheduledAt = Math.max(scheduledAt + intervalMs, SystemClock.elapsedRealtime());
                 }

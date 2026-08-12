@@ -8,6 +8,12 @@
     <string name="capture_settings_label">CAPTURA</string>
     <string name="session_label">SESSÃO CONTÍNUA</string>
     <string name="recent_captures">CAPTURAS RECENTES</string>
+    <string name="update_preview">Atualizar prévia na próxima foto</string>
+    <string name="preview_waiting">Prévia solicitada…</string>
+    <string name="preview_downloading">Baixando nova prévia…</string>
+    <string name="preview_waiting_notice">A próxima foto concluída atualizará a prévia</string>
+    <string name="download_session_jpegs">Baixar JPGs da sessão</string>
+    <string name="download_session_jpegs_count">Baixar JPGs da sessão (%1$d)</string>
     <string name="version_placeholder">Versão do app</string>
     <string name="version_format">Versão %1$s (build %2$d)</string>
     <string name="status_waiting">Conecte a Canon EOS R por USB.</string>

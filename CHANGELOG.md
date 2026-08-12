@@ -21,6 +21,10 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added a low-transfer Android Astro capture mode that downloads only the first
+  JPG preview, lets the user request a fresh preview from the next completed
+  capture, and imports the remaining session JPGs in one post-pause batch.
+
 - Added a read-only libgphoto2 2.5.34 Android path for the EOS R probe, using
   the Android-authorized USB file descriptor with libusb and the focused
   `ptp2`/`usb1` module set before enabling capture or configuration writes.
@@ -42,6 +46,9 @@ test distributions do not require an entry here.
 - Replaced the Android EOS R probe/debug screen with a focused Astro capture
   interface based on the canonical Figma capture screen and tokens, retaining
   only post-capture log sharing from the diagnostic workflow.
+- Kept overnight Astro captures on the camera card instead of transferring
+  every file immediately, reducing continuous USB traffic and leaving CR3
+  originals on the camera for later workflows.
 
 ### Fixed
 
