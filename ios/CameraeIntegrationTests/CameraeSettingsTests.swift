@@ -138,6 +138,13 @@ struct CameraeSettingsTests {
         )
     }
 
+    @Test("RAW photo capture never configures processed-photo quality prioritization")
+    func rawPhotoSkipsQualityPrioritization() {
+        #expect(!CameraePhotoQualityPrioritizationPolicy.shouldConfigure(for: .dng))
+        #expect(CameraePhotoQualityPrioritizationPolicy.shouldConfigure(for: .heic))
+        #expect(CameraePhotoQualityPrioritizationPolicy.shouldConfigure(for: .jpeg))
+    }
+
     @Test("new installs use the approved capture and privacy defaults")
     func defaults() {
         let defaults = isolatedDefaults()

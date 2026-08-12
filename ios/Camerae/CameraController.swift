@@ -28,6 +28,10 @@ enum CameraeLocationAuthorizationPolicy {
 }
 
 enum CameraePhotoQualityPrioritizationPolicy {
+    static func shouldConfigure(for format: CaptureSourceFormat) -> Bool {
+        format != .dng
+    }
+
     static func resolved(
         requested: AVCapturePhotoOutput.QualityPrioritization,
         maximum: AVCapturePhotoOutput.QualityPrioritization
@@ -2649,11 +2653,16 @@ private extension DispatchQueue {
             requested: requestedPrioritization,
             maximum: photoOutput.maxPhotoQualityPrioritization
         )
-        settings.photoQualityPrioritization = resolvedPrioritization
+        let configuresQualityPrioritization = CameraePhotoQualityPrioritizationPolicy.shouldConfigure(
+            for: selectedFormat
+        )
+        if configuresQualityPrioritization {
+            settings.photoQualityPrioritization = resolvedPrioritization
+        }
         settings.flashMode = .off
         CameraeCaptureDiagnostics.event(
             "C20 photo.settings",
-            "format=\(selectedFormat.rawValue) requestedQuality=\(requestedPrioritization.rawValue) maxQuality=\(photoOutput.maxPhotoQualityPrioritization.rawValue) resolvedQuality=\(resolvedPrioritization.rawValue)"
+            "format=\(selectedFormat.rawValue) requestedQuality=\(requestedPrioritization.rawValue) maxQuality=\(photoOutput.maxPhotoQualityPrioritization.rawValue) resolvedQuality=\(resolvedPrioritization.rawValue) configuresQuality=\(configuresQualityPrioritization)"
         )
 
         let delegate = PhotoCaptureDelegate(format: selectedFormat) { result in

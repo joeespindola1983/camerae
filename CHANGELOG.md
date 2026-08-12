@@ -25,6 +25,9 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Prevented Astro DNG capture from crashing by leaving processed-photo quality
+  prioritization unset for RAW photo settings.
+
 ## [9.5.0] - 2026-08-04
 
 **Status:** Approved local release (build 36; not submitted)
