@@ -5,11 +5,112 @@
     android:background="@drawable/bg_astro_screen">
 
     <ScrollView
+        android:id="@+id/session_catalog_screen"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="720dp"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="28dp"
+                android:letterSpacing="0.18"
+                android:text="@string/astro_usb_label"
+                android:textColor="#4D6FFF"
+                android:textSize="9sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:fontFamily="sans-serif-medium"
+                android:text="@string/sessions_title"
+                android:textColor="#E8EEFF"
+                android:textSize="28sp" />
+
+            <TextView
+                android:id="@+id/catalog_camera_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/status_waiting"
+                android:textColor="#8090C0"
+                android:textSize="13sp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:layout_marginTop="24dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:letterSpacing="0.18"
+                    android:text="@string/sessions_label"
+                    android:textColor="#8090C0"
+                    android:textSize="9sp" />
+
+                <TextView
+                    android:id="@+id/session_count"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:letterSpacing="0.14"
+                    android:text="@string/no_sessions_count"
+                    android:textColor="#4D6FFF"
+                    android:textSize="9sp" />
+            </LinearLayout>
+
+            <TextView
+                android:id="@+id/sessions_empty"
+                android:layout_width="match_parent"
+                android:layout_height="120dp"
+                android:background="@drawable/bg_astro_card"
+                android:gravity="center"
+                android:padding="24dp"
+                android:text="@string/sessions_empty"
+                android:textAlignment="center"
+                android:textColor="#8090C0"
+                android:textSize="14sp" />
+
+            <LinearLayout
+                android:id="@+id/session_list"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
+
+            <Button
+                android:id="@+id/create_session"
+                android:layout_width="match_parent"
+                android:layout_height="56dp"
+                android:layout_marginTop="18dp"
+                android:background="@drawable/bg_astro_accent"
+                android:text="@string/new_session"
+                android:textAllCaps="false"
+                android:textColor="#050200"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+    </ScrollView>
+
+    <ScrollView
+        android:id="@+id/capture_screen"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipToPadding="false"
         android:fillViewport="true"
-        android:overScrollMode="never">
+        android:overScrollMode="never"
+        android:visibility="gone">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -19,6 +120,15 @@
             android:paddingTop="24dp"
             android:paddingEnd="16dp"
             android:paddingBottom="32dp">
+
+            <Button
+                android:id="@+id/back_to_sessions"
+                android:layout_width="wrap_content"
+                android:layout_height="40dp"
+                android:backgroundTint="#080D24"
+                android:text="@string/back_to_sessions"
+                android:textAllCaps="false"
+                android:textColor="#B8C3E5" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -338,6 +448,15 @@
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
+                <TextView
+                    android:id="@+id/session_camera_status"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:text="@string/session_card_not_checked"
+                    android:textColor="#8090C0"
+                    android:textSize="12sp" />
+
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="54dp"
@@ -396,6 +515,17 @@
                     android:textColor="#050200"
                     android:textSize="15sp"
                     android:textStyle="bold" />
+
+                <Button
+                    android:id="@+id/finalize_session"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:layout_marginTop="8dp"
+                    android:backgroundTint="#101833"
+                    android:text="@string/finalize_session"
+                    android:textAllCaps="false"
+                    android:textColor="#E8EEFF"
+                    android:visibility="gone" />
             </LinearLayout>
 
             <TextView

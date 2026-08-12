@@ -21,6 +21,10 @@ test distributions do not require an entry here.
 
 ### Added
 
+- Added a Figma-aligned Astro session catalog to the Android USB app with
+  session creation, opening, safe local deletion, resumable paused sessions,
+  explicit finalization, per-session directories and persisted camera-card
+  file references for targeted availability checks after reconnection.
 - Added a low-transfer Android Astro capture mode that downloads only the first
   JPG preview, lets the user request a fresh preview from the next completed
   capture, and imports the remaining session JPGs in one post-pause batch.
@@ -49,6 +53,8 @@ test distributions do not require an entry here.
 - Kept overnight Astro captures on the camera card instead of transferring
   every file immediately, reducing continuous USB traffic and leaving CR3
   originals on the camera for later workflows.
+- Changed the live Astro session panel to show a real seconds-until-next-shot
+  countdown and expose finalization only after capture has paused.
 
 ### Fixed
 

@@ -1,6 +1,7 @@
 package com.camerae.eosrprobe;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
@@ -13,6 +14,8 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
@@ -22,6 +25,7 @@ import android.os.Environment;
 import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.view.View;
+import android.view.Gravity;
 import android.widget.Button;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
@@ -74,6 +78,14 @@ public final class MainActivity extends Activity {
     private Button exportJpegButton;
     private Button updatePreviewButton;
     private Button downloadSessionJpegsButton;
+    private Button finalizeSessionButton;
+    private View sessionCatalogScreen;
+    private View captureScreen;
+    private TextView catalogCameraStatusView;
+    private TextView sessionCountView;
+    private TextView sessionsEmptyView;
+    private TextView sessionCameraStatusView;
+    private LinearLayout sessionListView;
     private EditText sequenceCountInput;
     private EditText sequenceDelayInput;
     private EditText sequenceIntervalInput;
@@ -105,6 +117,9 @@ public final class MainActivity extends Activity {
     private File activeSequenceDirectory;
     private int activeSequenceCompletedCount;
     private final List<String> pendingJpegCameraFiles = new ArrayList<>();
+    private final List<String> allCameraFiles = new ArrayList<>();
+    private AstroUsbSessionStore.Session activeSession;
+    private boolean sessionCameraVerified;
     private boolean receiverRegistered;
     private CanonEosExposureCapabilities.Snapshot exposureSnapshot;
 
@@ -133,6 +148,7 @@ public final class MainActivity extends Activity {
                 exposureReport = "Controles de exposição desconectados.\n";
                 gphotoReport = "libgphoto2 desconectado; reinicie o app antes de um novo probe.\n";
                 gphotoProbeCompleted = false;
+                sessionCameraVerified = false;
                 closeGPhotoConnection();
                 exposureSnapshot = null;
                 clearExposureControls();
@@ -151,6 +167,12 @@ public final class MainActivity extends Activity {
         setContentView(R.layout.activity_main);
 
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
+        sessionCatalogScreen = findViewById(R.id.session_catalog_screen);
+        captureScreen = findViewById(R.id.capture_screen);
+        catalogCameraStatusView = findViewById(R.id.catalog_camera_status);
+        sessionCountView = findViewById(R.id.session_count);
+        sessionsEmptyView = findViewById(R.id.sessions_empty);
+        sessionListView = findViewById(R.id.session_list);
         ((TextView) findViewById(R.id.app_version)).setText(getString(
                 R.string.version_format,
                 BuildConfig.VERSION_NAME,
@@ -179,6 +201,8 @@ public final class MainActivity extends Activity {
         exportJpegButton = findViewById(R.id.export_jpeg);
         updatePreviewButton = findViewById(R.id.update_preview);
         downloadSessionJpegsButton = findViewById(R.id.download_session_jpegs);
+        finalizeSessionButton = findViewById(R.id.finalize_session);
+        sessionCameraStatusView = findViewById(R.id.session_camera_status);
         thumbnailStrip = findViewById(R.id.capture_thumbnails);
         sequenceProgressView = findViewById(R.id.sequence_progress);
         acceptedCountView = findViewById(R.id.accepted_count);
@@ -212,8 +236,12 @@ public final class MainActivity extends Activity {
         exportJpegButton.setOnClickListener(view -> exportSelectedJpeg());
         updatePreviewButton.setOnClickListener(view -> requestNextPreview());
         downloadSessionJpegsButton.setOnClickListener(view -> downloadSessionJpegs());
+        finalizeSessionButton.setOnClickListener(view -> finalizeActiveSession());
+        findViewById(R.id.create_session).setOnClickListener(view -> createSession());
+        findViewById(R.id.back_to_sessions).setOnClickListener(view -> returnToSessionCatalog());
 
         configureAstroControlAdapters();
+        showSessionCatalog();
 
         appendEvent("Aplicativo " + BuildConfig.VERSION_NAME + " iniciado em "
                 + Build.MANUFACTURER + " " + Build.MODEL
@@ -265,6 +293,234 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private File sessionsRoot() {
+        File pictures = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        if (pictures == null) pictures = getFilesDir();
+        return new File(pictures, "CameraeAstro");
+    }
+
+    private void showSessionCatalog() {
+        captureScreen.setVisibility(View.GONE);
+        sessionCatalogScreen.setVisibility(View.VISIBLE);
+        renderSessionCatalog();
+        refreshProbe();
+    }
+
+    private void renderSessionCatalog() {
+        List<AstroUsbSessionStore.Session> sessions = AstroUsbSessionStore.list(sessionsRoot());
+        sessionListView.removeAllViews();
+        sessionCountView.setText(getResources().getQuantityString(
+                R.plurals.session_count,
+                sessions.size(),
+                sessions.size()
+        ));
+        sessionsEmptyView.setVisibility(sessions.isEmpty() ? View.VISIBLE : View.GONE);
+        for (AstroUsbSessionStore.Session session : sessions) {
+            sessionListView.addView(createSessionCard(session));
+        }
+    }
+
+    private View createSessionCard(AstroUsbSessionStore.Session session) {
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setGravity(Gravity.CENTER_VERTICAL);
+        card.setPadding(dp(12), dp(12), dp(10), dp(12));
+        GradientDrawable background = new GradientDrawable();
+        background.setColor(Color.rgb(8, 13, 36));
+        background.setCornerRadius(dp(16));
+        background.setStroke(dp(1), Color.rgb(27, 43, 94));
+        card.setBackground(background);
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, dp(116)
+        );
+        cardParams.setMargins(0, 0, 0, dp(10));
+        card.setLayoutParams(cardParams);
+
+        ImageView thumbnail = new ImageView(this);
+        thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        thumbnail.setBackgroundResource(R.drawable.bg_astro_preview);
+        LinearLayout.LayoutParams thumbnailParams = new LinearLayout.LayoutParams(dp(78), dp(92));
+        thumbnailParams.setMarginEnd(dp(12));
+        thumbnail.setLayoutParams(thumbnailParams);
+        File localJpeg = AstroUsbSessionStore.latestLocalJpeg(session);
+        if (localJpeg != null) {
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 8;
+            thumbnail.setImageBitmap(BitmapFactory.decodeFile(localJpeg.getAbsolutePath(), options));
+        }
+        card.addView(thumbnail);
+
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER_VERTICAL);
+        content.setLayoutParams(new LinearLayout.LayoutParams(0, dp(92), 1));
+        content.addView(catalogText(session.title, 15, Color.rgb(232, 238, 255), true));
+        content.addView(catalogText(
+                new SimpleDateFormat("dd MMM yyyy · HH:mm", Locale.getDefault())
+                        .format(new Date(session.updatedAtMillis)),
+                12, Color.rgb(128, 144, 192), false
+        ));
+        content.addView(catalogText(
+                session.captureCount + " FOTOS · " + session.format + " · "
+                        + session.bulbSeconds + " S",
+                10, Color.rgb(77, 111, 255), false
+        ));
+        content.addView(catalogText(sessionStatusLabel(session),
+                10, Color.rgb(128, 144, 192), false));
+        card.addView(content);
+
+        Button delete = new Button(this);
+        delete.setText(R.string.delete_session_short);
+        delete.setTextSize(11);
+        delete.setTextColor(Color.rgb(255, 93, 93));
+        delete.setAllCaps(false);
+        delete.setBackgroundResource(R.drawable.bg_astro_pill);
+        delete.setLayoutParams(new LinearLayout.LayoutParams(dp(72), dp(44)));
+        delete.setOnClickListener(view -> confirmDeleteSession(session));
+        card.addView(delete);
+        card.setOnClickListener(view -> openSession(session));
+        return card;
+    }
+
+    private TextView catalogText(String text, int size, int color, boolean strong) {
+        TextView view = new TextView(this);
+        view.setText(text);
+        view.setTextSize(size);
+        view.setTextColor(color);
+        view.setMaxLines(1);
+        view.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        if (strong) view.setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+        return view;
+    }
+
+    private String sessionStatusLabel(AstroUsbSessionStore.Session session) {
+        if ("capturing".equals(session.status)) return "INTERROMPIDA · PODE CONTINUAR";
+        if ("paused".equals(session.status)) return "PAUSADA · PODE CONTINUAR";
+        if ("finalized".equals(session.status)) return "FINALIZADA · ABRIR OU IMPORTAR";
+        return "PRONTA PARA CAPTURAR";
+    }
+
+    private void createSession() {
+        try {
+            openSession(AstroUsbSessionStore.create(sessionsRoot()));
+        } catch (IOException error) {
+            Toast.makeText(this, "Falha ao criar sessão: " + error.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void openSession(AstroUsbSessionStore.Session session) {
+        activeSession = session;
+        activeSequenceDirectory = session.directory;
+        activeSequenceCompletedCount = session.captureCount;
+        pendingJpegCameraFiles.clear();
+        pendingJpegCameraFiles.addAll(session.pendingJpegs);
+        allCameraFiles.clear();
+        allCameraFiles.addAll(session.cameraFiles);
+        sessionCameraVerified = false;
+        thumbnailStrip.removeAllViews();
+        previewView.setVisibility(View.GONE);
+        previewPlaceholder.setVisibility(View.VISIBLE);
+        File localJpeg = AstroUsbSessionStore.latestLocalJpeg(session);
+        if (localJpeg != null) {
+            addCapturedFilesFromReport("FILE|" + localJpeg.getAbsolutePath() + "|image/jpeg\n");
+        }
+        selectSpinnerValue(isoSpinner, session.iso);
+        selectSpinnerValue(whiteBalanceSpinner, session.whiteBalance);
+        selectSpinnerValue(formatSpinner, session.format);
+        bulbDurationInput.setText(String.valueOf(session.bulbSeconds));
+        sequenceIntervalInput.setText(String.valueOf(session.intervalSeconds));
+        acceptedCountView.setText(String.valueOf(session.captureCount));
+        exposureMetricView.setText(session.bulbSeconds + " s");
+        nextCaptureView.setText("—");
+        sequenceProgressView.setText(session.captureCount == 0
+                ? getString(R.string.sequence_idle)
+                : session.captureCount + " capturas registradas");
+        sessionCameraStatusView.setText(allCameraFiles.isEmpty()
+                ? R.string.session_card_no_remote_files
+                : R.string.session_card_waiting_check);
+        sessionCatalogScreen.setVisibility(View.GONE);
+        captureScreen.setVisibility(View.VISIBLE);
+        appendEvent("Sessão aberta: " + session.id + " com " + session.captureCount + " capturas");
+        refreshProbe();
+    }
+
+    private void returnToSessionCatalog() {
+        if (sequenceRunning) {
+            Toast.makeText(this, R.string.pause_before_leaving, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        persistActiveSession(activeSession != null && "finalized".equals(activeSession.status)
+                ? "finalized"
+                : activeSequenceCompletedCount > 0 ? "paused" : "draft");
+        showSessionCatalog();
+    }
+
+    private void finalizeActiveSession() {
+        if (activeSession == null || sequenceRunning) return;
+        persistActiveSession("finalized");
+        appendEvent("Sessão finalizada: " + activeSession.id);
+        activeSession = null;
+        activeSequenceDirectory = null;
+        showSessionCatalog();
+    }
+
+    private void confirmDeleteSession(AstroUsbSessionStore.Session session) {
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.delete_session_title)
+                .setMessage(R.string.delete_session_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.delete_session_confirm, (dialog, which) -> {
+                    if (AstroUsbSessionStore.delete(session)) {
+                        renderSessionCatalog();
+                    } else {
+                        Toast.makeText(this, R.string.delete_session_failed, Toast.LENGTH_LONG).show();
+                    }
+                })
+                .show();
+    }
+
+    private void persistActiveSession(String status) {
+        if (activeSession == null) return;
+        activeSession.status = status;
+        activeSession.captureCount = activeSequenceCompletedCount;
+        activeSession.iso = String.valueOf(isoSpinner.getSelectedItem());
+        activeSession.whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
+        activeSession.format = String.valueOf(formatSpinner.getSelectedItem());
+        activeSession.bulbSeconds = parseIntOrDefault(bulbDurationInput, 5);
+        activeSession.intervalSeconds = parseIntOrDefault(sequenceIntervalInput, 10);
+        activeSession.cameraFiles.clear();
+        activeSession.cameraFiles.addAll(allCameraFiles);
+        activeSession.pendingJpegs.clear();
+        activeSession.pendingJpegs.addAll(pendingJpegCameraFiles);
+        try {
+            AstroUsbSessionStore.save(activeSession);
+        } catch (IOException error) {
+            appendEvent("Falha salvando sessão: " + error.getMessage());
+        }
+    }
+
+    private static int parseIntOrDefault(EditText input, int fallback) {
+        try {
+            return Integer.parseInt(input.getText().toString().trim());
+        } catch (NumberFormatException ignored) {
+            return fallback;
+        }
+    }
+
+    private void selectSpinnerValue(Spinner spinner, String value) {
+        if (spinner.getAdapter() == null) return;
+        for (int index = 0; index < spinner.getAdapter().getCount(); index++) {
+            if (value.equals(String.valueOf(spinner.getAdapter().getItem(index)))) {
+                spinner.setSelection(index);
+                return;
+            }
+        }
+    }
+
+    private int dp(int value) {
+        return Math.round(value * getResources().getDisplayMetrics().density);
+    }
+
     private void refreshProbe() {
         if (usbManager == null) {
             statusView.setText(R.string.status_usb_service_missing);
@@ -289,6 +545,7 @@ public final class MainActivity extends Activity {
         } else {
             statusView.setText(getString(R.string.status_permission_required, deviceLabel(selected)));
         }
+        catalogCameraStatusView.setText(statusView.getText());
         boolean cameraReady = selected != null && usbManager.hasPermission(selected);
         boolean captureValidated = cameraReady && isValidatedCaptureDevice(selected);
         authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
@@ -318,12 +575,21 @@ public final class MainActivity extends Activity {
                 pendingJpegCameraFiles.size()
         ));
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
-        startSequenceButton.setEnabled(captureValidated && (!cameraBusy || sequenceRunning));
-        startSequenceButton.setText(sequenceRunning
+        boolean finalizedSession = activeSession != null
+                && "finalized".equals(activeSession.status);
+        startSequenceButton.setEnabled(activeSession != null && !finalizedSession
+                && captureValidated && (!cameraBusy || sequenceRunning));
+        startSequenceButton.setText(finalizedSession
+                ? R.string.finalized_session
+                : sequenceRunning
                 ? (sequenceCancelRequested ? R.string.pausing_sequence : R.string.pause_sequence)
                 : (activeSequenceCompletedCount > 0
                 ? R.string.resume_sequence
                 : R.string.start_sequence));
+        finalizeSessionButton.setVisibility(activeSession != null && !finalizedSession
+                && activeSequenceCompletedCount > 0 && !sequenceRunning
+                ? View.VISIBLE : View.GONE);
+        finalizeSessionButton.setEnabled(!cameraBusy && !sequenceRunning);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
         sequenceCountInput.setEnabled(!cameraBusy);
         sequenceDelayInput.setEnabled(!cameraBusy);
@@ -353,6 +619,12 @@ public final class MainActivity extends Activity {
         report.append("\nDIAGNÓSTICO PERSISTENTE PTP\n")
                 .append(PersistentProbeLog.snapshot());
         logView.setText(report.toString());
+        if (activeSession != null && captureScreen.getVisibility() == View.VISIBLE
+                && cameraReady && !cameraBusy && !sessionCameraVerified
+                && !allCameraFiles.isEmpty()) {
+            sessionCameraVerified = true;
+            verifyActiveSessionOnCamera(deviceLabel(selected));
+        }
     }
 
     private void runGPhotoProbe() {
@@ -548,6 +820,17 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private void collectSessionCameraFiles(String report) {
+        for (String line : report.split("\\n")) {
+            if (!line.startsWith("CAMERA|")) continue;
+            String[] components = line.split("\\|", 3);
+            if (components.length < 3) continue;
+            String cameraFile = components[1] + "|" + components[2];
+            if (!allCameraFiles.contains(cameraFile)) allCameraFiles.add(cameraFile);
+        }
+        sessionCameraVerified = true;
+    }
+
     private void requestNextPreview() {
         if (!sequenceRunning || previewRefreshRequested) return;
         previewRefreshRequested = true;
@@ -590,6 +873,7 @@ public final class MainActivity extends Activity {
                     sequenceProgressView.setText(downloadedCount + " JPGs baixados para o aparelho");
                     appendEvent("Importação pós-sessão concluída: " + downloadedCount
                             + "/" + requestedCount + " JPGs");
+                    persistActiveSession(activeSession == null ? "paused" : activeSession.status);
                     refreshProbe();
                 });
             } catch (Throwable error) {
@@ -602,6 +886,56 @@ public final class MainActivity extends Activity {
                 });
             }
         });
+    }
+
+    private void verifyActiveSessionOnCamera(String cameraLabel) {
+        if (activeSession == null || allCameraFiles.isEmpty()) return;
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)) return;
+        String encodedFiles = String.join("\n", allCameraFiles);
+        int expected = allCameraFiles.size();
+        cameraBusy = true;
+        sessionCameraStatusView.setText(R.string.session_card_checking);
+        appendEvent("Verificando " + expected + " arquivos da sessão no cartão");
+        refreshProbe();
+        cameraExecutor.execute(() -> {
+            try {
+                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
+                if (gphotoConnection == null) throw new IOException("UsbManager.openDevice retornou null");
+                String result = NativeGPhotoClient.checkFiles(
+                        getApplicationContext(),
+                        gphotoConnection.getFileDescriptor(),
+                        encodedFiles
+                );
+                PersistentProbeLog.append("GPHOTO2-SESSION-CHECK", result);
+                int present = countReportLines(result, "PRESENT|");
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    sessionCameraStatusView.setText(getString(
+                            R.string.session_card_check_result,
+                            present,
+                            expected,
+                            cameraLabel
+                    ));
+                    appendEvent("Sessão verificada no cartão: " + present + "/" + expected);
+                    refreshProbe();
+                });
+            } catch (Throwable error) {
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    sessionCameraStatusView.setText("Não foi possível verificar o cartão: "
+                            + error.getMessage());
+                    appendEvent("Verificação da sessão falhou: " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
+    }
+
+    private static int countReportLines(String report, String prefix) {
+        int count = 0;
+        for (String line : report.split("\\n")) if (line.startsWith(prefix)) count++;
+        return count;
     }
 
     private void removeDownloadedCameraFiles(String report) {
@@ -883,6 +1217,11 @@ public final class MainActivity extends Activity {
             pauseAstroSequence();
             return;
         }
+        if (activeSession == null) {
+            Toast.makeText(this, R.string.create_session_first, Toast.LENGTH_SHORT).show();
+            showSessionCatalog();
+            return;
+        }
         UsbDevice device = selectCamera();
         if (device == null || !usbManager.hasPermission(device)
                 || !isValidatedCaptureDevice(device)) {
@@ -908,16 +1247,6 @@ public final class MainActivity extends Activity {
         String whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
         String format = String.valueOf(formatSpinner.getSelectedItem());
         int expectedFilesPerPhoto = "JPG+CR3".equals(format) ? 2 : 1;
-        File pictures = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
-        if (pictures == null) pictures = getFilesDir();
-        if (activeSequenceDirectory == null) {
-            activeSequenceDirectory = new File(
-                    pictures,
-                    "CameraeAstro/session-"
-                            + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date())
-            );
-            activeSequenceCompletedCount = 0;
-        }
         File outputDirectory = activeSequenceDirectory;
 
         cameraBusy = true;
@@ -933,6 +1262,7 @@ public final class MainActivity extends Activity {
         nextCaptureView.setText("agora");
         appendEvent("Sessão astro iniciada/retomada: intervalo " + intervalSeconds
                 + " s, Bulb " + bulbSeconds + " s, " + format);
+        persistActiveSession("capturing");
         refreshProbe();
 
         long intervalMs = intervalSeconds * 1000L;
@@ -944,7 +1274,7 @@ public final class MainActivity extends Activity {
                 if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
                 if (gphotoConnection == null) throw new IOException("UsbManager.openDevice retornou null");
                 while (!sequenceCancelRequested) {
-                    if (!waitUntilOrCanceled(scheduledAt)) break;
+                    if (!waitUntilOrCanceledWithCountdown(scheduledAt)) break;
                     int captureNumber = completed + 1;
                     boolean downloadPreview = completed == 0 || previewRefreshRequested;
                     previewRefreshRequested = false;
@@ -980,6 +1310,7 @@ public final class MainActivity extends Activity {
                     int completedNow = completed;
                     runOnUiThread(() -> {
                         captureReport = result.endsWith("\n") ? result : result + "\n";
+                        collectSessionCameraFiles(result);
                         collectPendingJpegsFromReport(result);
                         addCapturedFilesFromReport(result);
                         hasCaptureLog = true;
@@ -989,6 +1320,7 @@ public final class MainActivity extends Activity {
                         sequenceProgressView.setText(completedNow + " capturas no cartão");
                         updatePreviewButton.setText(R.string.update_preview);
                         shareLogButton.setEnabled(false);
+                        persistActiveSession("capturing");
                         refreshProbe();
                     });
                     scheduledAt = Math.max(scheduledAt + intervalMs, SystemClock.elapsedRealtime());
@@ -1017,6 +1349,7 @@ public final class MainActivity extends Activity {
                         + "\nPasta: " + outputDirectory
                         + (finalFailure == null ? "\n" : "\nErro: " + finalFailure + "\n");
                 appendEvent("Sessão astro " + state + ": " + finalCompleted + " capturas");
+                persistActiveSession(finalFailure == null ? "paused" : "failed");
                 refreshProbe();
             });
         });
@@ -1289,6 +1622,25 @@ public final class MainActivity extends Activity {
             long remaining = targetElapsedTime - SystemClock.elapsedRealtime();
             if (remaining <= 0) {
                 return true;
+            }
+            SystemClock.sleep(Math.min(remaining, 200));
+        }
+        return false;
+    }
+
+    private boolean waitUntilOrCanceledWithCountdown(long targetElapsedTime) {
+        long displayedSeconds = Long.MIN_VALUE;
+        while (!sequenceCancelRequested) {
+            long remaining = targetElapsedTime - SystemClock.elapsedRealtime();
+            if (remaining <= 0) {
+                runOnUiThread(() -> nextCaptureView.setText("agora"));
+                return true;
+            }
+            long seconds = Math.max(1, (remaining + 999) / 1000);
+            if (seconds != displayedSeconds) {
+                displayedSeconds = seconds;
+                long shown = seconds;
+                runOnUiThread(() -> nextCaptureView.setText(shown + " s"));
             }
             SystemClock.sleep(Math.min(remaining, 200));
         }

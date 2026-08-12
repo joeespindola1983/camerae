@@ -473,3 +473,75 @@ Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeDownloadFiles(
     (*env)->ReleaseStringUTFChars(env, camera_files, encoded_files);
     return (*env)->NewStringUTF(env, report.data);
 }
+
+JNIEXPORT jstring JNICALL
+Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCheckFiles(
+        JNIEnv *env, jclass clazz, jint file_descriptor, jstring camlib_directory,
+        jstring iolib_directory, jstring camera_files) {
+    (void) clazz;
+    ProbeReport report = {{0}, 0};
+    const char *camlibs = (*env)->GetStringUTFChars(env, camlib_directory, NULL);
+    const char *iolibs = (*env)->GetStringUTFChars(env, iolib_directory, NULL);
+    const char *encoded_files = (*env)->GetStringUTFChars(env, camera_files, NULL);
+    if (!camlibs || !iolibs || !encoded_files) {
+        return (*env)->NewStringUTF(env, "ERRO: parâmetros JNI inválidos.");
+    }
+    setenv("CAMLIBS", camlibs, 1);
+    setenv("IOLIBS", iolibs, 1);
+    report_append(&report, "VERIFICAÇÃO DE SESSÃO NO CARTÃO\n");
+
+    GPContext *context = gp_context_new();
+    Camera *camera = NULL;
+    int initialized = 0;
+    int result = gp_port_usb_set_sys_device(file_descriptor);
+    if (context) {
+        gp_context_set_error_func(context, context_error, &report);
+        gp_context_set_status_func(context, context_status, &report);
+    }
+    if (result >= GP_OK && context) result = gp_camera_new(&camera);
+    if (result >= GP_OK && camera) {
+        result = gp_camera_init(camera, context);
+        initialized = result >= GP_OK;
+        report_append(&report, "gp_camera_init: %d (%s)\n", result, gp_result_as_string(result));
+    }
+
+    int checked = 0;
+    int present = 0;
+    char *files = strdup(encoded_files);
+    char *save_line = NULL;
+    for (char *line = strtok_r(files, "\n", &save_line);
+         initialized && line;
+         line = strtok_r(NULL, "\n", &save_line)) {
+        char *separator = strchr(line, '|');
+        if (!separator) continue;
+        *separator = '\0';
+        const char *folder = line;
+        const char *name = separator + 1;
+        CameraFileInfo info;
+        memset(&info, 0, sizeof(info));
+        int info_result = gp_camera_file_get_info(camera, folder, name, &info, context);
+        checked++;
+        if (info_result >= GP_OK) {
+            present++;
+            report_append(&report, "PRESENT|%s|%s\n", folder, name);
+        } else {
+            report_append(&report, "MISSING|%s|%s|%d\n", folder, name, info_result);
+        }
+    }
+    free(files);
+    report_append(&report, "Arquivos encontrados no cartão: %d/%d\n", present, checked);
+
+    if (camera) {
+        if (initialized) {
+            int exit_result = gp_camera_exit(camera, context);
+            report_append(&report, "gp_camera_exit: %d (%s)\n",
+                          exit_result, gp_result_as_string(exit_result));
+        }
+        gp_camera_free(camera);
+    }
+    if (context) gp_context_unref(context);
+    (*env)->ReleaseStringUTFChars(env, camlib_directory, camlibs);
+    (*env)->ReleaseStringUTFChars(env, iolib_directory, iolibs);
+    (*env)->ReleaseStringUTFChars(env, camera_files, encoded_files);
+    return (*env)->NewStringUTF(env, report.data);
+}

@@ -3,10 +3,30 @@
     <string name="title">Camerae Astro USB</string>
     <string name="astro_usb_label">CAMERAE · ASTRO USB</string>
     <string name="astro_capture_title">Captura externa</string>
+    <string name="sessions_title">Sessões Astro</string>
+    <string name="sessions_label">SESSÕES</string>
+    <string name="no_sessions_count">0 SESSÕES</string>
+    <string name="sessions_empty">Nenhuma sessão Astro. Crie uma sessão para organizar as capturas no cartão e no aparelho.</string>
+    <string name="new_session">Nova sessão</string>
+    <string name="back_to_sessions">‹ Sessões</string>
+    <string name="delete_session_short">Excluir</string>
+    <string name="delete_session_title">Excluir sessão?</string>
+    <string name="delete_session_message">Os arquivos locais desta sessão serão apagados. As fotos que continuam no cartão da câmera não serão removidas.</string>
+    <string name="delete_session_confirm">Excluir</string>
+    <string name="delete_session_failed">Não foi possível excluir o diretório da sessão</string>
+    <string name="create_session_first">Crie ou abra uma sessão primeiro</string>
+    <string name="pause_before_leaving">Pause a sessão antes de voltar ao catálogo</string>
     <string name="eos_r_external_camera">CANON EOS R · USB</string>
     <string name="manual_focus_hint">FOCO · MANUAL RECOMENDADO</string>
     <string name="capture_settings_label">CAPTURA</string>
     <string name="session_label">SESSÃO CONTÍNUA</string>
+    <string name="finalize_session">Finalizar sessão</string>
+    <string name="finalized_session">Sessão finalizada</string>
+    <string name="session_card_not_checked">Cartão da câmera ainda não verificado</string>
+    <string name="session_card_no_remote_files">Esta sessão ainda não registrou arquivos no cartão</string>
+    <string name="session_card_waiting_check">Conecte a câmera para localizar os arquivos desta sessão no cartão</string>
+    <string name="session_card_checking">Verificando os arquivos desta sessão no cartão…</string>
+    <string name="session_card_check_result">%1$d de %2$d arquivos encontrados em %3$s</string>
     <string name="recent_captures">CAPTURAS RECENTES</string>
     <string name="update_preview">Atualizar prévia na próxima foto</string>
     <string name="preview_waiting">Prévia solicitada…</string>
@@ -64,4 +84,8 @@
     <string name="log_copied">Log copiado</string>
     <string name="latest_image_preview">Prévia da última imagem baixada</string>
     <string name="export_jpeg">Exportar JPG selecionado para a Galeria</string>
+    <plurals name="session_count">
+        <item quantity="one">%1$d SESSÃO</item>
+        <item quantity="other">%1$d SESSÕES</item>
+    </plurals>
 </resources>

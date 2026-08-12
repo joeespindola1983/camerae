@@ -71,6 +71,19 @@ final class NativeGPhotoClient {
         );
     }
 
+    static String checkFiles(Context context, int fileDescriptor, String cameraFiles)
+            throws IOException {
+        File root = prepareModules(context);
+        File camlibs = new File(root, "camlibs");
+        File iolibs = new File(root, "iolibs");
+        return nativeCheckFiles(
+                fileDescriptor,
+                camlibs.getAbsolutePath(),
+                iolibs.getAbsolutePath(),
+                cameraFiles
+        );
+    }
+
     private static File prepareModules(Context context) throws IOException {
         File root = new File(context.getFilesDir(), "gphoto2-modules/2.5.34");
         File camlibs = new File(root, "camlibs");
@@ -120,6 +133,13 @@ final class NativeGPhotoClient {
             String camlibDirectory,
             String iolibDirectory,
             String outputDirectory,
+            String cameraFiles
+    );
+
+    private static native String nativeCheckFiles(
+            int fileDescriptor,
+            String camlibDirectory,
+            String iolibDirectory,
             String cameraFiles
     );
 }
