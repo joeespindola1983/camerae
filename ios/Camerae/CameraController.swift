@@ -22,6 +22,10 @@ enum AstroCaptureTimingPolicy {
     }
 }
 
+enum AstroCaptureProcessingPolicy {
+    static let processesInline = false
+}
+
 enum CameraeLocationAuthorizationAction: Equatable, Sendable {
     case requestWhenInUse
     case startUpdates
@@ -1449,19 +1453,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             finishPlannedTimelapse()
             return
         }
-
-        do {
-            status = "Alinhando e empilhando \(originals.count) fotos"
-            let outputURL = try await processAstroBatch(originals, batchIndex: 1)
-            astroCompositeFrameCount = 1
-            astroPreviewURL = outputURL
-            stackProgressLabel = "Stack final"
-            status = originals.count == stackCount.rawValue
-                ? "Foto Astro concluída"
-                : "Foto Astro concluída com \(originals.count) originais"
-        } catch {
-            status = "Stacking falhou: \(error.localizedDescription)"
-        }
+        stackProgressLabel = "\(originals.count) originais"
+        status = originals.count == stackCount.rawValue
+            ? "Originais Astro salvos"
+            : "Captura Astro concluída com \(originals.count) originais"
         finishPlannedTimelapse()
     }
 
@@ -1499,8 +1494,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         let clampedTimelapseInterval = min(max(timelapseInterval, 2), 120)
         let clampedAstroInterval = AstroCaptureTimingPolicy.normalizedInterval(astroInterval)
         let size = Self.clampedAstroBatchSize(batchSize)
-        var currentBatch: [URL] = []
-        currentBatch.reserveCapacity(size)
+        var currentBatchCount = 0
+        var completedBatchCount = 0
         var isStackingActive = !waitsForAstroExposure
         let runBudget = CaptureRunBudget(
             startedAt: Date(),
@@ -1536,23 +1531,17 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                         }
                     }
 
-                    currentBatch.append(savedFrame.url)
-                    astroBatchProgressLabel = "\(currentBatch.count)/\(size)"
-                    stackProgressLabel = "Lote \(currentBatch.count)/\(size)"
+                    currentBatchCount += 1
+                    astroBatchProgressLabel = "\(currentBatchCount)/\(size)"
+                    stackProgressLabel = "Lote \(completedBatchCount + 1) · \(currentBatchCount)/\(size)"
                 }
 
-                if currentBatch.count >= size {
-                    status = "Processando frame astro"
-                    let outputURL = try await processAstroBatch(
-                        currentBatch,
-                        batchIndex: astroCompositeFrameCount + 1
-                    )
-                    astroCompositeFrameCount += 1
-                    astroPreviewURL = outputURL
-                    currentBatch.removeAll(keepingCapacity: true)
+                if currentBatchCount >= size {
+                    completedBatchCount += 1
+                    currentBatchCount = 0
                     astroBatchProgressLabel = "0/\(size)"
-                    stackProgressLabel = "Stack \(astroCompositeFrameCount)"
-                    status = "Preview astro atualizado"
+                    stackProgressLabel = "\(completedBatchCount) lotes capturados"
+                    status = "Lote \(completedBatchCount) salvo sem processamento"
                 }
             } catch {
                 status = "Frame falhou: \(error.localizedDescription)"
@@ -1569,7 +1558,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     status = "Aguardando \(Self.formatInterval(remaining))"
                     try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
                 } else {
-                    status = currentBatch.isEmpty ? "Capturando proximo lote" : "Capturando lote astro"
+                    status = currentBatchCount == 0 ? "Capturando próximo lote" : "Capturando lote Astro"
                 }
             }
         }
@@ -1918,22 +1907,6 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         stackProgressLabel = "Original"
         status = "Salvo \(savedURL.lastPathComponent)"
         return SavedFrame(index: frameIndex, url: savedURL, exposureSeconds: photo.exposureSeconds)
-    }
-
-    private func processAstroBatch(_ frameURLs: [URL], batchIndex: Int) async throws -> URL {
-        guard let currentSession else { throw CameraError.missingSession }
-        let data = try await Task.detached(priority: .userInitiated) {
-            let stacker = ExposureStacker()
-            return try autoreleasepool {
-                try stacker.averageJPEGFiles(
-                    frameURLs,
-                    maxDimension: 1920,
-                    profile: .natural
-                )
-            }
-        }.value
-
-        return try store.saveAstroStackFrame(data, in: currentSession, index: batchIndex)
     }
 
     private func applyOutputRotation(for orientation: CaptureDisplayOrientation?) {

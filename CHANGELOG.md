@@ -29,6 +29,9 @@ test distributions do not require an entry here.
 - Astro capture now uses the device's maximum supported exposure automatically;
   its 2–10 second interval controls both capture cadence and frame/storage
   estimates.
+- Astro sessions now save originals and count batches without running alignment,
+  stacking, OpenCV, or rendering until processing is explicitly started from
+  the capture catalog.
 
 ### Fixed
 

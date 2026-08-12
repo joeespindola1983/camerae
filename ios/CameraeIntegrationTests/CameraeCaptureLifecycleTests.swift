@@ -12,6 +12,11 @@ struct CameraeCaptureLifecycleTests {
         #expect(AstroCaptureTimingPolicy.normalizedInterval(30) == 10)
         #expect(AstroCaptureTimingPolicy.intervalRange == 2...10)
     }
+
+    @Test("Astro capture persists originals without inline stacking")
+    func astroCaptureDefersProcessing() {
+        #expect(!AstroCaptureProcessingPolicy.processesInline)
+    }
     @Test func preparingAndRunningUseDifferentPresentationStates() {
         #expect(CameraeCaptureLifecyclePresentation(state: .preparing).showsProgress)
         #expect(!CameraeCaptureLifecyclePresentation(state: .running).isVisible)
