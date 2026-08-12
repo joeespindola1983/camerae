@@ -27,8 +27,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.MediaStore;
-import android.text.Editable;
-import android.text.TextWatcher;
 import android.view.View;
 import android.view.Gravity;
 import android.widget.Button;
@@ -36,6 +34,7 @@ import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.SeekBar;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -94,7 +93,8 @@ public final class MainActivity extends Activity {
     private EditText sequenceCountInput;
     private EditText sequenceDelayInput;
     private EditText sequenceIntervalInput;
-    private EditText bulbDurationInput;
+    private SeekBar bulbDurationSlider;
+    private TextView bulbDurationValueView;
     private Spinner isoSpinner;
     private Spinner whiteBalanceSpinner;
     private Spinner formatSpinner;
@@ -190,11 +190,13 @@ public final class MainActivity extends Activity {
         sessionCountView = findViewById(R.id.session_count);
         sessionsEmptyView = findViewById(R.id.sessions_empty);
         sessionListView = findViewById(R.id.session_list);
-        ((TextView) findViewById(R.id.app_version)).setText(getString(
+        String appVersion = getString(
                 R.string.version_format,
                 BuildConfig.VERSION_NAME,
                 BuildConfig.VERSION_CODE
-        ));
+        );
+        ((TextView) findViewById(R.id.app_version)).setText(appVersion);
+        ((TextView) findViewById(R.id.catalog_app_version)).setText(appVersion);
         statusView = findViewById(R.id.status);
         logView = findViewById(R.id.log);
         authorizeButton = findViewById(R.id.authorize);
@@ -211,7 +213,8 @@ public final class MainActivity extends Activity {
         sequenceCountInput = findViewById(R.id.sequence_count);
         sequenceDelayInput = findViewById(R.id.sequence_delay);
         sequenceIntervalInput = findViewById(R.id.sequence_interval);
-        bulbDurationInput = findViewById(R.id.bulb_duration);
+        bulbDurationSlider = findViewById(R.id.bulb_duration);
+        bulbDurationValueView = findViewById(R.id.bulb_duration_value);
         isoSpinner = findViewById(R.id.iso_spinner);
         whiteBalanceSpinner = findViewById(R.id.white_balance_spinner);
         formatSpinner = findViewById(R.id.capture_format_spinner);
@@ -256,13 +259,15 @@ public final class MainActivity extends Activity {
         finalizeSessionButton.setOnClickListener(view -> finalizeActiveSession());
         findViewById(R.id.create_session).setOnClickListener(view -> createSession());
         findViewById(R.id.back_to_sessions).setOnClickListener(view -> returnToSessionCatalog());
-        bulbDurationInput.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence value, int start, int count, int after) {}
-            @Override public void onTextChanged(CharSequence value, int start, int before, int count) {}
-            @Override public void afterTextChanged(Editable value) {
-                if (sequenceRunning) return;
-                String seconds = value.toString().trim();
-                exposureMetricView.setText(seconds.isEmpty() ? "—" : seconds + " s");
+        bulbDurationSlider.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override public void onStartTrackingTouch(SeekBar seekBar) {}
+            @Override public void onStopTrackingTouch(SeekBar seekBar) {}
+            @Override public void onProgressChanged(SeekBar seekBar, int seconds, boolean fromUser) {
+                int duration = ExposureDurationPolicy.clamp(seconds);
+                bulbDurationValueView.setText(getString(R.string.seconds_value, duration));
+                if (!sequenceRunning) {
+                    exposureMetricView.setText(getString(R.string.seconds_value, duration));
+                }
             }
         });
 
@@ -463,10 +468,10 @@ public final class MainActivity extends Activity {
         selectSpinnerValue(isoSpinner, session.iso);
         selectSpinnerValue(whiteBalanceSpinner, session.whiteBalance);
         selectSpinnerValue(formatSpinner, session.format);
-        bulbDurationInput.setText(String.valueOf(session.bulbSeconds));
+        setBulbDurationSeconds(session.bulbSeconds);
         sequenceIntervalInput.setText(String.valueOf(session.intervalSeconds));
         acceptedCountView.setText(String.valueOf(session.captureCount));
-        exposureMetricView.setText(session.bulbSeconds + " s");
+        exposureMetricView.setText(getString(R.string.seconds_value, selectedBulbSeconds()));
         nextCaptureView.setText("—");
         sequenceProgressView.setText(session.captureCount == 0
                 ? getString(R.string.sequence_idle)
@@ -534,7 +539,7 @@ public final class MainActivity extends Activity {
         activeSession.iso = String.valueOf(isoSpinner.getSelectedItem());
         activeSession.whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
         activeSession.format = String.valueOf(formatSpinner.getSelectedItem());
-        activeSession.bulbSeconds = parseIntOrDefault(bulbDurationInput, 5);
+        activeSession.bulbSeconds = selectedBulbSeconds();
         activeSession.intervalSeconds = parseIntOrDefault(sequenceIntervalInput, 10);
         activeSession.cameraFiles.clear();
         activeSession.cameraFiles.addAll(allCameraFiles);
@@ -617,6 +622,19 @@ public final class MainActivity extends Activity {
         }
     }
 
+    private int selectedBulbSeconds() {
+        return ExposureDurationPolicy.clamp(bulbDurationSlider.getProgress());
+    }
+
+    private void setBulbDurationSeconds(int seconds) {
+        int duration = ExposureDurationPolicy.clamp(seconds);
+        bulbDurationSlider.setProgress(duration);
+        bulbDurationValueView.setText(getString(R.string.seconds_value, duration));
+        if (!sequenceRunning) {
+            exposureMetricView.setText(getString(R.string.seconds_value, duration));
+        }
+    }
+
     private void selectSpinnerValue(Spinner spinner, String value) {
         if (spinner.getAdapter() == null) return;
         for (int index = 0; index < spinner.getAdapter().getCount(); index++) {
@@ -674,7 +692,7 @@ public final class MainActivity extends Activity {
         isoSpinner.setEnabled(captureValidated && !cameraBusy);
         whiteBalanceSpinner.setEnabled(captureValidated && !cameraBusy);
         formatSpinner.setEnabled(captureValidated && !cameraBusy);
-        bulbDurationInput.setEnabled(captureValidated && !cameraBusy);
+        bulbDurationSlider.setEnabled(captureValidated && !cameraBusy);
         exportJpegButton.setEnabled(selectedJpeg != null && !cameraBusy);
         updatePreviewButton.setEnabled(sequenceRunning && !previewRefreshRequested);
         updatePreviewButton.setText(previewRefreshRequested
@@ -821,17 +839,7 @@ public final class MainActivity extends Activity {
             refreshProbe();
             return;
         }
-        int bulbSeconds;
-        try {
-            bulbSeconds = Integer.parseInt(bulbDurationInput.getText().toString().trim());
-        } catch (NumberFormatException error) {
-            Toast.makeText(this, "Informe uma duração Bulb válida", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (bulbSeconds < 1 || bulbSeconds > 120) {
-            Toast.makeText(this, "Neste MVP, use Bulb entre 1 e 120 segundos", Toast.LENGTH_LONG).show();
-            return;
-        }
+        int bulbSeconds = selectedBulbSeconds();
 
         String iso = String.valueOf(isoSpinner.getSelectedItem());
         String whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
@@ -1348,17 +1356,7 @@ public final class MainActivity extends Activity {
         Integer intervalSeconds = readSequenceValue(sequenceIntervalInput, 1, 86400, "Intervalo");
         if (intervalSeconds == null) return;
 
-        int bulbSeconds;
-        try {
-            bulbSeconds = Integer.parseInt(bulbDurationInput.getText().toString().trim());
-        } catch (NumberFormatException error) {
-            Toast.makeText(this, "Informe uma duração Bulb válida", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        if (bulbSeconds < 1 || bulbSeconds > 120) {
-            Toast.makeText(this, "Neste MVP, use Bulb entre 1 e 120 segundos", Toast.LENGTH_LONG).show();
-            return;
-        }
+        int bulbSeconds = selectedBulbSeconds();
         String iso = String.valueOf(isoSpinner.getSelectedItem());
         String whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
         String format = String.valueOf(formatSpinner.getSelectedItem());
@@ -1732,8 +1730,7 @@ public final class MainActivity extends Activity {
         if (exposureSnapshot == null || !exposureSnapshot.isBulbMode()) {
             return 0;
         }
-        Integer seconds = readSequenceValue(bulbDurationInput, 1, 3600, "Bulb");
-        return seconds == null ? -1 : seconds * 1000L;
+        return selectedBulbSeconds() * 1000L;
     }
 
     private void finishSequenceWithError(

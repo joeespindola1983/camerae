@@ -60,7 +60,8 @@
     <string name="bulb_duration_seconds">Bulb (s)</string>
     <string name="capture_format">FORMATO</string>
     <string name="interval_between_starts">INTERVALO (S)</string>
-    <string name="default_bulb_duration">5</string>
+    <string name="default_bulb_duration_value">5 s</string>
+    <string name="seconds_value">%1$d s</string>
     <string name="apply_controls">Aplicar ISO e WB</string>
     <string name="photo_count">Fotos</string>
     <string name="initial_delay_seconds">Atraso (s)</string>

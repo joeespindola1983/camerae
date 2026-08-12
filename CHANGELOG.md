@@ -50,6 +50,8 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Replaced the Android Astro exposure text field with a one-second slider from
+  1–45 seconds, using five-second reference marks from 0 through 45.
 - Replaced the Android EOS R probe/debug screen with a focused Astro capture
   interface based on the canonical Figma capture screen and tokens, retaining
   only post-capture log sharing from the diagnostic workflow.
@@ -61,6 +63,8 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Restored the Android app version/build badge to the initial Astro session
+  catalog so installed test builds can be identified before opening a session.
 - Replaced raw Android USB paths and VID/PID values in the Astro UI with the
   friendly camera model, synchronized the live exposure metric with its input,
   and kept the active exposure countdown visible while a safe pause is pending.

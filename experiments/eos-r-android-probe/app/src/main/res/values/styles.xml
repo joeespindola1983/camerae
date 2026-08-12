@@ -7,4 +7,13 @@
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowActionModeOverlay">true</item>
     </style>
+
+    <style name="ExposureMark">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:gravity">center</item>
+        <item name="android:textColor">#66749E</item>
+        <item name="android:textSize">8sp</item>
+    </style>
 </resources>
