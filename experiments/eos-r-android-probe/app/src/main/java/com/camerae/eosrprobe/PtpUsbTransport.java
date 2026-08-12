@@ -70,11 +70,11 @@ final class PtpUsbTransport implements AutoCloseable {
         nextTransactionId = 1;
     }
 
-    void probeDeviceInfoBeforeSession() throws TransportException {
+    void probeDeviceInfoBeforeSession(int postReadinessQuietMs) throws TransportException {
         if (sessionOpen) {
             throw new TransportException("GetDeviceInfo de readiness exige sessão fechada");
         }
-        discardStaleInput("antes de GetDeviceInfo");
+        discardStaleInput("antes de GetDeviceInfo", STALE_INPUT_TIMEOUT_MS);
         byte[] deviceInfo = commandWithData("GetDeviceInfo", 0x1001);
         nextTransactionId = 0;
         if (deviceInfo.length < 12) {
@@ -82,6 +82,7 @@ final class PtpUsbTransport implements AutoCloseable {
                     + deviceInfo.length + " bytes");
         }
         append("Readiness PTP confirmada por GetDeviceInfo: %d bytes", deviceInfo.length);
+        discardStaleInput("após GetDeviceInfo", postReadinessQuietMs);
     }
 
     void command(String name, int operationCode, int... parameters)
@@ -253,10 +254,10 @@ final class PtpUsbTransport implements AutoCloseable {
                 hex4(operationCode), transactionId, payload.length, hexPrefix(payload));
     }
 
-    private void discardStaleInput(String phase) throws TransportException {
+    private void discardStaleInput(String phase, int quietWindowMs) throws TransportException {
         int discarded = 0;
         while (discarded < MAX_STALE_CONTAINERS) {
-            Container stale = readContainer(STALE_INPUT_TIMEOUT_MS, true);
+            Container stale = readContainer(quietWindowMs, true);
             if (stale == null) {
                 break;
             }
@@ -362,6 +363,10 @@ final class PtpUsbTransport implements AutoCloseable {
     private Response parseResponse(String name, Container container, int expectedTransactionId)
             throws TransportException {
         if (container.type != CONTAINER_RESPONSE) {
+            append("<- INESPERADO %s code=%s tx=%d bytes=%d; %s esperava RESP tx=%d",
+                    containerTypeName(container.type), hex4(container.code),
+                    container.transactionId, container.payload.length,
+                    name, expectedTransactionId);
             throw new TransportException(name + ": esperado RESPONSE, recebido container type="
                     + container.type);
         }

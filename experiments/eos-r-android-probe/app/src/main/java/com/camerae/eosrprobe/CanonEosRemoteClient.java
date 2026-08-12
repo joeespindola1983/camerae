@@ -22,6 +22,9 @@ final class CanonEosRemoteClient {
     private static final long OBJECT_EVENT_TIMEOUT_MS = 15_000;
     private static final long OBJECT_EVENT_POLL_MS = 500;
     private static final int READINESS_ATTEMPTS = 6;
+    private static final int FIRST_READINESS_QUIET_MS = 200;
+    private static final int RECOVERED_READINESS_QUIET_MS = 750;
+    private static final long FIRST_READINESS_RETRY_DELAY_MS = 1_500;
     private static final int CAPABILITY_POLLS = 3;
     private static final int SETTING_READBACK_POLLS = 6;
     private static final int PROP_ISO_SPEED = 0xD103;
@@ -415,7 +418,11 @@ final class CanonEosRemoteClient {
             PtpUsbTransport candidate = null;
             try {
                 candidate = new PtpUsbTransport(usbManager, device, report);
-                candidate.probeDeviceInfoBeforeSession();
+                candidate.probeDeviceInfoBeforeSession(
+                        attempt == 1
+                                ? FIRST_READINESS_QUIET_MS
+                                : RECOVERED_READINESS_QUIET_MS
+                );
                 report.append("Readiness PTP: tentativa ").append(attempt).append(" aceita\n");
                 return candidate;
             } catch (PtpUsbTransport.TransportException error) {
@@ -426,7 +433,8 @@ final class CanonEosRemoteClient {
                     candidate.close();
                 }
                 if (attempt < READINESS_ATTEMPTS) {
-                    SystemClock.sleep(attempt * 500L);
+                    SystemClock.sleep(FIRST_READINESS_RETRY_DELAY_MS
+                            + (attempt - 1) * 500L);
                 }
             }
         }
