@@ -13,12 +13,13 @@
     <string name="gphoto_probe">Testar libgphoto2 (somente leitura)</string>
     <string name="gphoto_probe_notice">Primeiro marco: detectar a EOS R e ler resumo, ISO, WB e shutter sem capturar nem alterar configurações. O transporte PTP experimental anterior está desativado nesta versão.</string>
     <string name="astro_sequence_title">Sequência astro</string>
-    <string name="camera_settings_notice">A EOS R bloqueia seus controles físicos enquanto está ligada ao USB. Leia abaixo as opções anunciadas pela câmera antes de aplicar ISO/WB.</string>
+    <string name="camera_settings_notice">Configure ISO, WB, formato e duração Bulb. Para o primeiro teste, use foco manual, JPG e 5 segundos.</string>
     <string name="inspect_controls">Ler ISO, WB e shutter</string>
     <string name="exposure_capabilities_idle">Controles ainda não consultados.</string>
     <string name="iso">ISO</string>
     <string name="white_balance">White balance</string>
     <string name="bulb_duration_seconds">Bulb (s)</string>
+    <string name="capture_format">Formato da captura</string>
     <string name="default_bulb_duration">5</string>
     <string name="apply_controls">Aplicar ISO e WB</string>
     <string name="photo_count">Fotos</string>
@@ -33,10 +34,11 @@
     <string name="refresh">Varrer</string>
     <string name="authorize_usb">Autorizar USB</string>
     <string name="inspect_mtp">Ler câmera</string>
-    <string name="capture_test">Capturar + baixar (MF)</string>
+    <string name="capture_test">Captura teste libgphoto2</string>
     <string name="download_latest">Baixar última</string>
     <string name="copy_log">Copiar log</string>
     <string name="share_log">Compartilhar log</string>
     <string name="log_copied">Log copiado</string>
     <string name="latest_image_preview">Prévia da última imagem baixada</string>
+    <string name="export_jpeg">Exportar JPG selecionado para a Galeria</string>
 </resources>

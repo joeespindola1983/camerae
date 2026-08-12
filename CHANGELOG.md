@@ -24,6 +24,9 @@ test distributions do not require an entry here.
 - Added a read-only libgphoto2 2.5.34 Android path for the EOS R probe, using
   the Android-authorized USB file descriptor with libusb and the focused
   `ptp2`/`usb1` module set before enabling capture or configuration writes.
+- Added an EOS R astro capture MVP on top of libgphoto2 with ISO, white balance,
+  JPG/CR3/JPG+CR3 selection, timed Bulb release, camera-card download, JPG
+  thumbnails, and export of the selected JPG to the Android Gallery.
 - Added an experimental Android EOS R USB probe with physically validated CR3
   import and Canon PTP remote shutter, plus an automatic capture-to-new-handle
   download flow for hardware validation.
@@ -35,6 +38,9 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Switched EOS R timed Bulb capture from the unavailable generic `bulb` action
+  to libgphoto2's camera-advertised `eosremoterelease` press/release action,
+  and stopped reporting a capture as successful when no file was downloaded.
 - Persisted the Android EOS R PTP command trace across process restarts so a
   camera lockup can be diagnosed even after cable recovery, and added bounded
   Canon remote/event-mode cleanup before every session closes.

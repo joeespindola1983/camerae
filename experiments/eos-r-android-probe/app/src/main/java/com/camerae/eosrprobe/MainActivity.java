@@ -6,6 +6,7 @@ import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
 import android.content.ClipData;
 import android.content.ClipboardManager;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -19,17 +20,21 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.SystemClock;
+import android.provider.MediaStore;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ImageView;
+import android.widget.LinearLayout;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
@@ -61,12 +66,15 @@ public final class MainActivity extends Activity {
     private Button cancelSequenceButton;
     private Button copyLogButton;
     private Button shareLogButton;
+    private Button exportJpegButton;
     private EditText sequenceCountInput;
     private EditText sequenceDelayInput;
     private EditText sequenceIntervalInput;
     private EditText bulbDurationInput;
     private Spinner isoSpinner;
     private Spinner whiteBalanceSpinner;
+    private Spinner formatSpinner;
+    private LinearLayout thumbnailStrip;
     private TextView sequenceProgressView;
     private TextView exposureCapabilitiesView;
     private ImageView previewView;
@@ -78,6 +86,7 @@ public final class MainActivity extends Activity {
     private boolean cameraBusy;
     private boolean gphotoProbeCompleted;
     private UsbDeviceConnection gphotoConnection;
+    private File selectedJpeg;
     private volatile boolean sequenceRunning;
     private volatile boolean sequenceCancelRequested;
     private boolean receiverRegistered;
@@ -149,6 +158,9 @@ public final class MainActivity extends Activity {
         bulbDurationInput = findViewById(R.id.bulb_duration);
         isoSpinner = findViewById(R.id.iso_spinner);
         whiteBalanceSpinner = findViewById(R.id.white_balance_spinner);
+        formatSpinner = findViewById(R.id.capture_format_spinner);
+        exportJpegButton = findViewById(R.id.export_jpeg);
+        thumbnailStrip = findViewById(R.id.capture_thumbnails);
         sequenceProgressView = findViewById(R.id.sequence_progress);
         exposureCapabilitiesView = findViewById(R.id.exposure_capabilities);
         previewView = findViewById(R.id.preview);
@@ -159,7 +171,7 @@ public final class MainActivity extends Activity {
         });
         authorizeButton.setOnClickListener(view -> requestUsbPermission());
         gphotoProbeButton.setOnClickListener(view -> runGPhotoProbe());
-        captureButton.setOnClickListener(view -> runRemoteCapture());
+        captureButton.setOnClickListener(view -> runGPhotoCapture());
         startSequenceButton.setOnClickListener(view -> startAstroSequence());
         cancelSequenceButton.setOnClickListener(view -> cancelAstroSequence());
         inspectMtpButton.setOnClickListener(view -> runMtpProbe(false));
@@ -168,6 +180,9 @@ public final class MainActivity extends Activity {
         downloadLatestButton.setOnClickListener(view -> runMtpProbe(true));
         copyLogButton.setOnClickListener(view -> copyLog());
         shareLogButton.setOnClickListener(view -> shareLog());
+        exportJpegButton.setOnClickListener(view -> exportSelectedJpeg());
+
+        configureAstroControlAdapters();
 
         appendEvent("Aplicativo " + BuildConfig.VERSION_NAME + " iniciado em "
                 + Build.MANUFACTURER + " " + Build.MODEL
@@ -247,8 +262,7 @@ public final class MainActivity extends Activity {
         boolean captureValidated = cameraReady && isValidatedCaptureDevice(selected);
         authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
         gphotoProbeButton.setEnabled(captureValidated && !cameraBusy && !gphotoProbeCompleted);
-        // O transporte PTP manual fica congelado enquanto validamos o caminho oficial libgphoto2.
-        captureButton.setEnabled(false);
+        captureButton.setEnabled(captureValidated && !cameraBusy);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
         inspectControlsButton.setEnabled(false);
         boolean controlsReady = captureValidated
@@ -256,11 +270,11 @@ public final class MainActivity extends Activity {
                 && !exposureSnapshot.isoOptions.isEmpty()
                 && !exposureSnapshot.whiteBalanceOptions.isEmpty();
         applyControlsButton.setEnabled(false);
-        isoSpinner.setEnabled(controlsReady && !cameraBusy);
-        whiteBalanceSpinner.setEnabled(controlsReady && !cameraBusy);
-        bulbDurationInput.setEnabled(controlsReady
-                && exposureSnapshot.isBulbMode()
-                && !cameraBusy);
+        isoSpinner.setEnabled(captureValidated && !cameraBusy);
+        whiteBalanceSpinner.setEnabled(captureValidated && !cameraBusy);
+        formatSpinner.setEnabled(captureValidated && !cameraBusy);
+        bulbDurationInput.setEnabled(captureValidated && !cameraBusy);
+        exportJpegButton.setEnabled(selectedJpeg != null && !cameraBusy);
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
         startSequenceButton.setEnabled(false);
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
@@ -337,6 +351,188 @@ public final class MainActivity extends Activity {
                             + ": " + error.getMessage());
                     refreshProbe();
                 });
+            }
+        });
+    }
+
+    private void configureAstroControlAdapters() {
+        String[] isoValues = {
+                "Auto", "100", "125", "160", "200", "250", "320", "400", "500", "640",
+                "800", "1000", "1250", "1600", "2000", "2500", "3200", "4000", "5000",
+                "6400", "8000", "10000", "12800", "16000", "20000", "25600", "32000", "40000"
+        };
+        String[] whiteBalanceValues = {
+                "Auto", "AWB White", "Daylight", "Shadow", "Cloudy", "Tungsten",
+                "Fluorescent", "Flash", "Manual", "Color Temperature"
+        };
+        String[] formatValues = {"JPG", "CR3", "JPG+CR3"};
+        isoSpinner.setAdapter(new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_dropdown_item, isoValues));
+        whiteBalanceSpinner.setAdapter(new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_dropdown_item, whiteBalanceValues));
+        formatSpinner.setAdapter(new ArrayAdapter<>(
+                this, android.R.layout.simple_spinner_dropdown_item, formatValues));
+        isoSpinner.setSelection(19);
+        whiteBalanceSpinner.setSelection(9);
+        formatSpinner.setSelection(0);
+        exposureCapabilitiesView.setText(
+                "Controles via libgphoto2. Primeiro teste recomendado: JPG, Bulb 5 s e foco manual."
+        );
+    }
+
+    private void runGPhotoCapture() {
+        UsbDevice device = selectCamera();
+        if (device == null || !usbManager.hasPermission(device)
+                || !isValidatedCaptureDevice(device)) {
+            appendEvent("Captura libgphoto2 cancelada: EOS R ausente ou sem permissão USB");
+            refreshProbe();
+            return;
+        }
+        int bulbSeconds;
+        try {
+            bulbSeconds = Integer.parseInt(bulbDurationInput.getText().toString().trim());
+        } catch (NumberFormatException error) {
+            Toast.makeText(this, "Informe uma duração Bulb válida", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (bulbSeconds < 1 || bulbSeconds > 120) {
+            Toast.makeText(this, "Neste MVP, use Bulb entre 1 e 120 segundos", Toast.LENGTH_LONG).show();
+            return;
+        }
+
+        String iso = String.valueOf(isoSpinner.getSelectedItem());
+        String whiteBalance = String.valueOf(whiteBalanceSpinner.getSelectedItem());
+        String format = String.valueOf(formatSpinner.getSelectedItem());
+        File pictures = getExternalFilesDir(Environment.DIRECTORY_PICTURES);
+        if (pictures == null) pictures = getFilesDir();
+        File outputDirectory = new File(
+                pictures,
+                "CameraeAstro/" + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(new Date())
+        );
+
+        cameraBusy = true;
+        appendEvent("Captura libgphoto2 iniciada: ISO " + iso + ", WB " + whiteBalance
+                + ", " + format + ", Bulb " + bulbSeconds + " s");
+        refreshProbe();
+        cameraExecutor.submit(() -> {
+            try {
+                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
+                if (gphotoConnection == null) throw new IOException("UsbManager.openDevice retornou null");
+                String result = NativeGPhotoClient.capture(
+                        getApplicationContext(),
+                        gphotoConnection.getFileDescriptor(),
+                        outputDirectory,
+                        iso,
+                        whiteBalance,
+                        format,
+                        bulbSeconds
+                );
+                PersistentProbeLog.append("GPHOTO2-CAPTURE", result);
+                runOnUiThread(() -> {
+                    captureReport = result.endsWith("\n") ? result : result + "\n";
+                    addCapturedFilesFromReport(result);
+                    gphotoProbeCompleted = true;
+                    cameraBusy = false;
+                    int expectedFiles = "JPG+CR3".equals(format) ? 2 : 1;
+                    boolean completed = result.contains(
+                            "Arquivos baixados: " + expectedFiles + "/" + expectedFiles
+                    );
+                    appendEvent(completed
+                            ? "Captura libgphoto2 concluída com download " + expectedFiles + "/" + expectedFiles
+                            : "Captura libgphoto2 falhou; nenhum sucesso foi presumido");
+                    refreshProbe();
+                });
+            } catch (Throwable error) {
+                PersistentProbeLog.append("GPHOTO2-CAPTURE", "Falha: " + error);
+                runOnUiThread(() -> {
+                    captureReport = "CAPTURA LIBGPHOTO2\nERRO: "
+                            + error.getClass().getSimpleName() + ": " + error.getMessage() + "\n";
+                    cameraBusy = false;
+                    appendEvent("Captura libgphoto2 falhou: " + error.getClass().getSimpleName()
+                            + ": " + error.getMessage());
+                    refreshProbe();
+                });
+            }
+        });
+    }
+
+    private void addCapturedFilesFromReport(String report) {
+        for (String line : report.split("\\n")) {
+            if (!line.startsWith("FILE|")) continue;
+            String[] components = line.split("\\|", 3);
+            if (components.length < 3) continue;
+            File file = new File(components[1]);
+            String lowerName = file.getName().toLowerCase(Locale.US);
+            if (!lowerName.endsWith(".jpg") && !lowerName.endsWith(".jpeg")) continue;
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inSampleSize = 8;
+            Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+            if (bitmap == null) continue;
+            ImageView thumbnail = new ImageView(this);
+            int size = Math.round(88 * getResources().getDisplayMetrics().density);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(size, size);
+            params.setMarginEnd(Math.round(8 * getResources().getDisplayMetrics().density));
+            thumbnail.setLayoutParams(params);
+            thumbnail.setScaleType(ImageView.ScaleType.CENTER_CROP);
+            thumbnail.setImageBitmap(bitmap);
+            thumbnail.setContentDescription("Captura " + file.getName());
+            thumbnail.setOnClickListener(view -> selectJpeg(file));
+            thumbnailStrip.addView(thumbnail, 0);
+            selectJpeg(file);
+        }
+    }
+
+    private void selectJpeg(File file) {
+        selectedJpeg = file;
+        BitmapFactory.Options options = new BitmapFactory.Options();
+        options.inSampleSize = 4;
+        Bitmap bitmap = BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        if (bitmap != null) {
+            previewView.setImageBitmap(bitmap);
+            previewView.setVisibility(View.VISIBLE);
+        }
+        exportJpegButton.setEnabled(!cameraBusy);
+    }
+
+    private void exportSelectedJpeg() {
+        File source = selectedJpeg;
+        if (source == null || !source.isFile()) {
+            Toast.makeText(this, "Selecione um JPG capturado", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            Toast.makeText(this, "Exportação deste MVP requer Android 10 ou superior", Toast.LENGTH_LONG).show();
+            return;
+        }
+        cameraExecutor.submit(() -> {
+            android.net.Uri uri = null;
+            try {
+                ContentValues values = new ContentValues();
+                values.put(MediaStore.Images.Media.DISPLAY_NAME, source.getName());
+                values.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                values.put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Camerae");
+                values.put(MediaStore.Images.Media.IS_PENDING, 1);
+                uri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+                if (uri == null) throw new IOException("MediaStore não criou o destino");
+                try (FileInputStream input = new FileInputStream(source);
+                     OutputStream output = getContentResolver().openOutputStream(uri)) {
+                    if (output == null) throw new IOException("MediaStore não abriu o destino");
+                    byte[] buffer = new byte[64 * 1024];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                }
+                values.clear();
+                values.put(MediaStore.Images.Media.IS_PENDING, 0);
+                getContentResolver().update(uri, values, null, null);
+                runOnUiThread(() -> {
+                    appendEvent("JPG exportado para Fotos/Camerae: " + source.getName());
+                    Toast.makeText(this, "JPG exportado para a Galeria", Toast.LENGTH_SHORT).show();
+                    refreshProbe();
+                });
+            } catch (IOException error) {
+                if (uri != null) getContentResolver().delete(uri, null, null);
+                runOnUiThread(() -> Toast.makeText(
+                        this, "Falha ao exportar: " + error.getMessage(), Toast.LENGTH_LONG).show());
             }
         });
     }
@@ -450,8 +646,9 @@ public final class MainActivity extends Activity {
     }
 
     private void clearExposureControls() {
-        isoSpinner.setAdapter(null);
-        whiteBalanceSpinner.setAdapter(null);
+        isoSpinner.setEnabled(false);
+        whiteBalanceSpinner.setEnabled(false);
+        formatSpinner.setEnabled(false);
     }
 
     private void setSpinnerOptions(

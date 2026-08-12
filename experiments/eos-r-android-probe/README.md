@@ -35,7 +35,10 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O log 20 confirmou que até o primeiro `GetDeviceInfo` continuava retornando bulk IN inválido em conexões físicas limpas. Esse resultado encerrou os ajustes incrementais do transporte PTP manual.
 - O APK `0.8.0` substitui o próximo marco por libgphoto2 2.5.34, libusb 1.0.29 e libltdl 2.5.4 compilados para Android `arm64-v8a`. O file descriptor autorizado pelo Android é entregue ao backend oficial por `gp_port_usb_set_sys_device`.
 - Em `0.8.0`, captura, sequência e escrita pelo transporte manual estão desativadas. O novo botão `Testar libgphoto2 (somente leitura)` limita-se a inicializar a EOS R, obter seu resumo e ler a árvore de configuração procurando ISO, white balance, shutter, Bulb e capture target.
-- Build debug `0.8.0` verificado e instalado com sucesso no SM-A065M em 11 de agosto de 2026.
+- O log 21 validou duas inicializações libgphoto2 completas na EOS R, leitura de ISO/WB/Bulb/capture target, `gp_camera_exit` limpo e um inventário MTP posterior de 17 imagens sem bloqueio da câmera.
+- O APK `0.9.0` adiciona ISO, WB, formato JPG/CR3/JPG+CR3, duração Bulb de 1 a 120 s, captura teste, download dos arquivos anunciados pela câmera, thumbnails dos JPGs e exportação do JPG selecionado para `Fotos/Camerae` via MediaStore.
+- O log 22 confirmou que ISO, WB, destino e formato foram escritos com sucesso, mas a EOS R não anuncia a ação genérica `bulb`. O APK `0.9.1` usa a ação anunciada `eosremoterelease` com `Press Full MF` e `Release`, e só reporta sucesso quando baixa a contagem esperada de arquivos.
+- Build debug `0.9.1` verificado e instalado com sucesso no SM-A065M em 11 de agosto de 2026.
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
@@ -66,6 +69,16 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 6. Se houver erro ou a câmera reiniciar, não repita no mesmo attach: compartilhe o log e reconecte fisicamente antes de outro teste.
 
 Esse probe não solicita captura e não escreve configurações. A conexão autorizada permanece aberta até o app encerrar ou a câmera ser desconectada, porque o backend Android do libgphoto2 mantém o dispositivo externo durante o processo.
+
+### Captura teste libgphoto2 (`0.9.1`)
+
+1. Confirme `Versão 0.9.1 (build 21)`, câmera em modo Bulb e lente em foco manual.
+2. Para o primeiro teste, mantenha ISO 6400, WB `Color Temperature`, formato `JPG` e Bulb 5 s.
+3. Toque uma única vez em `Captura teste libgphoto2` e aguarde o app liberar o obturador, receber `FILE_ADDED`, baixar a imagem e mostrar a thumbnail.
+4. Toque na thumbnail para selecioná-la e use `Exportar JPG selecionado para a Galeria` para copiá-la para `Fotos/Camerae`.
+5. Compartilhe o log antes de testar `CR3` e depois `JPG+CR3`. No modo combinado, o resultado esperado é `Arquivos baixados: 2/2`.
+
+A captura configura o destino como cartão de memória, aplica somente escolhas anunciadas pela câmera e sempre tenta encerrar Bulb antes de fechar a sessão. O intervalômetro continua desativado até uma captura/download completar fisicamente por esse caminho.
 
 ### Fluxo legado (congelado em `0.8.0`)
 

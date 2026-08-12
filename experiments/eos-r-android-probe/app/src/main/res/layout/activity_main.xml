@@ -68,7 +68,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="@string/inspect_controls" />
+            android:text="@string/inspect_controls"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/exposure_capabilities"
@@ -150,12 +151,33 @@
             </LinearLayout>
         </LinearLayout>
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:labelFor="@id/capture_format_spinner"
+            android:text="@string/capture_format" />
+
+        <Spinner
+            android:id="@+id/capture_format_spinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:enabled="false" />
+
+        <Button
+            android:id="@+id/capture_test"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:enabled="false"
+            android:text="@string/capture_test" />
+
         <Button
             android:id="@+id/apply_controls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:enabled="false"
-            android:text="@string/apply_controls" />
+            android:text="@string/apply_controls"
+            android:visibility="gone" />
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -302,13 +324,6 @@
                 android:text="@string/inspect_mtp" />
 
             <Button
-                android:id="@+id/capture_test"
-                style="?android:attr/buttonBarButtonStyle"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/capture_test" />
-
-            <Button
                 android:id="@+id/download_latest"
                 style="?android:attr/buttonBarButtonStyle"
                 android:layout_width="wrap_content"
@@ -339,6 +354,26 @@
         android:contentDescription="@string/latest_image_preview"
         android:scaleType="centerInside"
         android:visibility="gone" />
+
+    <HorizontalScrollView
+        android:layout_width="match_parent"
+        android:layout_height="96dp"
+        android:layout_marginTop="6dp"
+        android:scrollbars="none">
+
+        <LinearLayout
+            android:id="@+id/capture_thumbnails"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:orientation="horizontal" />
+    </HorizontalScrollView>
+
+    <Button
+        android:id="@+id/export_jpeg"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:enabled="false"
+        android:text="@string/export_jpeg" />
 
     <ScrollView
         android:layout_width="match_parent"
