@@ -3,8 +3,8 @@ package com.camerae.eosrprobe;
 final class AstroPreviewEnergyPolicy {
     private AstroPreviewEnergyPolicy() {}
 
-    static boolean shouldDownloadNextJpeg(boolean explicitlyRequested) {
-        return explicitlyRequested;
+    static boolean shouldDownloadNextJpeg(int completedCaptures, boolean explicitlyRequested) {
+        return completedCaptures == 0 || explicitlyRequested;
     }
 
     static boolean canCaptureLiveViewFrame(

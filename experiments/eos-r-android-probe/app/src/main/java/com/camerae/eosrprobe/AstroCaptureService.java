@@ -269,6 +269,7 @@ public final class AstroCaptureService extends Service {
                 if (!waitUntilScheduled(scheduledAt)) break;
                 int captureNumber = completed + 1;
                 boolean downloadPreview = AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(
+                        completed,
                         previewRequested
                 );
                 previewRequested = false;

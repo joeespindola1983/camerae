@@ -754,12 +754,14 @@ public final class MainActivity extends Activity {
                                 sequenceRunning
                         )
         );
+        liveViewFrameButton.setVisibility(sequenceRunning ? View.GONE : View.VISIBLE);
         updatePreviewButton.setEnabled(
                 AstroPreviewEnergyPolicy.canRequestNextCaptureJpeg(
                         captureValidated,
                         sequenceRunning
                 ) && !previewRefreshRequested
         );
+        updatePreviewButton.setVisibility(sequenceRunning ? View.VISIBLE : View.GONE);
         updatePreviewButton.setText(previewRefreshRequested
                 ? R.string.preview_waiting
                 : R.string.update_preview);

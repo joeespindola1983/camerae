@@ -7,9 +7,10 @@ import org.junit.Test;
 
 public final class AstroPreviewEnergyPolicyTest {
     @Test
-    public void firstCaptureDoesNotDownloadJpegWithoutAnExplicitRequest() {
-        assertFalse(AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(false));
-        assertTrue(AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(true));
+    public void firstCaptureDownloadsOneJpegForTheSessionThumbnail() {
+        assertTrue(AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(0, false));
+        assertFalse(AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(1, false));
+        assertTrue(AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(8, true));
     }
 
     @Test
