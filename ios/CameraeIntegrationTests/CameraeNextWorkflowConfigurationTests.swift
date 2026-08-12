@@ -319,11 +319,10 @@ struct CameraeNextWorkflowConfigurationTests {
 
         #expect(configuration.module == .astrophotography)
         #expect(configuration.repeatableKind == .photo)
-        #expect(!configuration.usesAutomaticAstroExposure)
+        #expect(configuration.usesAutomaticAstroExposure)
         #expect(configuration.cameraLens == .wide)
         #expect(configuration.cameraZoomFactor == 1)
         #expect(configuration.sourceFormat == .dng)
-        #expect(configuration.astroExposureSeconds == 8)
         #expect(configuration.intervalSeconds == 8)
         #expect(configuration.astroPhotoStackCount == .ten)
         #expect(configuration.estimatedFrameCount == 10)
@@ -339,9 +338,13 @@ struct CameraeNextWorkflowConfigurationTests {
         var astro = CameraeNextCaptureConfiguration.astroDefault
         astro.repeatableKind = .timelapse
         astro.durationMinutes = 30
-        astro.astroExposureSeconds = 8
+        astro.intervalSeconds = 8
         astro.astroCapturesPerFrame = 3
-        #expect(astro.estimatedFrameCount == 75)
+        #expect(astro.estimatedFrameCount == 225)
+
+        astro.intervalSeconds = 30
+        #expect(astro.estimatedFrameCount == 180)
+        #expect(astro.normalizedForCapture().intervalSeconds == 10)
     }
 
     @Test("Repeatable presentation follows the approved configuration screen")
@@ -484,7 +487,7 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(presentation.primaryActionTitle == CameraeL10n.openCamera)
         #expect(presentation.captureSectionTitle == CameraeL10n.sessionSection)
         #expect(presentation.adjustmentsSectionTitle == CameraeL10n.astroCaptureSection)
-        #expect(presentation.adjustmentTitles == [CameraeL10n.exposure])
+        #expect(presentation.adjustmentTitles.isEmpty)
         #expect(presentation.durationLabels.isEmpty)
         #expect(presentation.showsAstroPhotoStacking)
         #expect(presentation.cameraPresentation == .lockedStatus(lens: "Wide", zoom: "1×"))
@@ -786,15 +789,15 @@ struct CameraeNextWorkflowConfigurationTests {
         #expect(CameraeNextCustomDuration.parse("0 h 00 min") == nil)
     }
 
-    @Test("Automatic Astro mode disables only the manual exposure control")
-    func automaticAstroExposure() {
-        var automatic = CameraeNextCaptureConfiguration.astroDefault
-        automatic.usesAutomaticAstroExposure = true
-        let automaticPresentation = CameraeNextWorkflowConfigurationPresentation(configuration: automatic)
-        let manualPresentation = CameraeNextWorkflowConfigurationPresentation(configuration: .astroDefault)
+    @Test("Astro always uses maximum device exposure and exposes no manual control")
+    func maximumAstroExposure() {
+        var configuration = CameraeNextCaptureConfiguration.astroDefault
+        configuration.repeatableKind = .timelapse
+        let presentation = CameraeNextWorkflowConfigurationPresentation(configuration: configuration)
 
-        #expect(!automaticPresentation.isAstroExposureControlEnabled)
-        #expect(manualPresentation.isAstroExposureControlEnabled)
+        #expect(!presentation.isAstroExposureControlEnabled)
+        #expect(!presentation.adjustmentTitles.contains(CameraeL10n.exposure))
+        #expect(presentation.adjustmentTitles.contains(CameraeL10n.interval))
     }
 
     private func sessionSummary(

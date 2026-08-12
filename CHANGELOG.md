@@ -26,6 +26,9 @@ test distributions do not require an entry here.
 - Astro projects now use the same persistent Configure/Captures workspace as
   Repeatable projects, with processing, sharing, and deletion actions available
   from the capture catalog instead of a session modal.
+- Astro capture now uses the device's maximum supported exposure automatically;
+  its 2–10 second interval controls both capture cadence and frame/storage
+  estimates.
 
 ### Fixed
 

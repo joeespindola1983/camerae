@@ -3,6 +3,15 @@ import Testing
 @testable import Camerae
 
 struct CameraeCaptureLifecycleTests {
+    @Test("Astro interval is a minimum start-to-start cadence")
+    func astroIntervalCadence() {
+        #expect(AstroCaptureTimingPolicy.waitDuration(interval: 8, captureDuration: 3) == 5)
+        #expect(AstroCaptureTimingPolicy.waitDuration(interval: 8, captureDuration: 10) == 0)
+        #expect(AstroCaptureTimingPolicy.estimatedCaptureCount(duration: 1_800, interval: 8) == 225)
+        #expect(AstroCaptureTimingPolicy.normalizedInterval(1) == 2)
+        #expect(AstroCaptureTimingPolicy.normalizedInterval(30) == 10)
+        #expect(AstroCaptureTimingPolicy.intervalRange == 2...10)
+    }
     @Test func preparingAndRunningUseDifferentPresentationStates() {
         #expect(CameraeCaptureLifecyclePresentation(state: .preparing).showsProgress)
         #expect(!CameraeCaptureLifecyclePresentation(state: .running).isVisible)

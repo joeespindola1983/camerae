@@ -63,14 +63,18 @@ struct CameraView: View {
             projectDirectoryURL: project.directoryURL
         ))
         if let nextConfiguration {
-            _astroIntervalSeconds = State(initialValue: nextConfiguration.astroExposureSeconds)
+            _astroIntervalSeconds = State(
+                initialValue: AstroCaptureTimingPolicy.normalizedInterval(
+                    nextConfiguration.intervalSeconds
+                )
+            )
             _astroBatchSize = State(initialValue: Double(nextConfiguration.astroCapturesPerFrame))
             _astroPhotoStackCount = State(initialValue: nextConfiguration.astroPhotoStackCount)
             _captureKind = State(initialValue: nextConfiguration.repeatableKind)
             _videoSettings = State(initialValue: nextConfiguration.videoSettings)
             _videoDurationSeconds = State(initialValue: nextConfiguration.videoDurationSeconds)
             _exposureBias = State(initialValue: nextConfiguration.exposureBias)
-            _usesAutomaticAstroExposure = State(initialValue: nextConfiguration.usesAutomaticAstroExposure)
+            _usesAutomaticAstroExposure = State(initialValue: true)
             _durationOption = State(initialValue: .custom)
             _customDurationMinutes = State(initialValue: max(1, nextConfiguration.durationMinutes))
             _sourceFormat = State(initialValue: nextConfiguration.sourceFormat)
@@ -180,24 +184,10 @@ struct CameraView: View {
             }
 
             Section("Ajustes") {
-                Toggle(isOn: $usesAutomaticAstroExposure) {
-                    Label("Exposição automática Astro", systemImage: "camera.aperture")
-                }
-
-                if usesAutomaticAstroExposure {
-                    ControlSlider(
-                        title: "Intervalo timelapse",
-                        value: $timelapseIntervalSeconds,
-                        range: 2...120,
-                        step: 1,
-                        suffix: "s"
-                    )
-                }
-
                 ControlSlider(
-                    title: "Intervalo astro",
+                    title: "Intervalo",
                     value: $astroIntervalSeconds,
-                    range: 1...10,
+                    range: AstroCaptureTimingPolicy.intervalRange,
                     step: 1,
                     suffix: "s"
                 )

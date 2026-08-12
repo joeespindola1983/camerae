@@ -6,6 +6,22 @@ import CoreMotion
 import ImageIO
 import UIKit
 
+enum AstroCaptureTimingPolicy {
+    static let intervalRange = 2.0...10.0
+
+    static func normalizedInterval(_ interval: TimeInterval) -> TimeInterval {
+        min(max(interval, intervalRange.lowerBound), intervalRange.upperBound)
+    }
+
+    static func estimatedCaptureCount(duration: TimeInterval, interval: TimeInterval) -> Int {
+        max(1, Int((max(duration, 0) / normalizedInterval(interval)).rounded(.down)))
+    }
+
+    static func waitDuration(interval: TimeInterval, captureDuration: TimeInterval) -> TimeInterval {
+        max(normalizedInterval(interval) - max(captureDuration, 0), 0)
+    }
+}
+
 enum CameraeLocationAuthorizationAction: Equatable, Sendable {
     case requestWhenInUse
     case startUpdates
@@ -997,7 +1013,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         do {
             stoppedForStorage = false
-            astroExposureStrategy = usesAutomaticExposure ? .automatic(maxDuration: 1.0) : .fixed(duration: 1.0)
+            astroExposureStrategy = .fixed(duration: .greatestFiniteMagnitude)
             currentSession = try store.createSession(
                 captureKind: .timelapse,
                 cameraLens: selectedRepeatableLens,
@@ -1010,7 +1026,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             frameCount = 0
             astroCompositeFrameCount = 0
             astroBatchProgressLabel = "0/\(Self.clampedAstroBatchSize(batchSize))"
-            astroExposurePhaseLabel = usesAutomaticExposure ? "Auto" : "Astro"
+            astroExposurePhaseLabel = "Máxima"
             astroStackingStartFrame = nil
             astroPreviewURL = nil
             lastExportURL = nil
@@ -1024,7 +1040,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                     timelapseInterval: timelapseInterval,
                     astroInterval: astroInterval,
                     batchSize: batchSize,
-                    waitsForAstroExposure: usesAutomaticExposure,
+                    waitsForAstroExposure: false,
                     plannedDuration: plan.plannedDuration
                 )
             }
@@ -1042,9 +1058,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         do {
             stoppedForStorage = false
-            astroExposureStrategy = usesAutomaticExposure
-                ? .automatic(maxDuration: max(plan.captureInterval ?? 1, 1))
-                : .fixed(duration: max(plan.captureInterval ?? 1, 1))
+            astroExposureStrategy = .fixed(duration: .greatestFiniteMagnitude)
             currentSession = try store.createSession(
                 captureKind: .photo,
                 cameraLens: selectedRepeatableLens,
@@ -1057,7 +1071,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             frameCount = 0
             astroCompositeFrameCount = 0
             astroBatchProgressLabel = "0/\(stackCount.rawValue)"
-            astroExposurePhaseLabel = usesAutomaticExposure ? "Auto" : "Astro"
+            astroExposurePhaseLabel = "Máxima"
             astroStackingStartFrame = nil
             astroPreviewURL = nil
             lastExportURL = nil
@@ -1067,7 +1081,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
             timelapseTask = Task { [weak self] in
                 guard let self else { return }
-                await self.runAstroPhotoStackWithCountdown(stackCount: stackCount)
+                await self.runAstroPhotoStackWithCountdown(
+                    stackCount: stackCount,
+                    interval: plan.captureInterval ?? 0.1
+                )
             }
         } catch {
             status = "Falha ao criar sessão: \(error.localizedDescription)"
@@ -1391,7 +1408,8 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
     }
 
     private func runAstroPhotoStackWithCountdown(
-        stackCount: AstroPhotoStackCount
+        stackCount: AstroPhotoStackCount,
+        interval: TimeInterval
     ) async {
         guard await performStartCountdown(statusPrefix: "Foto em") else { return }
         timelapseStartedAt = Date()
@@ -1404,6 +1422,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
 
         for index in 1...stackCount.rawValue {
             guard !Task.isCancelled else { return }
+            let captureStartedAt = Date()
             do {
                 let frame = try await captureAndSaveFrame()
                 originals.append(frame.url)
@@ -1412,6 +1431,16 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
                 if await shouldStopForStorage() { break }
             } catch {
                 status = "Frame \(index) falhou: \(error.localizedDescription)"
+            }
+            if index < stackCount.rawValue, !Task.isCancelled {
+                let wait = AstroCaptureTimingPolicy.waitDuration(
+                    interval: interval,
+                    captureDuration: Date().timeIntervalSince(captureStartedAt)
+                )
+                if wait > 0 {
+                    status = "Aguardando \(Self.formatInterval(wait))"
+                    try? await Task.sleep(for: .seconds(wait))
+                }
             }
         }
 
@@ -1468,7 +1497,7 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
         plannedDuration: TimeInterval
     ) async {
         let clampedTimelapseInterval = min(max(timelapseInterval, 2), 120)
-        let clampedAstroInterval = min(max(astroInterval, 1), 10)
+        let clampedAstroInterval = AstroCaptureTimingPolicy.normalizedInterval(astroInterval)
         let size = Self.clampedAstroBatchSize(batchSize)
         var currentBatch: [URL] = []
         currentBatch.reserveCapacity(size)
@@ -1532,7 +1561,10 @@ final class CameraController: NSObject, ObservableObject, AVCaptureVideoDataOutp
             if !Task.isCancelled {
                 let elapsed = Date().timeIntervalSince(captureStartedAt)
                 let nextInterval = isStackingActive ? clampedAstroInterval : clampedTimelapseInterval
-                let remaining = nextInterval - elapsed
+                let remaining = AstroCaptureTimingPolicy.waitDuration(
+                    interval: nextInterval,
+                    captureDuration: elapsed
+                )
                 if remaining > 0 {
                     status = "Aguardando \(Self.formatInterval(remaining))"
                     try? await Task.sleep(nanoseconds: UInt64(remaining * 1_000_000_000))
