@@ -29,5 +29,9 @@ public final class AstroScreenCapabilitiesTest {
                 AstroScreenCapabilities.Capability.FINALIZE_SESSION));
         assertTrue(AstroScreenCapabilities.captureSession().contains(
                 AstroScreenCapabilities.Capability.SHARE_CAPTURE_LOG));
+        assertTrue(AstroScreenCapabilities.captureSession().contains(
+                AstroScreenCapabilities.Capability.CAPTURE_LIVE_VIEW_FRAME));
+        assertTrue(AstroScreenCapabilities.captureSession().contains(
+                AstroScreenCapabilities.Capability.REQUEST_NEXT_JPEG_PREVIEW));
     }
 }

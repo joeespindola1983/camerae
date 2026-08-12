@@ -13,6 +13,8 @@ final class AstroScreenCapabilities {
         START_SESSION,
         PAUSE_SESSION,
         FINALIZE_SESSION,
+        CAPTURE_LIVE_VIEW_FRAME,
+        REQUEST_NEXT_JPEG_PREVIEW,
         SHARE_CAPTURE_LOG
     }
 
@@ -34,6 +36,8 @@ final class AstroScreenCapabilities {
                 Capability.START_SESSION,
                 Capability.PAUSE_SESSION,
                 Capability.FINALIZE_SESSION,
+                Capability.CAPTURE_LIVE_VIEW_FRAME,
+                Capability.REQUEST_NEXT_JPEG_PREVIEW,
                 Capability.SHARE_CAPTURE_LOG
         );
     }

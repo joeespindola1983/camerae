@@ -81,6 +81,7 @@ public final class MainActivity extends Activity {
     private Button copyLogButton;
     private Button shareLogButton;
     private Button exportJpegButton;
+    private Button liveViewFrameButton;
     private Button updatePreviewButton;
     private Button downloadSessionJpegsButton;
     private Button finalizeSessionButton;
@@ -107,6 +108,7 @@ public final class MainActivity extends Activity {
     private TextView nextCaptureView;
     private TextView exposureCapabilitiesView;
     private TextView captureSettingsAvailabilityView;
+    private TextView previewEnergyStatusView;
     private ImageView previewView;
     private LinearLayout previewPlaceholder;
     private String mtpReport = "MTP/PTP ainda não consultado.\n";
@@ -224,6 +226,7 @@ public final class MainActivity extends Activity {
         whiteBalanceSpinner = findViewById(R.id.white_balance_spinner);
         formatSpinner = findViewById(R.id.capture_format_spinner);
         exportJpegButton = findViewById(R.id.export_jpeg);
+        liveViewFrameButton = findViewById(R.id.live_view_frame);
         updatePreviewButton = findViewById(R.id.update_preview);
         downloadSessionJpegsButton = findViewById(R.id.download_session_jpegs);
         finalizeSessionButton = findViewById(R.id.finalize_session);
@@ -236,6 +239,7 @@ public final class MainActivity extends Activity {
         exposureCapabilitiesView = findViewById(R.id.exposure_capabilities);
         previewView = findViewById(R.id.preview);
         previewPlaceholder = findViewById(R.id.preview_placeholder);
+        previewEnergyStatusView = findViewById(R.id.preview_energy_status);
 
         findViewById(R.id.refresh).setOnClickListener(view -> {
             appendEvent("Varredura manual solicitada");
@@ -259,6 +263,7 @@ public final class MainActivity extends Activity {
         copyLogButton.setOnClickListener(view -> copyLog());
         shareLogButton.setOnClickListener(view -> shareLog());
         exportJpegButton.setOnClickListener(view -> exportSelectedJpeg());
+        liveViewFrameButton.setOnClickListener(view -> captureLiveViewFrame());
         updatePreviewButton.setOnClickListener(view -> requestNextPreview());
         downloadSessionJpegsButton.setOnClickListener(view -> downloadSessionJpegs());
         finalizeSessionButton.setOnClickListener(view -> finalizeActiveSession());
@@ -740,10 +745,27 @@ public final class MainActivity extends Activity {
         formatSpinner.setEnabled(captureSettingsEnabled);
         bulbDurationSlider.setEnabled(captureSettingsEnabled);
         exportJpegButton.setEnabled(selectedJpeg != null && !cameraBusy);
-        updatePreviewButton.setEnabled(sequenceRunning && !previewRefreshRequested);
+        liveViewFrameButton.setEnabled(
+                activeSession != null
+                        && !finalizedSession
+                        && AstroPreviewEnergyPolicy.canCaptureLiveViewFrame(
+                                captureValidated,
+                                cameraBusy,
+                                sequenceRunning
+                        )
+        );
+        updatePreviewButton.setEnabled(
+                AstroPreviewEnergyPolicy.canRequestNextCaptureJpeg(
+                        captureValidated,
+                        sequenceRunning
+                ) && !previewRefreshRequested
+        );
         updatePreviewButton.setText(previewRefreshRequested
                 ? R.string.preview_waiting
                 : R.string.update_preview);
+        previewEnergyStatusView.setText(sequenceRunning
+                ? R.string.preview_energy_saving_sequence
+                : R.string.preview_energy_saving_idle);
         downloadSessionJpegsButton.setEnabled(
                 !cameraBusy && !pendingJpegCameraFiles.isEmpty()
         );
@@ -1006,6 +1028,65 @@ public final class MainActivity extends Activity {
         Toast.makeText(this, R.string.preview_waiting_notice, Toast.LENGTH_SHORT).show();
         appendEvent("Atualização da prévia solicitada para a próxima captura");
         refreshProbe();
+    }
+
+    private void captureLiveViewFrame() {
+        UsbDevice device = selectCamera();
+        boolean ready = device != null
+                && usbManager.hasPermission(device)
+                && isValidatedCaptureDevice(device);
+        if (!AstroPreviewEnergyPolicy.canCaptureLiveViewFrame(
+                ready,
+                cameraBusy,
+                sequenceRunning
+        )) {
+            return;
+        }
+
+        File previewFile = new File(getCacheDir(), "eos-r-live-view.jpg");
+        cameraBusy = true;
+        previewEnergyStatusView.setText(R.string.preview_live_view_loading);
+        appendEvent("Live View temporário solicitado; será desligado após um quadro");
+        refreshProbe();
+        cameraExecutor.execute(() -> {
+            try {
+                if (gphotoConnection == null) gphotoConnection = usbManager.openDevice(device);
+                if (gphotoConnection == null) {
+                    throw new IOException("UsbManager.openDevice retornou null");
+                }
+                String report = NativeGPhotoClient.captureLiveViewFrame(
+                        getApplicationContext(),
+                        gphotoConnection.getFileDescriptor(),
+                        previewFile
+                );
+                PersistentProbeLog.append("GPHOTO2-LIVE-VIEW-FRAME", report);
+                if (!report.contains("FILE|" + previewFile.getAbsolutePath() + "|image/jpeg")) {
+                    throw new IOException("a câmera não entregou o quadro de Live View");
+                }
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    captureReport = report;
+                    hasCaptureLog = true;
+                    showPreview(previewFile);
+                    appendEvent("Live View encerrado após um quadro");
+                    refreshProbe();
+                });
+            } catch (Throwable error) {
+                PersistentProbeLog.append("GPHOTO2-LIVE-VIEW-FRAME", "Falha: " + error);
+                runOnUiThread(() -> {
+                    cameraBusy = false;
+                    appendEvent("Live View falhou: " + error.getMessage());
+                    Toast.makeText(
+                            this,
+                            "Live View falhou: " + error.getMessage(),
+                            Toast.LENGTH_LONG
+                    ).show();
+                    refreshProbe();
+                });
+            } finally {
+                closeGPhotoConnection();
+            }
+        });
     }
 
     private void downloadSessionJpegs() {

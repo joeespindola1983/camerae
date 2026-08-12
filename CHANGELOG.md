@@ -28,9 +28,9 @@ test distributions do not require an entry here.
   session creation, opening, safe local deletion, resumable paused sessions,
   explicit finalization, per-session directories and persisted camera-card
   file references for targeted availability checks after reconnection.
-- Added a low-transfer Android Astro capture mode that downloads only the first
-  JPG preview, lets the user request a fresh preview from the next completed
-  capture, and imports the remaining session JPGs in one post-pause batch.
+- Added an explicit low-transfer Android Astro preview mode: remote Live View
+  opens only for a single requested framing frame, capture JPGs download only
+  when requested, and the remaining session JPGs import in a post-pause batch.
 
 - Added a read-only libgphoto2 2.5.34 Android path for the EOS R probe, using
   the Android-authorized USB file descriptor with libusb and the focused

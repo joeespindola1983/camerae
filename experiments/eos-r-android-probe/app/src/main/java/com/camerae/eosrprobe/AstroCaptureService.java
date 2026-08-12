@@ -268,7 +268,9 @@ public final class AstroCaptureService extends Service {
             while (!pauseRequested) {
                 if (!waitUntilScheduled(scheduledAt)) break;
                 int captureNumber = completed + 1;
-                boolean downloadPreview = completed == 0 || previewRequested;
+                boolean downloadPreview = AstroPreviewEnergyPolicy.shouldDownloadNextJpeg(
+                        previewRequested
+                );
                 previewRequested = false;
                 startPhaseTicker("Expondo a foto " + captureNumber, bulbSeconds);
                 String result = NativeGPhotoClient.capture(

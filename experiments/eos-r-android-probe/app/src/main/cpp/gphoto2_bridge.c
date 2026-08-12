@@ -400,6 +400,69 @@ Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCapture(
 }
 
 JNIEXPORT jstring JNICALL
+Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeCaptureLiveViewFrame(
+        JNIEnv *env, jclass clazz, jint file_descriptor, jstring camlib_directory,
+        jstring iolib_directory, jstring output_file) {
+    (void) clazz;
+    ProbeReport report = {{0}, 0};
+    const char *camlibs = (*env)->GetStringUTFChars(env, camlib_directory, NULL);
+    const char *iolibs = (*env)->GetStringUTFChars(env, iolib_directory, NULL);
+    const char *output = (*env)->GetStringUTFChars(env, output_file, NULL);
+    if (!camlibs || !iolibs || !output) {
+        if (camlibs) (*env)->ReleaseStringUTFChars(env, camlib_directory, camlibs);
+        if (iolibs) (*env)->ReleaseStringUTFChars(env, iolib_directory, iolibs);
+        if (output) (*env)->ReleaseStringUTFChars(env, output_file, output);
+        return (*env)->NewStringUTF(env, "ERRO: parâmetros JNI inválidos.");
+    }
+    setenv("CAMLIBS", camlibs, 1);
+    setenv("IOLIBS", iolibs, 1);
+    report_append(&report, "LIVE VIEW TEMPORÁRIO\n");
+
+    GPContext *context = gp_context_new();
+    Camera *camera = NULL;
+    CameraFile *preview = NULL;
+    int initialized = 0;
+    int result = gp_port_usb_set_sys_device(file_descriptor);
+    if (context) {
+        gp_context_set_error_func(context, context_error, &report);
+        gp_context_set_status_func(context, context_status, &report);
+    }
+    if (result >= GP_OK && context) result = gp_camera_new(&camera);
+    if (result >= GP_OK && camera) {
+        result = gp_camera_init(camera, context);
+        initialized = result >= GP_OK;
+        report_append(&report, "gp_camera_init: %d (%s)\n",
+                      result, gp_result_as_string(result));
+    }
+    if (result >= GP_OK) result = gp_file_new(&preview);
+    if (result >= GP_OK) {
+        result = gp_camera_capture_preview(camera, preview, context);
+        report_append(&report, "gp_camera_capture_preview: %d (%s)\n",
+                      result, gp_result_as_string(result));
+    }
+    if (result >= GP_OK) {
+        result = gp_file_save(preview, output);
+        report_append(&report, "gp_file_save: %d (%s)\n",
+                      result, gp_result_as_string(result));
+        if (result >= GP_OK) report_append(&report, "FILE|%s|image/jpeg\n", output);
+    }
+    if (preview) gp_file_free(preview);
+    if (camera) {
+        if (initialized) {
+            int exit_result = gp_camera_exit(camera, context);
+            report_append(&report, "gp_camera_exit (Live View desligado): %d (%s)\n",
+                          exit_result, gp_result_as_string(exit_result));
+        }
+        gp_camera_free(camera);
+    }
+    if (context) gp_context_unref(context);
+    (*env)->ReleaseStringUTFChars(env, camlib_directory, camlibs);
+    (*env)->ReleaseStringUTFChars(env, iolib_directory, iolibs);
+    (*env)->ReleaseStringUTFChars(env, output_file, output);
+    return (*env)->NewStringUTF(env, report.data);
+}
+
+JNIEXPORT jstring JNICALL
 Java_com_camerae_eosrprobe_NativeGPhotoClient_nativeDownloadFiles(
         JNIEnv *env, jclass clazz, jint file_descriptor, jstring camlib_directory,
         jstring iolib_directory, jstring output_directory, jstring camera_files) {

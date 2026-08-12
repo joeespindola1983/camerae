@@ -50,6 +50,26 @@ final class NativeGPhotoClient {
         );
     }
 
+    static String captureLiveViewFrame(
+            Context context,
+            int fileDescriptor,
+            File outputFile
+    ) throws IOException {
+        File root = prepareModules(context);
+        File camlibs = new File(root, "camlibs");
+        File iolibs = new File(root, "iolibs");
+        File parent = outputFile.getParentFile();
+        if (parent == null || (!parent.isDirectory() && !parent.mkdirs())) {
+            throw new IOException("Não foi possível criar " + parent);
+        }
+        return nativeCaptureLiveViewFrame(
+                fileDescriptor,
+                camlibs.getAbsolutePath(),
+                iolibs.getAbsolutePath(),
+                outputFile.getAbsolutePath()
+        );
+    }
+
     static String downloadFiles(
             Context context,
             int fileDescriptor,
@@ -126,6 +146,13 @@ final class NativeGPhotoClient {
             String format,
             int bulbSeconds,
             boolean downloadJpegPreview
+    );
+
+    private static native String nativeCaptureLiveViewFrame(
+            int fileDescriptor,
+            String camlibDirectory,
+            String iolibDirectory,
+            String outputFile
     );
 
     private static native String nativeDownloadFiles(

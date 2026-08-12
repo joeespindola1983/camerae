@@ -37,7 +37,11 @@
     <string name="session_card_checking">Verificando os arquivos desta sessão no cartão…</string>
     <string name="session_card_check_result">%1$d de %2$d arquivos encontrados em %3$s</string>
     <string name="recent_captures">CAPTURAS RECENTES</string>
-    <string name="update_preview">Atualizar prévia na próxima foto</string>
+    <string name="preview_energy_saving_idle">Modo econômico · Live View e download automático desligados</string>
+    <string name="preview_energy_saving_sequence">Live View desligado · JPG somente quando solicitada</string>
+    <string name="preview_live_view_loading">Abrindo Live View temporário…</string>
+    <string name="capture_live_view_frame">Abrir Live View · 1 quadro</string>
+    <string name="update_preview">Baixar JPG da próxima foto</string>
     <string name="preview_waiting">Prévia solicitada…</string>
     <string name="preview_downloading">Baixando nova prévia…</string>
     <string name="preview_waiting_notice">A próxima foto concluída atualizará a prévia</string>

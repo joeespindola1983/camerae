@@ -260,6 +260,27 @@
                     android:textSize="9sp" />
             </FrameLayout>
 
+            <TextView
+                android:id="@+id/preview_energy_status"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:gravity="center"
+                android:text="@string/preview_energy_saving_idle"
+                android:textColor="#8090C0"
+                android:textSize="11sp" />
+
+            <Button
+                android:id="@+id/live_view_frame"
+                android:layout_width="match_parent"
+                android:layout_height="48dp"
+                android:layout_marginTop="8dp"
+                android:backgroundTint="#101833"
+                android:enabled="false"
+                android:text="@string/capture_live_view_frame"
+                android:textAllCaps="false"
+                android:textColor="#E8EEFF" />
+
             <Button
                 android:id="@+id/update_preview"
                 android:layout_width="match_parent"
