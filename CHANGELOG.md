@@ -50,6 +50,9 @@ test distributions do not require an entry here.
 
 ### Changed
 
+- Made the Android Astro capture-settings card visibly read-only whenever the
+  camera is missing, unauthorized, unsupported, busy, or the session is final,
+  with an inline explanation that clears automatically when controls are ready.
 - Replaced the Android Astro exposure text field with a one-second slider from
   1–45 seconds, using five-second reference marks from 0 through 45.
 - Replaced the Android EOS R probe/debug screen with a focused Astro capture

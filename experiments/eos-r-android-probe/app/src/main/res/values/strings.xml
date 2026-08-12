@@ -23,6 +23,11 @@
     <string name="eos_r_external_camera">CANON EOS R · USB</string>
     <string name="manual_focus_hint">FOCO · MANUAL RECOMENDADO</string>
     <string name="capture_settings_label">CAPTURA</string>
+    <string name="capture_settings_camera_required">Conecte a Canon EOS R para liberar estes ajustes.</string>
+    <string name="capture_settings_usb_required">Autorize o acesso USB para liberar estes ajustes.</string>
+    <string name="capture_settings_unsupported">Esta câmera ainda não oferece controles de captura.</string>
+    <string name="capture_settings_busy">A câmera está em uso. Os ajustes voltam após pausar.</string>
+    <string name="capture_settings_finalized">Sessão finalizada · ajustes em modo somente leitura.</string>
     <string name="session_label">SESSÃO CONTÍNUA</string>
     <string name="finalize_session">Finalizar sessão</string>
     <string name="finalized_session">Sessão finalizada</string>

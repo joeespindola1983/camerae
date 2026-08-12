@@ -49,6 +49,7 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O APK `0.13.1` mostra `Canon EOS R` no lugar do caminho `/dev/bus/usb` na interface, sincroniza a métrica de exposição durante a edição e mantém em `PRÓXIMA` a contagem regressiva da exposição mesmo quando uma pausa segura já foi solicitada.
 - O APK `0.14.0` move a sessão contínua para um serviço Android de dispositivo conectado. A captura segue com a tela bloqueada e apagada, usa um wake lock somente para a CPU durante a operação e oferece pausar, retomar e finalizar pela notificação persistente.
 - O APK `0.14.1` restaura a versão/build no catálogo inicial e troca a digitação da exposição por um slider de 1 a 45 segundos, ajustável a cada segundo e com referências visuais a cada 5 segundos.
+- O APK `0.14.2` bloqueia e esmaece o card de captura inteiro enquanto a EOS R estiver ausente, sem autorização USB, em uso ou a sessão estiver finalizada, mostrando no próprio card o que falta para liberar os ajustes.
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).
@@ -80,9 +81,9 @@ Nesta máquina o projeto usa `compileSdk 36` porque é a plataforma Android inst
 
 Esse probe não solicita captura e não escreve configurações. A conexão autorizada permanece aberta até o app encerrar ou a câmera ser desconectada, porque o backend Android do libgphoto2 mantém o dispositivo externo durante o processo.
 
-### Sessões Astro econômicas (`0.14.1`)
+### Sessões Astro econômicas (`0.14.2`)
 
-1. Confirme `Versão 0.14.1 (build 28)` no catálogo inicial e crie ou abra uma sessão.
+1. Confirme `Versão 0.14.2 (build 29)` no catálogo inicial e crie ou abra uma sessão.
 2. Com a câmera conectada, uma sessão existente verifica os arquivos conhecidos no cartão e continua permitindo importação. Sessões finalizadas podem ser abertas e importadas, mas não retomadas.
 3. Escolha ISO, white balance, JPG/CR3/JPG+CR3, exposição Bulb e o intervalo mínimo entre os inícios das fotos.
 4. Toque em `Iniciar sessão`. O app captura sem um limite predefinido e `PRÓXIMA` mostra a contagem regressiva real.

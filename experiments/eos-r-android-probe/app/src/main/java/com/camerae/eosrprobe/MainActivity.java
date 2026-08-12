@@ -29,6 +29,7 @@ import android.os.SystemClock;
 import android.provider.MediaStore;
 import android.view.View;
 import android.view.Gravity;
+import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
@@ -85,6 +86,7 @@ public final class MainActivity extends Activity {
     private Button finalizeSessionButton;
     private View sessionCatalogScreen;
     private View captureScreen;
+    private View captureSettingsControls;
     private TextView catalogCameraStatusView;
     private TextView sessionCountView;
     private TextView sessionsEmptyView;
@@ -104,6 +106,7 @@ public final class MainActivity extends Activity {
     private TextView exposureMetricView;
     private TextView nextCaptureView;
     private TextView exposureCapabilitiesView;
+    private TextView captureSettingsAvailabilityView;
     private ImageView previewView;
     private LinearLayout previewPlaceholder;
     private String mtpReport = "MTP/PTP ainda não consultado.\n";
@@ -186,6 +189,8 @@ public final class MainActivity extends Activity {
         usbManager = (UsbManager) getSystemService(Context.USB_SERVICE);
         sessionCatalogScreen = findViewById(R.id.session_catalog_screen);
         captureScreen = findViewById(R.id.capture_screen);
+        captureSettingsControls = findViewById(R.id.capture_settings_controls);
+        captureSettingsAvailabilityView = findViewById(R.id.capture_settings_availability);
         catalogCameraStatusView = findViewById(R.id.catalog_camera_status);
         sessionCountView = findViewById(R.id.session_count);
         sessionsEmptyView = findViewById(R.id.sessions_empty);
@@ -649,12 +654,44 @@ public final class MainActivity extends Activity {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
 
+    private void applyCaptureSettingsAvailability(
+            CaptureSettingsAvailabilityPolicy.State state
+    ) {
+        boolean enabled = state.isEnabled();
+        captureSettingsControls.setAlpha(enabled ? 1f : 0.38f);
+        setViewTreeEnabled(captureSettingsControls, enabled);
+        if (enabled) {
+            captureSettingsAvailabilityView.setVisibility(View.GONE);
+            return;
+        }
+        int message = switch (state) {
+            case USB_PERMISSION_REQUIRED -> R.string.capture_settings_usb_required;
+            case UNSUPPORTED_CAMERA -> R.string.capture_settings_unsupported;
+            case CAMERA_BUSY -> R.string.capture_settings_busy;
+            case SESSION_FINALIZED -> R.string.capture_settings_finalized;
+            default -> R.string.capture_settings_camera_required;
+        };
+        captureSettingsAvailabilityView.setText(message);
+        captureSettingsAvailabilityView.setVisibility(View.VISIBLE);
+    }
+
+    private static void setViewTreeEnabled(View view, boolean enabled) {
+        view.setEnabled(enabled);
+        if (!(view instanceof ViewGroup group)) return;
+        for (int index = 0; index < group.getChildCount(); index++) {
+            setViewTreeEnabled(group.getChildAt(index), enabled);
+        }
+    }
+
     private void refreshProbe() {
         if (usbManager == null) {
             statusView.setText(R.string.status_usb_service_missing);
             authorizeButton.setEnabled(false);
             captureButton.setEnabled(false);
             startSequenceButton.setEnabled(false);
+            applyCaptureSettingsAvailability(
+                    CaptureSettingsAvailabilityPolicy.State.CAMERA_MISSING
+            );
             return;
         }
 
@@ -677,22 +714,31 @@ public final class MainActivity extends Activity {
             ));
         }
         catalogCameraStatusView.setText(statusView.getText());
+        boolean cameraPresent = selected != null;
         boolean cameraReady = selected != null && usbManager.hasPermission(selected);
         boolean captureValidated = cameraReady && isValidatedCaptureDevice(selected);
+        boolean finalizedSession = activeSession != null
+                && "finalized".equals(activeSession.status);
+        CaptureSettingsAvailabilityPolicy.State captureSettingsState =
+                CaptureSettingsAvailabilityPolicy.evaluate(
+                        cameraPresent,
+                        cameraReady,
+                        selected != null && isValidatedCaptureDevice(selected),
+                        cameraBusy,
+                        finalizedSession
+                );
+        applyCaptureSettingsAvailability(captureSettingsState);
         authorizeButton.setEnabled(selected != null && !usbManager.hasPermission(selected) && !cameraBusy);
         gphotoProbeButton.setEnabled(captureValidated && !cameraBusy && !gphotoProbeCompleted);
         captureButton.setEnabled(captureValidated && !cameraBusy);
         inspectMtpButton.setEnabled(cameraReady && !cameraBusy);
         inspectControlsButton.setEnabled(false);
-        boolean controlsReady = captureValidated
-                && exposureSnapshot != null
-                && !exposureSnapshot.isoOptions.isEmpty()
-                && !exposureSnapshot.whiteBalanceOptions.isEmpty();
         applyControlsButton.setEnabled(false);
-        isoSpinner.setEnabled(captureValidated && !cameraBusy);
-        whiteBalanceSpinner.setEnabled(captureValidated && !cameraBusy);
-        formatSpinner.setEnabled(captureValidated && !cameraBusy);
-        bulbDurationSlider.setEnabled(captureValidated && !cameraBusy);
+        boolean captureSettingsEnabled = captureSettingsState.isEnabled();
+        isoSpinner.setEnabled(captureSettingsEnabled);
+        whiteBalanceSpinner.setEnabled(captureSettingsEnabled);
+        formatSpinner.setEnabled(captureSettingsEnabled);
+        bulbDurationSlider.setEnabled(captureSettingsEnabled);
         exportJpegButton.setEnabled(selectedJpeg != null && !cameraBusy);
         updatePreviewButton.setEnabled(sequenceRunning && !previewRefreshRequested);
         updatePreviewButton.setText(previewRefreshRequested
@@ -706,8 +752,6 @@ public final class MainActivity extends Activity {
                 pendingJpegCameraFiles.size()
         ));
         downloadLatestButton.setEnabled(cameraReady && !cameraBusy);
-        boolean finalizedSession = activeSession != null
-                && "finalized".equals(activeSession.status);
         startSequenceButton.setEnabled(activeSession != null && !finalizedSession
                 && captureValidated && (!cameraBusy || sequenceRunning));
         startSequenceButton.setText(finalizedSession
@@ -724,7 +768,7 @@ public final class MainActivity extends Activity {
         cancelSequenceButton.setEnabled(sequenceRunning && !sequenceCancelRequested);
         sequenceCountInput.setEnabled(!cameraBusy);
         sequenceDelayInput.setEnabled(!cameraBusy);
-        sequenceIntervalInput.setEnabled(!cameraBusy);
+        sequenceIntervalInput.setEnabled(captureSettingsEnabled);
         copyLogButton.setEnabled(!cameraBusy);
         authorizeButton.setVisibility(authorizeButton.isEnabled() ? View.VISIBLE : View.GONE);
         shareLogButton.setEnabled(!cameraBusy && hasCaptureLog);
