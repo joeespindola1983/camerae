@@ -46,6 +46,7 @@ Conectar EOS R por USB -> abrir o app -> tocar em Capturar
 - O log 25 confirmou seis capturas em 72 segundos, mas também mostrou cerca de 12 MB transferidos após cada exposição. O APK `0.12.0` usa o cartão da câmera como armazenamento primário durante a noite: baixa automaticamente apenas o primeiro JPG, permite solicitar uma nova prévia na próxima foto e importa os JPGs restantes em lote depois da pausa.
 - O APK `0.13.0` adiciona o catálogo simples de sessões do Figma, sem grupos: criar, abrir e excluir localmente. Cada sessão usa seu próprio diretório e `session.json`, persiste configurações e caminhos no cartão, pode ser retomada enquanto pausada e só se torna imutável após `Finalizar sessão`.
 - Ao abrir uma sessão com a EOS R conectada, o app consulta diretamente os caminhos persistidos e informa quantos arquivos ainda existem no cartão. Essa verificação dirigida evita inventariar o SD inteiro a cada conexão.
+- O APK `0.13.1` mostra `Canon EOS R` no lugar do caminho `/dev/bus/usb` na interface, sincroniza a métrica de exposição durante a edição e mantém em `PRÓXIMA` a contagem regressiva da exposição mesmo quando uma pausa segura já foi solicitada.
 - A escrita de ISO/WB e a duração Bulb configurável ainda aguardam validação física; outras Canon permanecem em importação/diagnóstico até perfil próprio.
 
 O roteiro de desenvolvimento e os critérios de decisão estão em [PLAN.md](PLAN.md).

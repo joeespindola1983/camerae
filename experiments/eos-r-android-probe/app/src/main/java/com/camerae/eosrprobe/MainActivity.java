@@ -22,8 +22,12 @@ import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.MediaStore;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
 import android.view.Gravity;
 import android.widget.Button;
@@ -112,6 +116,9 @@ public final class MainActivity extends Activity {
     private File selectedJpeg;
     private volatile boolean sequenceRunning;
     private volatile boolean sequenceCancelRequested;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private volatile boolean captureCountdownActive;
+    private int countdownGeneration;
     private boolean hasCaptureLog;
     private volatile boolean previewRefreshRequested;
     private File activeSequenceDirectory;
@@ -239,6 +246,15 @@ public final class MainActivity extends Activity {
         finalizeSessionButton.setOnClickListener(view -> finalizeActiveSession());
         findViewById(R.id.create_session).setOnClickListener(view -> createSession());
         findViewById(R.id.back_to_sessions).setOnClickListener(view -> returnToSessionCatalog());
+        bulbDurationInput.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence value, int start, int count, int after) {}
+            @Override public void onTextChanged(CharSequence value, int start, int before, int count) {}
+            @Override public void afterTextChanged(Editable value) {
+                if (sequenceRunning) return;
+                String seconds = value.toString().trim();
+                exposureMetricView.setText(seconds.isEmpty() ? "—" : seconds + " s");
+            }
+        });
 
         configureAstroControlAdapters();
         showSessionCatalog();
@@ -282,6 +298,8 @@ public final class MainActivity extends Activity {
     @Override
     protected void onDestroy() {
         sequenceCancelRequested = true;
+        countdownGeneration++;
+        mainHandler.removeCallbacksAndMessages(null);
         cameraExecutor.shutdownNow();
         closeGPhotoConnection();
         super.onDestroy();
@@ -540,10 +558,13 @@ public final class MainActivity extends Activity {
             statusView.setText(R.string.status_waiting);
         } else if (usbManager.hasPermission(selected)) {
             statusView.setText(isValidatedCaptureDevice(selected)
-                    ? getString(R.string.status_ready, deviceLabel(selected))
-                    : getString(R.string.status_import_only, deviceLabel(selected)));
+                    ? getString(R.string.status_ready, cameraDisplayName(selected))
+                    : getString(R.string.status_import_only, cameraDisplayName(selected)));
         } else {
-            statusView.setText(getString(R.string.status_permission_required, deviceLabel(selected)));
+            statusView.setText(getString(
+                    R.string.status_permission_required,
+                    cameraDisplayName(selected)
+            ));
         }
         catalogCameraStatusView.setText(statusView.getText());
         boolean cameraReady = selected != null && usbManager.hasPermission(selected);
@@ -623,7 +644,7 @@ public final class MainActivity extends Activity {
                 && cameraReady && !cameraBusy && !sessionCameraVerified
                 && !allCameraFiles.isEmpty()) {
             sessionCameraVerified = true;
-            verifyActiveSessionOnCamera(deviceLabel(selected));
+            verifyActiveSessionOnCamera(cameraDisplayName(selected));
         }
     }
 
@@ -1280,7 +1301,7 @@ public final class MainActivity extends Activity {
                     previewRefreshRequested = false;
                     runOnUiThread(() -> {
                         sequenceProgressView.setText("Expondo a foto " + captureNumber + "…");
-                        nextCaptureView.setText("capturando");
+                        startExposureCountdown(bulbSeconds);
                         updatePreviewButton.setText(downloadPreview
                                 ? R.string.preview_downloading
                                 : R.string.update_preview);
@@ -1301,6 +1322,7 @@ public final class MainActivity extends Activity {
                     );
                     String successMarker = "Arquivos registrados no cartão: " + expectedFilesPerPhoto
                             + "/" + expectedFilesPerPhoto;
+                    runOnUiThread(() -> stopActiveCountdown("processando"));
                     if (!result.contains(successMarker)) {
                         failure = "captura " + captureNumber + " não completou " + successMarker;
                         captureReport = result.endsWith("\n") ? result : result + "\n";
@@ -1339,7 +1361,7 @@ public final class MainActivity extends Activity {
                 sequenceCancelRequested = false;
                 activeSequenceCompletedCount = finalCompleted;
                 acceptedCountView.setText(String.valueOf(finalCompleted));
-                nextCaptureView.setText("pausada");
+                stopActiveCountdown("pausada");
                 String state = finalFailure != null ? "falhou" : canceled ? "pausada" : "encerrada";
                 sequenceProgressView.setText(finalFailure != null
                         ? "Sessão falhou após " + finalCompleted + " capturas"
@@ -1359,7 +1381,7 @@ public final class MainActivity extends Activity {
         if (!sequenceRunning || sequenceCancelRequested) return;
         sequenceCancelRequested = true;
         sequenceProgressView.setText("Pausa solicitada · concluindo a captura atual…");
-        nextCaptureView.setText("pausando");
+        if (!captureCountdownActive) nextCaptureView.setText("pausando");
         appendEvent("Pausa da sessão solicitada");
         refreshProbe();
     }
@@ -1647,6 +1669,33 @@ public final class MainActivity extends Activity {
         return false;
     }
 
+    private void startExposureCountdown(int seconds) {
+        captureCountdownActive = true;
+        int generation = ++countdownGeneration;
+        long deadline = SystemClock.elapsedRealtime() + seconds * 1000L;
+        Runnable tick = new Runnable() {
+            @Override public void run() {
+                if (generation != countdownGeneration) return;
+                long remaining = deadline - SystemClock.elapsedRealtime();
+                if (remaining <= 0) {
+                    captureCountdownActive = false;
+                    nextCaptureView.setText("processando");
+                    return;
+                }
+                long shownSeconds = Math.max(1, (remaining + 999) / 1000);
+                nextCaptureView.setText(shownSeconds + " s");
+                mainHandler.postDelayed(this, Math.min(remaining, 200));
+            }
+        };
+        mainHandler.post(tick);
+    }
+
+    private void stopActiveCountdown(String replacement) {
+        countdownGeneration++;
+        captureCountdownActive = false;
+        nextCaptureView.setText(replacement);
+    }
+
     private Integer readSequenceValue(EditText input, int minimum, int maximum, String label) {
         try {
             int value = Integer.parseInt(input.getText().toString().trim());
@@ -1911,6 +1960,21 @@ public final class MainActivity extends Activity {
     private static String deviceLabel(UsbDevice device) {
         return String.format(Locale.US, "%s [VID=0x%04X PID=0x%04X]",
                 device.getDeviceName(), device.getVendorId(), device.getProductId());
+    }
+
+    private static String cameraDisplayName(UsbDevice device) {
+        if (isValidatedCaptureDevice(device)) return "Canon EOS R";
+        if (device == null) return "Câmera USB";
+        String product = device.getProductName();
+        String manufacturer = device.getManufacturerName();
+        if (product != null && !product.trim().isEmpty()
+                && !"Canon Digital Camera".equalsIgnoreCase(product.trim())) {
+            return product.trim();
+        }
+        if (manufacturer != null && !manufacturer.trim().isEmpty()) {
+            return manufacturer.trim() + " câmera USB";
+        }
+        return "Câmera USB";
     }
 
     private static boolean isValidatedCaptureDevice(UsbDevice device) {

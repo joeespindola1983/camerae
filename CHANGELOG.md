@@ -58,6 +58,10 @@ test distributions do not require an entry here.
 
 ### Fixed
 
+- Replaced raw Android USB paths and VID/PID values in the Astro UI with the
+  friendly camera model, synchronized the live exposure metric with its input,
+  and kept the active exposure countdown visible while a safe pause is pending.
+
 - Switched EOS R timed Bulb capture from the unavailable generic `bulb` action
   to libgphoto2's camera-advertised `eosremoterelease` press/release action,
   and stopped reporting a capture as successful when no file was downloaded.
